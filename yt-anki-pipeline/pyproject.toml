@@ -1,0 +1,131 @@
+[build-system]
+requires      = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+# =============================================================================
+# Project metadata
+# =============================================================================
+
+[project]
+name        = "yt-anki-pipeline"
+version     = "0.1.0"
+description = "YouTube transcript to Anki flashcard pipeline"
+readme      = "README.md"
+requires-python = ">=3.9"
+license     = { text = "MIT" }
+
+# =============================================================================
+# Runtime dependencies
+# These are the only packages needed to run the pipeline.
+# Installed via: pip install -e .
+# =============================================================================
+
+dependencies = [
+    # Transcript extraction from YouTube
+    "youtube-transcript-api>=1.2.4,<2.0",
+
+    # NLP — tokenization, lemmatization, POS tagging
+    # Model downloaded separately: python -m spacy download en_core_web_sm
+    "spacy>=3.8,<4.0",
+
+    # Fuzzy string matching for deck confidence interval check
+    "rapidfuzz>=3.0,<4.0",
+
+    # HTTP client — MW API and dictionaryapi.dev calls
+    "requests>=2.28,<3.0",
+
+    # Anki package generation — produces .apkg files without Anki running
+    "genanki>=0.13,<1.0",
+
+    # Environment variable management — .env file support
+    "python-dotenv>=1.0,<2.0",
+]
+
+# =============================================================================
+# Optional dependencies
+# Dev tools — installed via: pip install -e ".[dev]"
+# Not needed to run the pipeline, only for development and testing.
+# =============================================================================
+
+[project.optional-dependencies]
+dev = [
+    # Test runner
+    "pytest>=8.0,<10.0",
+
+    # Code formatter
+    "black>=24.0",
+
+    # Linter
+    "ruff>=0.4",
+
+    # Static type checker
+    "mypy>=1.9",
+
+    # Type stubs for requests (used by mypy)
+    "types-requests>=2.28",
+]
+
+# =============================================================================
+# Package discovery
+# =============================================================================
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# =============================================================================
+# Pytest configuration
+# =============================================================================
+
+[tool.pytest.ini_options]
+testpaths    = ["tests"]
+pythonpath   = ["src"]
+markers      = [
+    "integration: hits external services or requires a running Anki instance",
+]
+# Default: skip integration tests unless explicitly requested
+addopts      = "-m 'not integration' --tb=short -q"
+
+# =============================================================================
+# Black configuration
+# =============================================================================
+
+[tool.black]
+line-length    = 100
+target-version = ["py39", "py310", "py311", "py312"]
+include        = '(src/pipeline|tests)/.*\.py$'
+
+# =============================================================================
+# Ruff configuration
+# =============================================================================
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+]
+ignore = [
+    "E501",  # line too long — black handles this
+    "B008",  # do not perform function calls in default args
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]  # assert False is fine in tests
+
+# =============================================================================
+# Mypy configuration
+# =============================================================================
+
+[tool.mypy]
+python_version         = "3.9"
+warn_return_any        = true
+warn_unused_configs    = true
+ignore_missing_imports = true
+files                  = ["src/pipeline"]
