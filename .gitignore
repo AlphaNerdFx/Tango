@@ -1,0 +1,60 @@
+# .gitignore — yt-anki-pipeline
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Python
+src/pipeline/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.tangovenv/
+.venv/
+venv/
+env/
+
+# Pipeline output
+output/
+*.apkg
+pipeline.db
+review.json
+
+# Logs
+logs/
+*.log
+*.jsonl
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+coverage.xml
+
+# Type checking
+.mypy_cache/
+
+# Linting
+.ruff_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# spaCy model cache
+# Models are downloaded via 'make spacy-model' — not committed
+*.tar.gz
+src/yt_anki_pipeline.egg-info

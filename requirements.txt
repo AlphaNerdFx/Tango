@@ -1,0 +1,37 @@
+# requirements.txt — pinned runtime dependencies
+# Generated from pyproject.toml dependencies.
+# Use this file for exact reproducibility across machines and deployments.
+# Install runtime deps only:
+#   pip install -r requirements.txt
+# Install everything including dev tools:
+#   pip install -r requirements.txt -r requirements-dev.txt
+# For development with editable install (recommended):
+#   pip install -e ".[dev]"
+
+# Transcript extraction
+youtube-transcript-api==1.2.4
+
+# NLP
+# spaCy model downloaded separately:
+#   python -m spacy download en_core_web_sm
+spacy==3.8.14
+
+# spaCy core transitive dependencies — pinned for stability
+thinc==8.3.13
+pydantic==2.13.4
+numpy==2.4.4
+cymem==2.0.13
+preshed==3.0.13
+murmurhash==1.0.15
+
+# Fuzzy matching
+rapidfuzz==3.14.5
+
+# HTTP client
+requests==2.33.1
+
+# Anki package generation
+genanki==0.13.1
+
+# Environment management
+python-dotenv==1.2.2
