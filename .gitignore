@@ -6,12 +6,12 @@
 !.env.example
 
 # Python
-src/pipeline/__pycache__/
-*.py[cod]
-*.pyo
-*.pyd
+src/pipeline/__pycache__
+src/pipeline/*.py[cod]
+src/pipeline/*.pyo
+src/pipeline/*.pyd
 .Python
-*.egg-info/
+src/yt_anki_pipeline.egg-info/
 *.egg
 dist/
 build/
