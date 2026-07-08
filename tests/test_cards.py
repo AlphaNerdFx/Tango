@@ -1,6 +1,5 @@
 """
 All file I/O uses tmp_path fixtures — no files written to the real filesystem.
-
 Run unit tests:  pytest tests/test_cards.py -m "not integration"
 """
 
