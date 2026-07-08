@@ -103,7 +103,7 @@ Short words (under 4 characters) use exact matching only — fuzzy scoring on sh
 ## Roadmap
 
 - [X] Core pipeline — transcript → NLP → deck check → definitions → Anki cards
-- [ ] Language filter — auto-detect deck language and filter subtitles accordingly
+- [X] Language filter — auto-detect deck language and filter subtitles accordingly
 - [ ] Real-time mode — surface new words as a video plays
 - [ ] User profiles — vocabulary level modelling from Anki review history
 - [ ] Video recommender — suggest videos based on vocabulary domain and level
