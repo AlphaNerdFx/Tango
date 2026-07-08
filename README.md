@@ -77,7 +77,8 @@ yt-anki-pipeline/
 │   ├── nlp.py           # spaCy vocabulary extraction
 │   ├── deck.py          # AnkiConnect duplicate detection
 │   ├── definition.py    # MW + dictionaryapi.dev fetching
-│   ├── cards.py         # genanki card and package generation
+│   ├── language.py      # Anki deck language detection
+|   ├── cards.py         # genanki card and package generation
 │   ├── state.py         # SQLite state management
 │   └── __main__.py      # CLI entry point
 ├── tests/
