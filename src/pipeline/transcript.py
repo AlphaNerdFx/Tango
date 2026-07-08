@@ -115,6 +115,11 @@ def get_transcript(video_id: str, languages: list[str] = ["en"]) -> Transcript:
     except YouTubeRequestFailed as exc:
         raise YouTubeRequestFailed(video_id, exc) from exc
 
+    # Use resolve_transcript for partial BCP-47 matching and manual-first preference
+    from pipeline.language import resolve_transcript
+    if languages and len(languages) == 1:
+        return resolve_transcript(transcript_list, languages[0])
+
     try:
         return transcript_list.find_transcript(languages)
     except (NoTranscriptFound, CouldNotRetrieveTranscript):

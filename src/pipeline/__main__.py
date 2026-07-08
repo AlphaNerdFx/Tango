@@ -1,6 +1,4 @@
 """
-__main__.py
------------
 CLI entry point for the yt-anki-pipeline.
 
 Usage:
@@ -33,6 +31,11 @@ from pipeline import (
     nlp as nlp_module,
     state,
     transcript as transcript_module,
+)
+from pipeline.language import (
+    LanguageResolutionError,
+    list_supported_languages,
+    resolve_language_code,
 )
 from pipeline.deck import (
     AnkiNotRunningError,
@@ -199,6 +202,17 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
     video_id  = args.video_id
     deck_name = _select_deck(args.deck, session)
 
+    # ── 0. Resolve language ───────────────────────────────────────────────────
+    try:
+        language_code = resolve_language_code(
+            language_flag=getattr(args, "language", None),
+            deck_name=deck_name,
+        )
+    except LanguageResolutionError as exc:
+        _err(str(exc))
+        sys.exit(1)
+    _ok(f"Target language: {language_code}")
+
     # ── 1. Check not already processed ───────────────────────────────────────
     try:
         check_video_not_processed(video_id)
@@ -210,7 +224,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
     # ── 2. Fetch transcript ───────────────────────────────────────────────────
     _info(f"Fetching transcript for: {video_id}")
     try:
-        transcript = transcript_module.get_transcript(video_id)
+        transcript = transcript_module.get_transcript(video_id, languages=[language_code])
         snippets   = transcript_module.get_snippets(transcript)
     except Exception as exc:
         _err(f"Transcript failed: {exc}")
@@ -451,6 +465,21 @@ examples:
 
     # Common
     parser.add_argument(
+        "--language",
+        metavar="LANG_CODE",
+        help=(
+            "BCP-47 language code for subtitle selection (e.g. fr, de, ja). "
+            "If omitted, inferred from deck name. "
+            "Run 'python -m pipeline --list-languages' to see all supported codes."
+        ),
+    )
+    parser.add_argument(
+        "--list-languages",
+        action="store_true",
+        dest="list_languages",
+        help="Print all supported language names and their BCP-47 codes, then exit.",
+    )
+    parser.add_argument(
         "--deck",
         metavar="DECK_NAME",
         help='Target Anki deck. Supports sub-decks: "Language::English::Vocabulary". '
@@ -480,6 +509,17 @@ def main() -> None:
             _err("--video-id is required for the default pipeline mode.")
             _info("Run 'python -m pipeline --help' for usage.")
             sys.exit(1)
+
+    # Handle --list-languages before anything else
+    if args.list_languages:
+        langs = list_supported_languages()
+        print()
+        print("  Supported languages:")
+        print()
+        for name, code in langs:
+            print(f"    {code:<10} {name}")
+        print()
+        sys.exit(0)
 
     # Dispatch
     if args.review:
