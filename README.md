@@ -2,7 +2,7 @@
 
 # Tango
 
-[![CI](https://github.com/youssefea/tango/actions/workflows/ci.yml/badge.svg)](https://github.com/youssefea/tango/actions/workflows/ci.yml)
+[![CI](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml/badge.svg)](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Version](https://img.shields.io/badge/version-v0.2.0--beta-orange)](https://github.com/youssefea/tango/releases/tag/v0.2.0)
