@@ -5,7 +5,7 @@
 [![CI](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml/badge.svg)](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.2.0--beta-orange)](https://github.com/youssefea/tango/releases/tag/v0.2.0)
+[![Version](https://img.shields.io/badge/version-v0.2.0--beta-orange)](https://github.com/AlphaNerdFx/Tango/releases/tag/v0.2.0)
 
 Turn any YouTube video into Anki flashcards, automatically.
 
@@ -40,8 +40,8 @@ Between extraction and card creation, Tango:
 Prerequisites: Python 3.9+, [Anki](https://apps.ankiweb.net/) desktop, [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on.
 
 ```bash
-git clone https://github.com/youssefea/tango.git
-cd tango
+git clone https://github.com/AlphaNerdFx/Tango.git
+cd Tango
 make all
 cp .env.example .env
 # fill in your API keys in .env
