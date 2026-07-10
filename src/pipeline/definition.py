@@ -213,13 +213,42 @@ def _cache_set(result: DefinitionResult) -> None:
         )
 
 
+def _cache_set_key(key: str, result: DefinitionResult) -> None:
+    """Persist a DefinitionResult to SQLite using a custom cache key."""
+    import json
+    with _get_db() as conn:
+        conn.execute(
+            """
+            INSERT OR REPLACE INTO definitions
+                (lemma, definition, example_dict, synonyms, antonyms,
+                 part_of_speech, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                key,
+                result.definition,
+                result.example_dict,
+                json.dumps(result.synonyms),
+                json.dumps(result.antonyms),
+                result.part_of_speech,
+                result.source,
+            ),
+        )
+
+
 def _cache_row_to_result(
-    lemma: str,
+    cache_key: str,
     row: dict,
     snippets: Optional[dict],
 ) -> DefinitionResult:
-    """Reconstruct a DefinitionResult from a SQLite cache row."""
+    """Reconstruct a DefinitionResult from a SQLite cache row.
+
+    cache_key may be a composite "lemma::language" string.
+    The lemma field in the result always returns the bare word only.
+    """
     import json
+    # Strip the "::language" suffix if present to restore bare lemma
+    lemma = cache_key.split("::")[0]
     return DefinitionResult(
         lemma=lemma,
         definition=row["definition"],
@@ -400,13 +429,17 @@ def _fetch_from_mw(lemma: str) -> Optional[list]:
     return None
 
 
-def _fetch_from_dictapi(lemma: str) -> Optional[list]:
+def _fetch_from_dictapi(lemma: str, language: str = "en") -> Optional[list]:
     """
-    Call dictionaryapi.dev for one word.
+    Call dictionaryapi.dev for one word in the specified language.
+
+    When language is "en", queries the English endpoint (default).
+    When language is "fr", "de", "es" etc., queries the native language endpoint
+    returning definitions in that language.
 
     Returns the raw JSON list, or None on failure.
     """
-    url = f"{DICT_API_BASE}/{lemma}"
+    url = f"{DICT_API_BASE.rstrip('/')}/{language}/{lemma}"
     try:
         response = requests.get(url, timeout=API_TIMEOUT)
         if response.status_code == 404:
@@ -427,46 +460,106 @@ def fetch_definition(
     lemma: str,
     snippets: Optional[dict] = None,
     use_cache: bool = True,
+    language: str = "en",
+    def_language: Optional[str] = None,
 ) -> Optional[DefinitionResult]:
     """
     Fetch a definition for one lemma.
 
-    Checks SQLite cache first. If not cached, tries MW then dictionaryapi.dev.
-    Successful results are cached immediately.
+    Checks SQLite cache first. If not cached, queries APIs based on the
+    language resolution:
+
+    Native mode (def_language is None or equals language):
+        dictionaryapi.dev/{language}/{lemma} → fallback card
+
+    Translation mode (def_language differs from language):
+        Translates lemma via translation.translate_word()
+        then MW(translated) → dictionaryapi.dev/en(translated)
+
+    English mode (language == "en"):
+        MW(lemma) → dictionaryapi.dev/en(lemma)  [original behaviour]
 
     Args:
-        lemma:      Lowercase lemma from nlp.py.
-        snippets:   Output of transcript.get_snippets(). Used to find the
-                    transcript example sentence. Pass None to skip.
-        use_cache:  Set False to force a fresh API call (e.g. in tests).
+        lemma:        Lowercase lemma from nlp.py.
+        snippets:     Output of transcript.get_snippets(). Used to find the
+                      transcript example sentence. Pass None to skip.
+        use_cache:    Set False to force a fresh API call (e.g. in tests).
+        language:     BCP-47 code of the transcript language (e.g. "fr").
+        def_language: BCP-47 code for definition output. If None or same as
+                      language, definitions are fetched in native language.
+                      If different (e.g. "en"), word is translated first.
 
     Returns:
         DefinitionResult or None if neither API found the word.
     """
     # ── Cache check ───────────────────────────────────────────────────────────
+    cache_key = f"{lemma}::{def_language or language}"
     if use_cache:
-        cached = _cache_get(lemma)
+        cached = _cache_get(cache_key)
         if cached:
-            logger.debug("Cache hit for '%s'.", lemma)
-            return _cache_row_to_result(lemma, cached, snippets)
+            logger.debug("Cache hit for '%s'.", cache_key)
+            return _cache_row_to_result(cache_key, cached, snippets)
 
-    # ── MW attempt ────────────────────────────────────────────────────────────
-    mw_data = _fetch_from_mw(lemma)
-    if mw_data:
-        result = _parse_mw_response(lemma, mw_data, snippets)
-        if result:
-            logger.info("MW: found '%s'.", lemma)
-            _cache_set(result)
-            return result
-        logger.debug("MW returned data for '%s' but it was unparseable.", lemma)
+    # ── Resolve which word and language to query ──────────────────────────────
+    target_language = def_language or language
+    query_lemma     = lemma
 
-    # ── dictionaryapi.dev fallback ────────────────────────────────────────────
-    dict_data = _fetch_from_dictapi(lemma)
+    # Translation mode: translate lemma to def_language first
+    if def_language and def_language != language:
+        try:
+            from pipeline.translation import translate_word, TranslationUnavailableError
+            translated = translate_word(query_lemma, language, def_language)
+            if translated:
+                logger.info(
+                    "Translated '%s' (%s->%s): '%s'",
+                    lemma, language, def_language, translated,
+                )
+                query_lemma = translated
+            else:
+                # User chose to continue without translation
+                target_language = language
+                logger.warning(
+                    "Translation unavailable for '%s'. "
+                    "Falling back to native '%s' definition.",
+                    lemma, language,
+                )
+        except TranslationUnavailableError:
+            raise
+
+    # ── English / translated word: MW first ───────────────────────────────────
+    if target_language == "en":
+        mw_data = _fetch_from_mw(query_lemma)
+        if mw_data:
+            result = _parse_mw_response(query_lemma, mw_data, snippets)
+            if result:
+                # Store under original lemma for consistent cache keys
+                result = DefinitionResult(
+                    lemma=lemma, definition=result.definition,
+                    example_dict=result.example_dict,
+                    example_transcript=result.example_transcript,
+                    synonyms=result.synonyms, antonyms=result.antonyms,
+                    part_of_speech=result.part_of_speech, source=result.source,
+                )
+                logger.info("MW: found '%s' (queried as '%s').", lemma, query_lemma)
+                _cache_set_key(cache_key, result)
+                return result
+
+    # ── dictionaryapi.dev (native or English fallback) ────────────────────────
+    dict_data = _fetch_from_dictapi(query_lemma, language=target_language)
     if dict_data:
-        result = _parse_dictapi_response(lemma, dict_data, snippets)
+        result = _parse_dictapi_response(query_lemma, dict_data, snippets)
         if result:
-            logger.info("dictionaryapi: found '%s'.", lemma)
-            _cache_set(result)
+            result = DefinitionResult(
+                lemma=lemma, definition=result.definition,
+                example_dict=result.example_dict,
+                example_transcript=result.example_transcript,
+                synonyms=result.synonyms, antonyms=result.antonyms,
+                part_of_speech=result.part_of_speech, source=result.source,
+            )
+            logger.info(
+                "dictionaryapi[%s]: found '%s'.", target_language, lemma
+            )
+            _cache_set_key(cache_key, result)
             return result
 
     logger.warning("No definition found for '%s' from either source.", lemma)
@@ -479,6 +572,8 @@ def fetch_definitions(
     lemmas: list[str],
     snippets: Optional[dict] = None,
     delay: float = API_DELAY,
+    language: str = "en",
+    def_language: Optional[str] = None,
 ) -> DefinitionBatchResult:
     """
     Fetch definitions for a list of lemmas in first-appearance order.
@@ -517,7 +612,10 @@ def fetch_definitions(
         if i > 1:
             time.sleep(delay)
 
-        result = fetch_definition(lemma, snippets, use_cache=False)
+        result = fetch_definition(
+                lemma, snippets, use_cache=False,
+                language=language, def_language=def_language,
+            )
 
         if result:
             batch.found.append(result)

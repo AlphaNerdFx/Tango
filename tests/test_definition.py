@@ -28,6 +28,9 @@ from pipeline.definition import (
     fetch_definitions,
 )
 
+
+# ── Fixtures ──────────────────────────────────────────────────────────────────
+
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
     """Redirect all SQLite operations to a temp DB for each test."""
@@ -118,6 +121,9 @@ def dictapi_response() -> list:
         }
     ]
 
+
+# ── _strip_mw_markup ──────────────────────────────────────────────────────────
+
 class TestStripMwMarkup:
 
     def test_strips_bc_token(self):
@@ -147,6 +153,9 @@ class TestStripMwMarkup:
 
     def test_no_markup_unchanged(self):
         assert _strip_mw_markup("plain text here") == "plain text here"
+
+
+# ── _find_transcript_sentence ─────────────────────────────────────────────────
 
 class TestFindTranscriptSentence:
 
@@ -182,6 +191,9 @@ class TestFindTranscriptSentence:
     def test_empty_snippets_returns_none(self):
         result = _find_transcript_sentence("water", {})
         assert result is None
+
+
+# ── _parse_mw_response ────────────────────────────────────────────────────────
 
 class TestParseMwResponse:
 
@@ -239,6 +251,9 @@ class TestParseMwResponse:
     def test_no_snippets_gives_no_transcript_example(self, mw_response):
         result = _parse_mw_response("contaminate", mw_response, None)
         assert result.example_transcript is None
+
+
+# ── _parse_dictapi_response ───────────────────────────────────────────────────
 
 class TestParseDictapiResponse:
 
@@ -317,6 +332,9 @@ class TestParseDictapiResponse:
         result = _parse_dictapi_response("test", response, sample_snippets)
         assert len(result.synonyms) <= 5
 
+
+# ── SQLite cache ──────────────────────────────────────────────────────────────
+
 class TestCache:
 
     def test_cache_miss_returns_none(self):
@@ -342,6 +360,9 @@ class TestCache:
         _cache_set(updated)
         cached = _cache_get("contaminate")
         assert cached["definition"] == "updated definition"
+
+
+# ── fetch_definition ──────────────────────────────────────────────────────────
 
 class TestFetchDefinition:
 
@@ -381,8 +402,13 @@ class TestFetchDefinition:
     def test_returns_cached_without_api_call(
         self, mock_mw, sample_definition_result, sample_snippets
     ):
-        _cache_set(sample_definition_result)
-        result = fetch_definition("contaminate", sample_snippets, use_cache=True)
+        # Cache key is now composite: "lemma::language"
+        # fetch_definition with default language="en" looks up "contaminate::en"
+        from pipeline.definition import _cache_set_key
+        _cache_set_key("contaminate::en", sample_definition_result)
+        result = fetch_definition(
+            "contaminate", sample_snippets, use_cache=True, language="en"
+        )
         mock_mw.assert_not_called()
         assert result is not None
         assert result.lemma == "contaminate"
@@ -394,9 +420,15 @@ class TestFetchDefinition:
     ):
         mock_mw.return_value = mw_response
         mock_dict.return_value = None
-        fetch_definition("contaminate", sample_snippets, use_cache=False)
-        cached = _cache_get("contaminate")
+        fetch_definition(
+            "contaminate", sample_snippets, use_cache=False, language="en"
+        )
+        # Cache key is now composite: "contaminate::en"
+        cached = _cache_get("contaminate::en")
         assert cached is not None
+
+
+# ── fetch_definitions (batch) ─────────────────────────────────────────────────
 
 class TestFetchDefinitions:
 
@@ -456,6 +488,9 @@ class TestFetchDefinitions:
         mock_fetch.assert_not_called()
         assert result.found == []
         assert result.not_found == []
+
+
+# ── Integration (real network + API keys required) ────────────────────────────
 
 @pytest.mark.integration
 class TestIntegration:
