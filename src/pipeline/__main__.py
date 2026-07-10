@@ -32,6 +32,7 @@ from pipeline import (
     state,
     transcript as transcript_module,
 )
+from pipeline.translation import reset_warning_state
 from pipeline.language import (
     LanguageResolutionError,
     list_supported_languages,
@@ -213,6 +214,16 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
         sys.exit(1)
     _ok(f"Target language: {language_code}")
 
+    # ── 0b. Resolve definition language ──────────────────────────────────────
+    def_language = getattr(args, "def_lang", None)
+    if def_language and def_language != language_code:
+        _info(f"Definition language: {def_language} (translation mode)")
+    else:
+        def_language = None  # native mode — no translation needed
+
+    # Reset per-run translation warning state
+    reset_warning_state()
+
     # ── 1. Check not already processed ───────────────────────────────────────
     try:
         check_video_not_processed(video_id)
@@ -277,7 +288,11 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
 
     # ── 7. Fetch definitions ──────────────────────────────────────────────────
     _info(f"Fetching definitions for {len(words_to_define)} words...")
-    batch = definition_module.fetch_definitions(words_to_define, snippets)
+    batch = definition_module.fetch_definitions(
+            words_to_define, snippets,
+            language=language_code,
+            def_language=def_language,
+        )
     _ok(
         f"Definitions: {len(batch.found)} found "
         f"({len(batch.from_cache)} cached) / {len(batch.not_found)} not found"
@@ -471,6 +486,17 @@ examples:
             "BCP-47 language code for subtitle selection (e.g. fr, de, ja). "
             "If omitted, inferred from deck name. "
             "Run 'python -m pipeline --list-languages' to see all supported codes."
+        ),
+    )
+    parser.add_argument(
+        "--def-lang",
+        dest="def_lang",
+        metavar="LANG_CODE",
+        help=(
+            "BCP-47 code for definition output language. "
+            "Defaults to the transcript language (native definitions). "
+            "Set to 'en' to get English definitions of non-English words via translation. "
+            "Example: --language fr --def-lang en"
         ),
     )
     parser.add_argument(
