@@ -48,6 +48,12 @@ dependencies = [
 # =============================================================================
 
 [project.optional-dependencies]
+translation = [
+    # Required for DEF_LANG translation mode.
+    # Install via: make translate-setup
+    "argostranslate>=1.9",
+    "libretranslate>=1.6",
+]
 dev = [
     # Test runner
     "pytest>=8.0,<10.0",

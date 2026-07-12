@@ -2,9 +2,9 @@
 # yt-anki-pipeline — Makefile
 # =============================================================================
 # Targets:
-#   make all          — full first-time setup (venv + install + spaCy model)
+#   make all          — full first-time setup (tangovenv + install + spaCy model)
 #   make venv         — create virtual environment
-#   make install      — install package and all dependencies into venv
+#   make install      — install package and all dependencies into tangovenv
 #   make spacy-model  — download en_core_web_sm separately
 #   make test         — run unit tests only (no network, no Anki required)
 #   make test-all     — run full suite including integration tests
@@ -14,7 +14,7 @@
 #   make run          — run the pipeline (VIDEO_ID and DECK required)
 #   make review       — process the review.json file
 #   make backlog      — process the Anki backlog for a deck
-#   make clean        — remove venv, output, cache files
+#   make clean        — remove tangovenv, output, cache files
 #   make check-os     — warn if running on Windows without a compatible shell
 # =============================================================================
 
@@ -120,8 +120,9 @@ spacy-model: venv
 # -- translate-setup ---------------------------------------------------------
 
 translate-setup: venv
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Setting up LibreTranslate for translation mode...\n"
-	@$(VENV_PIP) install --quiet libretranslate
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Setting up translation dependencies...\n"
+	@$(VENV_PIP) install --quiet argostranslate libretranslate
+	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  argostranslate and libretranslate installed.\n"
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Translation models will be downloaded on first use.\n"
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Language pair loaded from LANGUAGE and DEF_LANG in .env\n"
 	@$(VENV_PYTHON) -c "\

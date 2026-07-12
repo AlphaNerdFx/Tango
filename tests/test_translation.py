@@ -324,6 +324,49 @@ class TestWarningDeduplication:
         out = capsys.readouterr().out
         assert out.count("Community mirrors are unavailable") == 2
 
+    def test_reset_clears_user_choice(self):
+        from pipeline.translation import _user_choice
+        _user_choice["fr->en"] = "continue"
+        reset_warning_state()
+        assert "fr->en" not in _user_choice
+
+
+class TestPerRunChoiceCaching:
+
+    @patch("pipeline.translation.try_community_mirror", return_value=None)
+    @patch("pipeline.translation.translate_local",
+           side_effect=ModelNotInstalledError("fr", "en"))
+    def test_continue_choice_applied_silently_to_subsequent_words(self, _, __):
+        """After user picks 'f', subsequent words skip the prompt entirely."""
+        with patch("builtins.input", return_value="f") as mock_input:
+            translate_word("bonjour", "fr", "en", interactive=True)
+            translate_word("merci",   "fr", "en", interactive=True)
+            translate_word("maison",  "fr", "en", interactive=True)
+        # Input should only be called once — subsequent words use cached choice
+        assert mock_input.call_count == 1
+
+    @patch("pipeline.translation.try_community_mirror", return_value=None)
+    @patch("pipeline.translation.translate_local",
+           side_effect=ModelNotInstalledError("fr", "en"))
+    def test_exit_choice_raises_on_first_subsequent_word(self, _, __):
+        """After user picks 'x', next word raises immediately without prompting."""
+        with patch("builtins.input", return_value="x"):
+            with pytest.raises(TranslationUnavailableError):
+                translate_word("bonjour", "fr", "en", interactive=True)
+        # Second call raises without prompting
+        with pytest.raises(TranslationUnavailableError):
+            translate_word("merci", "fr", "en", interactive=True)
+
+    @patch("pipeline.translation.try_community_mirror", return_value=None)
+    @patch("pipeline.translation.translate_local",
+           side_effect=ModelNotInstalledError("fr", "en"))
+    def test_different_pairs_prompt_independently(self, _, __):
+        """fr->en and de->en are separate pairs, each prompts once."""
+        with patch("builtins.input", side_effect=["f", "f"]) as mock_input:
+            translate_word("bonjour", "fr", "en", interactive=True)
+            translate_word("hallo",   "de", "en", interactive=True)
+        assert mock_input.call_count == 2
+
 
 # ── Integration (real network + models) ──────────────────────────────────────
 

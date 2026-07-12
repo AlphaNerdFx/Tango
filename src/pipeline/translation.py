@@ -1,4 +1,6 @@
 """
+translation.py
+--------------
 Responsible for:
   1. Downloading argostranslate language pair models with a progress bar
   2. Translating a word from source language to target language locally
@@ -39,8 +41,11 @@ LIBRETRANSLATE_MIRRORS = [
     "https://translate.argosopentech.com",
     "https://libretranslate.de",
 ]
-LIBRETRANSLATE_LOCAL   = os.getenv("LIBRETRANSLATE_URL", "http://localhost:5000")
-LIBRETRANSLATE_TIMEOUT = 5  # seconds for mirror probe
+LIBRETRANSLATE_LOCAL       = os.getenv("LIBRETRANSLATE_URL", "http://localhost:5000")
+LIBRETRANSLATE_TIMEOUT     = 5    # seconds for mirror probe
+LOCAL_TRANSLATION_TIMEOUT  = 15   # seconds max per word for local argostranslate
+                                   # argostranslate on CPU can take 30-60s/word
+                                   # with Stanza SBD — abort and warn if exceeded
 
 # Approximate model sizes in MB — used to inform the user before download
 # Updated when argostranslate package index reports sizes
@@ -228,12 +233,19 @@ def download_model(from_code: str, to_code: str) -> bool:
         return False
 
 
+class _TranslationTimeoutError(Exception):
+    """Internal: local translation exceeded LOCAL_TRANSLATION_TIMEOUT."""
+
+
 def translate_local(word: str, from_code: str, to_code: str) -> Optional[str]:
     """
     Translate a word using the locally installed argostranslate model.
 
-    Returns the translated string, or None if the model is not installed
-    or translation fails.
+    Enforces LOCAL_TRANSLATION_TIMEOUT per word. argostranslate with the
+    Stanza sentence boundary model can take 30-60s per word on CPU — this
+    timeout prevents the pipeline hanging silently.
+
+    Returns the translated string, or None on failure or timeout.
 
     Raises:
         ModelNotInstalledError: Model not installed for this pair.
@@ -241,12 +253,30 @@ def translate_local(word: str, from_code: str, to_code: str) -> Optional[str]:
     if not is_model_installed(from_code, to_code):
         raise ModelNotInstalledError(from_code, to_code)
 
-    try:
+    import concurrent.futures
+
+    def _do_translate() -> str:
         from argostranslate import translate
         translation = translate.get_translation_from_codes(from_code, to_code)
-        result = translation.translate(word).strip()
-        logger.debug("Local translation: '%s' (%s->%s) -> '%s'", word, from_code, to_code, result)
-        return result or None
+        return translation.translate(word).strip()
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_do_translate)
+            result = future.result(timeout=LOCAL_TRANSLATION_TIMEOUT)
+            logger.debug(
+                "Local translation: '%s' (%s->%s) -> '%s'",
+                word, from_code, to_code, result,
+            )
+            return result or None
+    except concurrent.futures.TimeoutError:
+        logger.warning(
+            "Local translation timed out after %ds for '%s'. "
+            "argostranslate is too slow on this machine for per-word translation. "
+            "Consider using a community mirror or setting DEF_LANG to match LANGUAGE.",
+            LOCAL_TRANSLATION_TIMEOUT, word,
+        )
+        return None
     except Exception as exc:
         logger.warning("Local translation failed for '%s': %s", word, exc)
         return None
@@ -289,6 +319,8 @@ def translate_word(
         return result
 
     # ── Tier 2: Local model ───────────────────────────────────────────────────
+    # Warn once if local translation is about to run — it can be slow on CPU
+    _warn_local_translation_slow(pair)
     try:
         result = translate_local(word, from_code, to_code)
         if result:
@@ -300,14 +332,32 @@ def translate_word(
     if not interactive:
         return None
 
+    # If user already made a choice for this pair this run, honour it silently
+    if pair in _user_choice:
+        stored = _user_choice[pair]
+        if stored == "continue":
+            return None
+        elif stored == "exit":
+            raise TranslationUnavailableError(
+                f"Translation unavailable for {pair}. Exiting."
+            )
+        # "download" — model should now be installed, try again
+        try:
+            return translate_local(word, from_code, to_code)
+        except ModelNotInstalledError:
+            return None
+
     _warn_translation_unavailable(pair)
     choice = _prompt_translation_options(from_code, to_code)
+    _user_choice[pair] = choice
 
     if choice == "download":
         success = download_model(from_code, to_code)
         if success:
-            return translate_local(word, from_code, to_code)
+            result = translate_local(word, from_code, to_code)
+            return result
         print(f"  Download failed. Continuing without translation for this run.")
+        _user_choice[pair] = "continue"
         return None
 
     elif choice == "continue":
@@ -321,8 +371,27 @@ def translate_word(
 
 # ── Internal prompt helpers ───────────────────────────────────────────────────
 
-# Track whether the unavailability warning has been shown this run
-_warned_this_run: set[str] = set()
+# Track warning state and user choice per run, per language pair
+_warned_this_run:    set[str]   = set()
+_warned_slow:        set[str]   = set()
+_user_choice:        dict[str, str] = {}  # pair -> "download" | "continue" | "exit"
+
+
+def _warn_local_translation_slow(pair: str) -> None:
+    """
+    Warn once per run when local argostranslate is about to be used.
+    argostranslate on CPU with Stanza SBD can take 30-60s per word —
+    this sets the user's expectation before the first translation starts.
+    """
+    if pair in _warned_slow:
+        return
+    _warned_slow.add(pair)
+    msg = (
+        "\n  [info]  Local translation active: " + pair + "\n"
+        "          argostranslate on CPU can take 10-60s per word.\n"
+        "          Results will be cached after first run.\n"
+    )
+    print(msg)
 
 
 def _warn_translation_unavailable(pair: str) -> None:
@@ -367,5 +436,7 @@ def _prompt_translation_options(from_code: str, to_code: str) -> str:
 
 
 def reset_warning_state() -> None:
-    """Reset the per-run warning tracker. Called at pipeline start and in tests."""
+    """Reset per-run warning and choice state. Called at pipeline start and in tests."""
     _warned_this_run.clear()
+    _warned_slow.clear()
+    _user_choice.clear()
