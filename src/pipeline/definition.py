@@ -1,4 +1,6 @@
 """
+definition.py
+-------------
 Responsible for fetching word definitions for a list of lemmas and
 returning a normalised result for each word.
 
@@ -65,17 +67,18 @@ class DefinitionResult:
     Attributes:
         lemma:                The base word form from spaCy.
         definition:           First clean definition string.
-        example_dict:         Example sentence from the dictionary API (or None).
-        example_transcript:   Sentence from the video transcript containing
-                              the word (or None if not found in snippets).
+        example_dict:         First example sentence from the dictionary (or None).
+        example_dict2:        Second example sentence from the dictionary (or None).
+        example_transcript:   Sentence from the video transcript (or None).
         synonyms:             List of synonyms. May be empty.
-        antonyms:             List of antonyms. May be empty — rare in free APIs.
+        antonyms:             List of antonyms. May be empty.
         part_of_speech:       e.g. "verb", "noun", "adjective".
         source:               Which API provided the data.
     """
     lemma:                str
     definition:           str
     example_dict:         Optional[str]
+    example_dict2:        Optional[str]
     example_transcript:   Optional[str]
     synonyms:             list[str]
     antonyms:             list[str]
@@ -170,6 +173,7 @@ def _get_db() -> sqlite3.Connection:
             lemma               TEXT PRIMARY KEY,
             definition          TEXT NOT NULL,
             example_dict        TEXT,
+            example_dict2       TEXT,
             synonyms            TEXT,
             antonyms            TEXT,
             part_of_speech      TEXT,
@@ -177,6 +181,11 @@ def _get_db() -> sqlite3.Connection:
             fetched_at          TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+    # Migrate existing databases that predate the example_dict2 column
+    try:
+        conn.execute("ALTER TABLE definitions ADD COLUMN example_dict2 TEXT")
+    except Exception:
+        pass  # Column already exists — safe to ignore
     conn.commit()
     return conn
 
@@ -197,14 +206,15 @@ def _cache_set(result: DefinitionResult) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO definitions
-                (lemma, definition, example_dict, synonyms, antonyms,
+                (lemma, definition, example_dict, example_dict2, synonyms, antonyms,
                  part_of_speech, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 result.lemma,
                 result.definition,
                 result.example_dict,
+                getattr(result, "example_dict2", None),
                 json.dumps(result.synonyms),
                 json.dumps(result.antonyms),
                 result.part_of_speech,
@@ -220,14 +230,15 @@ def _cache_set_key(key: str, result: DefinitionResult) -> None:
         conn.execute(
             """
             INSERT OR REPLACE INTO definitions
-                (lemma, definition, example_dict, synonyms, antonyms,
+                (lemma, definition, example_dict, example_dict2, synonyms, antonyms,
                  part_of_speech, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 key,
                 result.definition,
                 result.example_dict,
+                getattr(result, "example_dict2", None),
                 json.dumps(result.synonyms),
                 json.dumps(result.antonyms),
                 result.part_of_speech,
@@ -253,6 +264,7 @@ def _cache_row_to_result(
         lemma=lemma,
         definition=row["definition"],
         example_dict=row.get("example_dict"),
+        example_dict2=row.get("example_dict2"),
         example_transcript=(
             _find_transcript_sentence(lemma, snippets) if snippets else None
         ),
@@ -290,8 +302,8 @@ def _parse_mw_response(
         return None
     definition = _strip_mw_markup(short_defs[0])
 
-    # ── Dictionary example (from verbal illustrations in 'def') ───────────────
-    example_dict: Optional[str] = None
+    # ── Dictionary examples (from verbal illustrations in 'def') ──────────────
+    examples_dict: list[str] = []
     try:
         for def_block in entry.get("def", []):
             for sseq_group in def_block.get("sseq", []):
@@ -303,17 +315,20 @@ def _parse_mw_response(
                         continue
                     for dt_item in sense.get("dt", []):
                         if isinstance(dt_item, list) and dt_item[0] == "vis":
-                            illustrations = dt_item[1]
-                            if illustrations:
-                                raw = illustrations[0].get("t", "")
-                                example_dict = _strip_mw_markup(raw)
-                                break
-                    if example_dict:
+                            for illus in dt_item[1]:
+                                raw = illus.get("t", "")
+                                if raw:
+                                    examples_dict.append(_strip_mw_markup(raw))
+                                if len(examples_dict) >= 2:
+                                    break
+                    if len(examples_dict) >= 2:
                         break
-                if example_dict:
+                if len(examples_dict) >= 2:
                     break
     except (KeyError, IndexError, TypeError):
         pass
+    example_dict  = examples_dict[0] if len(examples_dict) > 0 else None
+    example_dict2 = examples_dict[1] if len(examples_dict) > 1 else None
 
     # ── Synonyms (from 'syns' field) ──────────────────────────────────────────
     synonyms: list[str] = []
@@ -334,8 +349,9 @@ def _parse_mw_response(
         lemma=lemma,
         definition=definition,
         example_dict=example_dict,
+        example_dict2=example_dict2,
         example_transcript=_find_transcript_sentence(lemma, snippets) if snippets else None,
-        synonyms=synonyms[:5],   # cap at 5
+        synonyms=synonyms[:5],
         antonyms=antonyms,
         part_of_speech=pos,
         source="merriam-webster",
@@ -372,17 +388,16 @@ def _parse_dictapi_response(
     if not definition:
         return None
 
-    example_dict: Optional[str] = None
-    # Try definition-level example first, then scan all definitions
-    raw_example = first_def.get("example", "")
-    if raw_example:
-        example_dict = raw_example.strip()
-    else:
-        for defn in definitions[1:]:
-            candidate = defn.get("example", "")
-            if candidate:
-                example_dict = candidate.strip()
-                break
+    # Collect up to 2 example sentences
+    examples_dict: list[str] = []
+    for defn in definitions:
+        candidate = defn.get("example", "")
+        if candidate:
+            examples_dict.append(candidate.strip())
+        if len(examples_dict) >= 2:
+            break
+    example_dict  = examples_dict[0] if len(examples_dict) > 0 else None
+    example_dict2 = examples_dict[1] if len(examples_dict) > 1 else None
 
     # Synonyms and antonyms — present at both meaning and definition level
     synonyms: list[str] = (
@@ -396,6 +411,7 @@ def _parse_dictapi_response(
         lemma=lemma,
         definition=definition,
         example_dict=example_dict,
+        example_dict2=example_dict2,
         example_transcript=_find_transcript_sentence(lemma, snippets) if snippets else None,
         synonyms=synonyms[:5],
         antonyms=antonyms[:5],
@@ -536,6 +552,7 @@ def fetch_definition(
                 result = DefinitionResult(
                     lemma=lemma, definition=result.definition,
                     example_dict=result.example_dict,
+                    example_dict2=result.example_dict2 if hasattr(result, "example_dict2") else None,
                     example_transcript=result.example_transcript,
                     synonyms=result.synonyms, antonyms=result.antonyms,
                     part_of_speech=result.part_of_speech, source=result.source,
@@ -552,6 +569,7 @@ def fetch_definition(
             result = DefinitionResult(
                 lemma=lemma, definition=result.definition,
                 example_dict=result.example_dict,
+                example_dict2=getattr(result, "example_dict2", None),
                 example_transcript=result.example_transcript,
                 synonyms=result.synonyms, antonyms=result.antonyms,
                 part_of_speech=result.part_of_speech, source=result.source,

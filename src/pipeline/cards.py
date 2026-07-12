@@ -50,82 +50,169 @@ from pipeline.config import MODEL_ID, DECK_ID, OUTPUT_DIR
 CARD_CSS = """
 .card {
     font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 18px;
-    color: #1a1a2e;
-    background-color: #f8f9fa;
-    max-width: 560px;
+    font-size: 17px;
+    color: var(--fg, #1a1a2e);
+    background-color: var(--canvas, #ffffff);
+    max-width: 580px;
     margin: 0 auto;
-    padding: 20px;
-    line-height: 1.6;
+    padding: 24px 20px;
+    line-height: 1.65;
 }
-.word {
-    font-size: 28px;
-    font-weight: bold;
-    color: #0f3460;
+
+/* Front — centered word */
+.word-front {
+    font-size: 36px;
+    font-weight: 700;
     text-align: center;
-    margin-bottom: 6px;
+    color: var(--fg, #0f3460);
+    padding: 20px 0 10px;
     letter-spacing: 0.5px;
 }
+
+/* Back — main word */
+.word-back {
+    font-size: 30px;
+    font-weight: 700;
+    text-align: center;
+    color: var(--fg, #0f3460);
+    padding: 10px 0 4px;
+}
+
+/* Translated word or synonyms secondary line */
+.word-secondary {
+    font-size: 18px;
+    text-align: center;
+    color: var(--new-count, #00b4d8);
+    margin-bottom: 4px;
+    font-style: italic;
+}
+
+hr {
+    border: none;
+    border-top: 1px solid var(--border, #d1d5db);
+    margin: 12px 0;
+}
+
 .pos {
     font-size: 13px;
-    color: #6b7280;
+    color: var(--slightly-grey-text, #6b7280);
     text-align: center;
     font-style: italic;
+    margin-bottom: 10px;
+}
+
+.definition {
+    font-size: 16px;
+    color: var(--fg, #374151);
     margin-bottom: 16px;
+    text-align: center;
 }
-hr { border: none; border-top: 1px solid #d1d5db; margin: 14px 0; }
-.definition { font-size: 16px; color: #374151; margin-bottom: 14px; }
-.examples-label, .vocab-label {
-    font-size: 11px;
-    font-weight: bold;
-    text-transform: uppercase;
-    color: #9ca3af;
-    letter-spacing: 0.8px;
-    margin-bottom: 4px;
+
+.example-block {
+    margin-bottom: 14px;
 }
+
 .example {
     font-style: italic;
-    color: #4b5563;
-    font-size: 14px;
-    margin-bottom: 6px;
-    padding-left: 10px;
-    border-left: 3px solid #00b4d8;
+    color: var(--fg, #4b5563);
+    font-size: 15px;
+    margin-bottom: 3px;
+    padding-left: 14px;
+    border-left: 3px solid var(--new-count, #00b4d8);
 }
-.example-source { font-size: 11px; color: #9ca3af; margin-bottom: 10px; padding-left: 10px; }
-.vocab-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px; }
-.vocab-pill { background: #e8f4f8; color: #0f3460; border-radius: 12px; padding: 2px 10px; font-size: 13px; }
-.antonym-pill { background: #fef3c7; color: #92400e; border-radius: 12px; padding: 2px 10px; font-size: 13px; }
-.fallback-note { font-size: 12px; color: #9ca3af; font-style: italic; text-align: center; margin-bottom: 10px; }
+
+.example-source {
+    font-size: 11px;
+    color: var(--slightly-grey-text, #9ca3af);
+    padding-left: 14px;
+    margin-bottom: 0;
+}
+
+.section-label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--slightly-grey-text, #9ca3af);
+    letter-spacing: 0.8px;
+    margin: 14px 0 6px;
+}
+
+.vocab-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.vocab-pill {
+    background: var(--window-bg, #e8f4f8);
+    color: var(--fg, #0f3460);
+    border-radius: 12px;
+    padding: 2px 12px;
+    font-size: 13px;
+}
+
+.antonym-pill {
+    background: var(--window-bg, #fef3c7);
+    color: var(--fg, #92400e);
+    border-radius: 12px;
+    padding: 2px 12px;
+    font-size: 13px;
+}
+
+.fallback-note {
+    font-size: 12px;
+    color: var(--slightly-grey-text, #9ca3af);
+    font-style: italic;
+    text-align: center;
+    margin-top: 10px;
+}
 """
 
 # -- Card templates -----------------------------------------------------------
 
-FRONT_TEMPLATE = "{{Word}}"
+FRONT_TEMPLATE = '<div class="word-front">{{Word}}</div>'
 
 BACK_TEMPLATE = """
-{{FrontSide}}
+<div class="word-back">{{Word}}</div>
+
+{{#WordSecondary}}
+<div class="word-secondary">{{WordSecondary}}</div>
+{{/WordSecondary}}
+
 <hr>
+
 <div class="pos">{{PartOfSpeech}}</div>
 <div class="definition">{{Definition}}</div>
 
-{{#ExampleDict}}
-<div class="examples-label">Examples</div>
-<div class="example">{{ExampleDict}}</div>
+{{#ExampleDict1}}
+<div class="example-block">
+<div class="example">{{ExampleDict1}}</div>
 <div class="example-source">— Dictionary</div>
-{{/ExampleDict}}
+</div>
+{{/ExampleDict1}}
+
+{{#ExampleDict2}}
+<div class="example-block">
+<div class="example">{{ExampleDict2}}</div>
+<div class="example-source">— Dictionary</div>
+</div>
+{{/ExampleDict2}}
 
 {{#ExampleTranscript}}
+<div class="example-block">
 <div class="example">{{ExampleTranscript}}</div>
 <div class="example-source">— From video</div>
+</div>
 {{/ExampleTranscript}}
 
 {{#Synonyms}}
-<div class="vocab-label">Synonyms</div>
+<div class="section-label">Synonyms</div>
 <div class="vocab-row">{{Synonyms}}</div>
 {{/Synonyms}}
 
 {{#Antonyms}}
-<div class="vocab-label">Antonyms</div>
+<div class="section-label">Antonyms</div>
 <div class="vocab-row">{{Antonyms}}</div>
 {{/Antonyms}}
 
@@ -142,9 +229,11 @@ def _build_model() -> genanki.Model:
         "YT Anki Pipeline — Recognition",
         fields=[
             {"name": "Word"},
+            {"name": "WordSecondary"},
             {"name": "PartOfSpeech"},
             {"name": "Definition"},
-            {"name": "ExampleDict"},
+            {"name": "ExampleDict1"},
+            {"name": "ExampleDict2"},
             {"name": "ExampleTranscript"},
             {"name": "Synonyms"},
             {"name": "Antonyms"},
@@ -174,15 +263,28 @@ def _build_note(
     result: DefinitionResult,
     model: genanki.Model,
     video_id: str,
+    word_secondary: str = "",
 ) -> genanki.Note:
+    """
+    word_secondary: translated word (when DEF_LANG differs from LANGUAGE)
+                    or synonyms as plain text (when no translation used).
+                    Shown as the italic secondary line on the back card.
+    """
+    # Build secondary line: translated word if set, else first synonym
+    secondary = word_secondary
+    if not secondary and result.synonyms:
+        secondary = ", ".join(result.synonyms[:3])
+
     return genanki.Note(
         model=model,
         fields=[
             result.lemma.capitalize(),
+            secondary,
             result.part_of_speech,
             result.definition,
-            result.example_dict          or "",
-            result.example_transcript    or "",
+            result.example_dict                                       or "",
+            getattr(result, "example_dict2", None)                    or "",
+            result.example_transcript                                  or "",
             _format_pills(result.synonyms, "vocab-pill"),
             _format_pills(result.antonyms, "antonym-pill"),
             "",
@@ -203,13 +305,18 @@ def _build_fallback_note(
     return genanki.Note(
         model=model,
         fields=[
-            lemma.capitalize(),
-            "", "", "",
-            example_transcript or "",
-            "", "",
-            "Note: no definition found — example from video",
-            video_id,
-            "not_found",
+            lemma.capitalize(),  # Word
+            "",                  # WordSecondary
+            "",                  # PartOfSpeech
+            "",                  # Definition
+            "",                  # ExampleDict1
+            "",                  # ExampleDict2
+            example_transcript or "",  # ExampleTranscript
+            "",                  # Synonyms
+            "",                  # Antonyms
+            "Note: no definition found — example from video",  # FallbackNote
+            video_id,            # VideoID
+            "not_found",         # Source
         ],
         guid=genanki.guid_for(lemma, video_id),
         tags=["yt-anki", video_id, "no-definition"],

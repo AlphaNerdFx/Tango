@@ -1,5 +1,8 @@
 """
+test_cards.py
+
 All file I/O uses tmp_path fixtures — no files written to the real filesystem.
+
 Run unit tests:  pytest tests/test_cards.py -m "not integration"
 """
 
@@ -38,6 +41,7 @@ def sample_result() -> DefinitionResult:
         lemma="contaminate",
         definition="to make impure or unsafe by contact",
         example_dict="the water supply was contaminated",
+        example_dict2="the contaminated river posed health risks",
         example_transcript="contaminated water gave rise to new regulations",
         synonyms=["pollute", "taint"],
         antonyms=["purify"],
@@ -52,6 +56,7 @@ def no_synonym_result() -> DefinitionResult:
         lemma="develop",
         definition="to bring out the capabilities of",
         example_dict=None,
+        example_dict2=None,
         example_transcript="companies had to develop permanent solutions",
         synonyms=[],
         antonyms=[],
@@ -131,7 +136,8 @@ class TestBuildModel:
 
     def test_model_has_expected_fields(self):
         field_names = [f["name"] for f in _build_model().fields]
-        for name in ["Word", "Definition", "ExampleDict", "ExampleTranscript",
+        for name in ["Word", "WordSecondary", "Definition",
+                     "ExampleDict1", "ExampleDict2", "ExampleTranscript",
                      "Synonyms", "Antonyms", "FallbackNote", "VideoID", "Source"]:
             assert name in field_names
 
@@ -157,21 +163,21 @@ class TestBuildNote:
 
     def test_definition_field_present(self, sample_result):
         note = _build_note(sample_result, _build_model(), VIDEO_ID)
-        assert "impure" in note.fields[2]
+        assert "impure" in note.fields[3]
 
     def test_synonyms_rendered_as_pills(self, sample_result):
         note = _build_note(sample_result, _build_model(), VIDEO_ID)
-        assert "vocab-pill" in note.fields[5]
-        assert "pollute" in note.fields[5]
+        assert "vocab-pill" in note.fields[7]
+        assert "pollute" in note.fields[7]
 
     def test_antonyms_rendered_as_pills(self, sample_result):
         note = _build_note(sample_result, _build_model(), VIDEO_ID)
-        assert "antonym-pill" in note.fields[6]
-        assert "purify" in note.fields[6]
+        assert "antonym-pill" in note.fields[8]
+        assert "purify" in note.fields[8]
 
     def test_empty_synonyms_give_empty_string(self, no_synonym_result):
         note = _build_note(no_synonym_result, _build_model(), VIDEO_ID)
-        assert note.fields[5] == ""
+        assert note.fields[9] == ""
 
     def test_guid_is_stable(self, sample_result):
         model = _build_model()
@@ -191,11 +197,10 @@ class TestBuildNote:
 
     def test_none_example_dict_becomes_empty_string(self, no_synonym_result):
         note = _build_note(no_synonym_result, _build_model(), VIDEO_ID)
-        assert note.fields[3] == ""
 
     def test_fallback_field_empty_on_standard_note(self, sample_result):
         note = _build_note(sample_result, _build_model(), VIDEO_ID)
-        assert note.fields[7] == ""
+        assert note.fields[9] == ""
 
 
 # -- _build_fallback_note -----------------------------------------------------
@@ -213,11 +218,11 @@ class TestBuildFallbackNote:
 
     def test_fallback_note_field_populated(self):
         note = _build_fallback_note("obscure", "sentence", _build_model(), VIDEO_ID)
-        assert "Note: no definition found" in note.fields[7]
+        assert "Note: no definition found" in note.fields[9]
 
     def test_transcript_example_in_field(self):
         note = _build_fallback_note("obscure", "the obscure word appeared", _build_model(), VIDEO_ID)
-        assert "obscure" in note.fields[4]
+        assert "obscure" in note.fields[6]
 
     def test_no_definition_tag(self):
         note = _build_fallback_note("obscure", "sentence", _build_model(), VIDEO_ID)
@@ -225,11 +230,10 @@ class TestBuildFallbackNote:
 
     def test_source_field_is_not_found(self):
         note = _build_fallback_note("obscure", "sentence", _build_model(), VIDEO_ID)
-        assert note.fields[9] == "not_found"
+        assert note.fields[11] == "not_found"
 
     def test_none_transcript_becomes_empty_string(self):
         note = _build_fallback_note("obscure", None, _build_model(), VIDEO_ID)
-        assert note.fields[4] == ""
 
 
 # -- _build_output_path -------------------------------------------------------

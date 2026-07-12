@@ -1,4 +1,6 @@
 """
+test_definition.py
+
 All HTTP calls and SQLite operations use temp fixtures.
 No network access or API keys required for the unit suite.
 
@@ -56,6 +58,7 @@ def sample_definition_result() -> DefinitionResult:
         lemma="contaminate",
         definition="to make impure or unsafe by contact",
         example_dict="the water supply was contaminated",
+        example_dict2="the contaminated river posed health risks",
         example_transcript="contaminated water gave rise to new regulations",
         synonyms=["pollute", "taint"],
         antonyms=["purify"],
