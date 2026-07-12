@@ -6,6 +6,7 @@
 !.env.example
 
 # Python
+tests/__pycache__
 src/pipeline/__pycache__
 src/pipeline/*.py[cod]
 src/pipeline/*.pyo
