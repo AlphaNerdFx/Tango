@@ -176,35 +176,31 @@ FRONT_TEMPLATE = '<div class="word-front">{{Word}}</div>'
 BACK_TEMPLATE = """
 <div class="word-back">{{Word}}</div>
 
-{{#WordSecondary}}
-<div class="word-secondary">{{WordSecondary}}</div>
-{{/WordSecondary}}
-
 <hr>
 
-<div class="pos">{{PartOfSpeech}}</div>
+<div class="pos">{{Class}}</div>
 <div class="definition">{{Definition}}</div>
 
-{{#ExampleDict1}}
+{{#1st Example Sentence}}
 <div class="example-block">
-<div class="example">{{ExampleDict1}}</div>
+<div class="example">{{1st Example Sentence}}</div>
 <div class="example-source">— Dictionary</div>
 </div>
-{{/ExampleDict1}}
+{{/1st Example Sentence}}
 
-{{#ExampleDict2}}
+{{#2nd Example Sentence}}
 <div class="example-block">
-<div class="example">{{ExampleDict2}}</div>
+<div class="example">{{2nd Example Sentence}}</div>
 <div class="example-source">— Dictionary</div>
 </div>
-{{/ExampleDict2}}
+{{/2nd Example Sentence}}
 
-{{#ExampleTranscript}}
+{{#Example from Youtube Video}}
 <div class="example-block">
-<div class="example">{{ExampleTranscript}}</div>
+<div class="example">{{Example from Youtube Video}}</div>
 <div class="example-source">— From video</div>
 </div>
-{{/ExampleTranscript}}
+{{/Example from Youtube Video}}
 
 {{#Synonyms}}
 <div class="section-label">Synonyms</div>
@@ -216,9 +212,6 @@ BACK_TEMPLATE = """
 <div class="vocab-row">{{Antonyms}}</div>
 {{/Antonyms}}
 
-{{#FallbackNote}}
-<div class="fallback-note">{{FallbackNote}}</div>
-{{/FallbackNote}}
 """
 
 # -- Model --------------------------------------------------------------------
@@ -229,15 +222,13 @@ def _build_model() -> genanki.Model:
         "YT Anki Pipeline — Recognition",
         fields=[
             {"name": "Word"},
-            {"name": "WordSecondary"},
-            {"name": "PartOfSpeech"},
+            {"name": "Class"},
             {"name": "Definition"},
-            {"name": "ExampleDict1"},
-            {"name": "ExampleDict2"},
-            {"name": "ExampleTranscript"},
+            {"name": "1st Example Sentence"},
+            {"name": "2nd Example Sentence"},
+            {"name": "Example from Youtube Video"},
             {"name": "Synonyms"},
             {"name": "Antonyms"},
-            {"name": "FallbackNote"},
             {"name": "VideoID"},
             {"name": "Source"},
         ],
@@ -259,37 +250,39 @@ def _format_pills(words: list[str], css_class: str) -> str:
     return " ".join(f'<span class="{css_class}">{w}</span>' for w in words)
 
 
+def _truncate(text: str, max_chars: int = 256) -> str:
+    """Truncate at last sentence boundary before max_chars."""
+    if len(text) <= max_chars:
+        return text
+    cut = text[:max_chars]
+    last_dot = cut.rfind(". ")
+    if last_dot > max_chars // 2:
+        return cut[:last_dot + 1]
+    return cut.rstrip() + "..."
+
+
 def _build_note(
     result: DefinitionResult,
     model: genanki.Model,
     video_id: str,
-    word_secondary: str = "",
 ) -> genanki.Note:
-    """
-    word_secondary: translated word (when DEF_LANG differs from LANGUAGE)
-                    or synonyms as plain text (when no translation used).
-                    Shown as the italic secondary line on the back card.
-    """
-    # Build secondary line: translated word if set, else first synonym
-    secondary = word_secondary
-    if not secondary and result.synonyms:
-        secondary = ", ".join(result.synonyms[:3])
+    """Build a recognition card. Fields match renamed Anki model fields."""
+    synonyms_html = _truncate(_format_pills(result.synonyms, "vocab-pill"))
+    antonyms_html = _truncate(_format_pills(result.antonyms, "antonym-pill"))
 
     return genanki.Note(
         model=model,
         fields=[
-            result.lemma.capitalize(),
-            secondary,
-            result.part_of_speech,
-            result.definition,
-            result.example_dict                                       or "",
-            getattr(result, "example_dict2", None)                    or "",
-            result.example_transcript                                  or "",
-            _format_pills(result.synonyms, "vocab-pill"),
-            _format_pills(result.antonyms, "antonym-pill"),
-            "",
-            video_id,
-            result.source,
+            result.lemma.capitalize(),                   # Word
+            result.part_of_speech,                       # Class
+            result.definition,                           # Definition
+            result.example_dict             or "",       # 1st Example Sentence
+            getattr(result, "example_dict2", None) or "", # 2nd Example Sentence
+            result.example_transcript       or "",       # Example from Youtube Video
+            synonyms_html,                               # Synonyms
+            antonyms_html,                               # Antonyms
+            video_id,                                    # VideoID
+            result.source,                               # Source
         ],
         guid=genanki.guid_for(result.lemma, video_id),
         tags=["yt-anki", video_id],
@@ -305,18 +298,16 @@ def _build_fallback_note(
     return genanki.Note(
         model=model,
         fields=[
-            lemma.capitalize(),  # Word
-            "",                  # WordSecondary
-            "",                  # PartOfSpeech
-            "",                  # Definition
-            "",                  # ExampleDict1
-            "",                  # ExampleDict2
-            example_transcript or "",  # ExampleTranscript
-            "",                  # Synonyms
-            "",                  # Antonyms
-            "Note: no definition found — example from video",  # FallbackNote
-            video_id,            # VideoID
-            "not_found",         # Source
+            lemma.capitalize(),                               # Word
+            "",                                              # Class
+            "No definition found",                           # Definition
+            "",                                              # 1st Example Sentence
+            "",                                              # 2nd Example Sentence
+            example_transcript or "",                        # Example from Youtube Video
+            "",                                              # Synonyms
+            "",                                              # Antonyms
+            video_id,                                        # VideoID
+            "not_found",                                     # Source
         ],
         guid=genanki.guid_for(lemma, video_id),
         tags=["yt-anki", video_id, "no-definition"],

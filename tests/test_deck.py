@@ -1,4 +1,6 @@
 """
+test_deck.py
+
 All AnkiConnect calls and file I/O are mocked.
 No running Anki instance required for the unit suite.
 
@@ -571,3 +573,63 @@ class TestCheckVocabularySentenceDeck:
         result = check_vocabulary({"water": 1}, "English")
         assert len(result.skip) == 1
         assert len(result.new) == 0
+
+# -- Three-condition fuzzy filter (morphological false positives) --------------
+
+class TestThreeConditionFilter:
+    """
+    Tests for the combined WRatio + token_sort_ratio + length_ratio filter
+    that eliminates substring inflation in morphologically rich languages.
+    """
+
+    def test_commencer_vs_comme_is_new(self):
+        """'commencer' should not match 'comme' — pure substring inflation."""
+        result = _check_single("commencer", ["comme"])
+        assert result.decision == Decision.NEW
+
+    def test_puis_vs_puissiez_is_new(self):
+        """'puis' should not match 'puissiez' — 'puis' is prefix of 'puissiez'."""
+        result = _check_single("puis", ["puissiez"])
+        assert result.decision == Decision.NEW
+
+    def test_attend_vs_attendions_is_new(self):
+        """'attend' should not match 'attendions' — length ratio too low."""
+        result = _check_single("attend", ["n'attendions pas"])
+        assert result.decision == Decision.NEW
+
+    def test_faisiez_vs_fassiez_is_queue(self):
+        """'faisiez' vs 'fassiez' is a genuine near-duplicate — should QUEUE."""
+        result = _check_single("faisiez", ["fassiez"])
+        assert result.decision == Decision.QUEUE
+
+    def test_trouvent_vs_trouve_is_queue(self):
+        """'trouvent' vs 'trouve' — same root, legitimate match."""
+        result = _check_single("trouvent", ["trouve"])
+        assert result.decision in (Decision.QUEUE, Decision.SKIP)
+
+    def test_arrivé_vs_arrive_is_queue(self):
+        """'arrivé' vs 'arrive' — accented form vs base, legitimate match."""
+        result = _check_single("arrivé", ["arrive"])
+        assert result.decision in (Decision.QUEUE, Decision.SKIP)
+
+    def test_contaminate_vs_contamination_still_queues(self):
+        """English morphological match still works after new filter."""
+        result = _check_single("contaminate", ["contamination"])
+        assert result.decision == Decision.QUEUE
+
+    def test_develop_vs_developer_still_queues(self):
+        """Length ratio 0.78 is above threshold — legitimate match preserved."""
+        result = _check_single("develop", ["developer"])
+        assert result.decision in (Decision.QUEUE, Decision.SKIP)
+
+    def test_quelque_vs_long_sentence_front_is_new(self):
+        """Short word vs long sentence front: length ratio too low."""
+        result = _check_single("quelque", ["faire quelque chose de mon plein gré"])
+        assert result.decision == Decision.NEW
+
+    def test_filter_thresholds_documented(self):
+        """Verify the filter constants are accessible for config.py migration."""
+        from pipeline.deck import CONFIDENCE_LOW, CONFIDENCE_HIGH, SHORT_WORD_THRESHOLD
+        assert CONFIDENCE_LOW == 60
+        assert CONFIDENCE_HIGH == 90
+        assert SHORT_WORD_THRESHOLD == 4

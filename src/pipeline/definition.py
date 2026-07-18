@@ -480,111 +480,130 @@ def fetch_definition(
     def_language: Optional[str] = None,
 ) -> Optional[DefinitionResult]:
     """
-    Fetch a definition for one lemma.
+    Fetch a definition for one lemma using a dual-source strategy:
 
-    Checks SQLite cache first. If not cached, queries APIs based on the
-    language resolution:
+    Native source (always):
+        dictionaryapi.dev/{language}/ -> examples, synonyms, antonyms
+        These fields are always in the original transcript language.
 
-    Native mode (def_language is None or equals language):
-        dictionaryapi.dev/{language}/{lemma} → fallback card
+    Target source (definition + class only):
+        If def_language == language or def_language is None:
+            Same as native source — single fetch covers everything.
+        If def_language differs:
+            Translate lemma then MW -> dictionaryapi.dev/{def_language}/
+            Only definition and part_of_speech come from this source.
 
-    Translation mode (def_language differs from language):
-        Translates lemma via translation.translate_word()
-        then MW(translated) → dictionaryapi.dev/en(translated)
+    Field completion:
+        If MW returns definition but missing examples/synonyms,
+        dictionaryapi.dev supplements the missing fields.
 
-    English mode (language == "en"):
-        MW(lemma) → dictionaryapi.dev/en(lemma)  [original behaviour]
-
-    Args:
-        lemma:        Lowercase lemma from nlp.py.
-        snippets:     Output of transcript.get_snippets(). Used to find the
-                      transcript example sentence. Pass None to skip.
-        use_cache:    Set False to force a fresh API call (e.g. in tests).
-        language:     BCP-47 code of the transcript language (e.g. "fr").
-        def_language: BCP-47 code for definition output. If None or same as
-                      language, definitions are fetched in native language.
-                      If different (e.g. "en"), word is translated first.
-
-    Returns:
-        DefinitionResult or None if neither API found the word.
+    All text fields are capped at 256 characters.
     """
-    # ── Cache check ───────────────────────────────────────────────────────────
-    cache_key = f"{lemma}::{def_language or language}"
+    target_language = def_language or language
+    cache_key       = f"{lemma}::{target_language}"
+
     if use_cache:
         cached = _cache_get(cache_key)
         if cached:
             logger.debug("Cache hit for '%s'.", cache_key)
             return _cache_row_to_result(cache_key, cached, snippets)
 
-    # ── Resolve which word and language to query ──────────────────────────────
-    target_language = def_language or language
-    query_lemma     = lemma
+    # ── Step 1: Always fetch native-language data ─────────────────────────────
+    native_ex1: Optional[str]  = None
+    native_ex2: Optional[str]  = None
+    native_syns: list[str]     = []
+    native_ants: list[str]     = []
 
-    # Translation mode: translate lemma to def_language first
+    native_data = _fetch_from_dictapi(lemma, language=language)
+    if native_data:
+        nr = _parse_dictapi_response(lemma, native_data, snippets)
+        if nr:
+            native_ex1  = nr.example_dict
+            native_ex2  = getattr(nr, "example_dict2", None)
+            native_syns = nr.synonyms
+            native_ants = nr.antonyms
+
+    # ── Step 2: Resolve query word for definition source ──────────────────────
+    query_lemma = lemma
+
     if def_language and def_language != language:
         try:
             from pipeline.translation import translate_word, TranslationUnavailableError
-            translated = translate_word(query_lemma, language, def_language)
+            translated = translate_word(lemma, language, def_language)
             if translated:
-                logger.info(
-                    "Translated '%s' (%s->%s): '%s'",
-                    lemma, language, def_language, translated,
-                )
+                logger.info("Translated '%s' -> '%s'", lemma, translated)
                 query_lemma = translated
             else:
-                # User chose to continue without translation
                 target_language = language
-                logger.warning(
-                    "Translation unavailable for '%s'. "
-                    "Falling back to native '%s' definition.",
-                    lemma, language,
-                )
         except TranslationUnavailableError:
             raise
 
-    # ── English / translated word: MW first ───────────────────────────────────
+    # ── Step 3: Fetch definition in target language ───────────────────────────
+    definition:    Optional[str] = None
+    part_of_speech: str          = ""
+
+    # Try MW first for English definitions
+    _actual_source = "dictionaryapi"
     if target_language == "en":
         mw_data = _fetch_from_mw(query_lemma)
         if mw_data:
-            result = _parse_mw_response(query_lemma, mw_data, snippets)
-            if result:
-                # Store under original lemma for consistent cache keys
-                result = DefinitionResult(
-                    lemma=lemma, definition=result.definition,
-                    example_dict=result.example_dict,
-                    example_dict2=result.example_dict2 if hasattr(result, "example_dict2") else None,
-                    example_transcript=result.example_transcript,
-                    synonyms=result.synonyms, antonyms=result.antonyms,
-                    part_of_speech=result.part_of_speech, source=result.source,
-                )
-                logger.info("MW: found '%s' (queried as '%s').", lemma, query_lemma)
-                _cache_set_key(cache_key, result)
-                return result
+            mw = _parse_mw_response(query_lemma, mw_data, snippets)
+            if mw:
+                definition     = mw.definition
+                part_of_speech = mw.part_of_speech
+                _actual_source = "merriam-webster"
+                # Supplement native fields from MW if native fetch was empty
+                if not native_syns:
+                    native_syns = mw.synonyms
+                if not native_ants:
+                    native_ants = mw.antonyms
 
-    # ── dictionaryapi.dev (native or English fallback) ────────────────────────
-    dict_data = _fetch_from_dictapi(query_lemma, language=target_language)
-    if dict_data:
-        result = _parse_dictapi_response(query_lemma, dict_data, snippets)
-        if result:
-            result = DefinitionResult(
-                lemma=lemma, definition=result.definition,
-                example_dict=result.example_dict,
-                example_dict2=getattr(result, "example_dict2", None),
-                example_transcript=result.example_transcript,
-                synonyms=result.synonyms, antonyms=result.antonyms,
-                part_of_speech=result.part_of_speech, source=result.source,
-            )
-            logger.info(
-                "dictionaryapi[%s]: found '%s'.", target_language, lemma
-            )
-            _cache_set_key(cache_key, result)
-            return result
+    # dictionaryapi.dev fallback for definition (or primary for non-English targets)
+    if not definition:
+        dict_data = _fetch_from_dictapi(query_lemma, language=target_language)
+        if dict_data:
+            dr = _parse_dictapi_response(query_lemma, dict_data, snippets)
+            if dr:
+                definition     = dr.definition
+                part_of_speech = dr.part_of_speech
+                _actual_source = "dictionaryapi"
+                if not native_syns:
+                    native_syns = dr.synonyms
+                if not native_ants:
+                    native_ants = dr.antonyms
 
-    logger.warning("No definition found for '%s' from either source.", lemma)
-    return None
+    if not definition:
+        logger.warning("No definition found for '%s' from either source.", lemma)
+        return None
+
+    # ── Step 4: Build result with 256-char caps ───────────────────────────────
+    def _cap(text: Optional[str]) -> Optional[str]:
+        if not text:
+            return None
+        if len(text) <= 256:
+            return text
+        cut = text[:256]
+        dot = cut.rfind(". ")
+        return (cut[:dot + 1] if dot > 128 else cut.rstrip() + "...")
+
+    result = DefinitionResult(
+        lemma=lemma,
+        definition=_cap(definition) or "",
+        example_dict=_cap(native_ex1),
+        example_dict2=_cap(native_ex2),
+        example_transcript=_cap(
+            _find_transcript_sentence(lemma, snippets) if snippets else None
+        ),
+        synonyms=[s for s in native_syns[:5] if s],
+        antonyms=[s for s in native_ants[:5] if s],
+        part_of_speech=part_of_speech,
+        source=_actual_source,
+    )
+
+    _cache_set_key(cache_key, result)
+    return result
 
 
-# ── Batch fetch ───────────────────────────────────────────────────────────────
 
 def fetch_definitions(
     lemmas: list[str],

@@ -1,4 +1,6 @@
 """
+deck.py
+-------
 Responsible for:
   1. AnkiConnect communication  — list decks, fetch card fronts, health check
   2. Confidence interval check  — classify each lemma as SKIP / QUEUE / NEW
@@ -284,7 +286,12 @@ def _check_single(
     if not fuzzy_candidates:
         return MatchResult(lemma=lemma, decision=Decision.NEW)
 
-    # ── Fuzzy match (WRatio) ──────────────────────────────────────────────────
+    # ── Fuzzy match (three-condition filter) ─────────────────────────────────
+    # WRatio alone inflates scores when one string is a substring of the other
+    # (e.g. "commencer" vs "comme" scores 90 via partial_ratio = 100).
+    # Fix: require WRatio AND token_sort_ratio AND length_ratio all above threshold.
+    # token_sort_ratio is insensitive to word order and penalises substring inflation.
+    # length_ratio filters cases where one string is much shorter than the other.
     match = fuzz_process.extractOne(
         lemma_lower,
         fuzzy_candidates,
@@ -293,10 +300,20 @@ def _check_single(
     )
 
     if match is None:
-        # No match reached the minimum threshold
         return MatchResult(lemma=lemma, decision=Decision.NEW)
 
     matched_front, score, _ = match
+
+    # Apply secondary filters to eliminate substring inflation
+    token_score   = fuzz.token_sort_ratio(lemma_lower, matched_front)
+    shorter_len   = min(len(lemma_lower), len(matched_front))
+    longer_len    = max(len(lemma_lower), len(matched_front))
+    length_ratio  = shorter_len / longer_len if longer_len > 0 else 1.0
+
+    # Minimum token_sort_ratio prevents pure substring matches scoring high
+    # Minimum length_ratio prevents very short fronts inflating long lemmas
+    if token_score < 50 or length_ratio < 0.6:
+        return MatchResult(lemma=lemma, decision=Decision.NEW)
 
     if score > CONFIDENCE_HIGH:
         return MatchResult(
