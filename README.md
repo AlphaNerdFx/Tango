@@ -36,7 +36,7 @@ Between extraction and card creation, Tango:
 Prerequisites: Python 3.9+, [Anki](https://apps.ankiweb.net/) desktop, [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on.
 
 ```bash
-git clone https://github.com/youssefea/tango.git
+git clone https://github.com/AlphaNerdFx/Tango.git
 cd tango
 make all
 cp .env.example .env
