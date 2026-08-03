@@ -145,16 +145,18 @@ hr {
 }
 
 .vocab-pill {
-    background: var(--window-bg, #e8f4f8);
+    background: transparent;
     color: var(--fg, #0f3460);
+    border: 1px solid var(--new-count, #00b4d8);
     border-radius: 12px;
     padding: 2px 12px;
     font-size: 13px;
 }
 
 .antonym-pill {
-    background: var(--window-bg, #fef3c7);
+    background: transparent;
     color: var(--fg, #92400e);
+    border: 1px solid var(--fg, #92400e);
     border-radius: 12px;
     padding: 2px 12px;
     font-size: 13px;
@@ -395,14 +397,29 @@ def build_package(
     fallback_count = 0
     skipped_count  = 0
 
+    # Tracks every lemma that has already produced a note in this package,
+    # independent of definition.fetch_definitions()'s own input-list dedup.
+    # Defense in depth (see ARCHITECTURE.md 8.6): a duplicate that slips past
+    # that first layer must still not reach the user's Anki deck as two cards.
+    added_lemmas: set[str] = set()
+
     # Standard cards
     for result in found:
+        key = result.lemma.lower()
+        if key in added_lemmas:
+            logger.debug("Skipping duplicate note for '%s'.", result.lemma)
+            continue
+        added_lemmas.add(key)
         deck.add_note(_build_note(result, model, video_id))
         standard_count += 1
         logger.debug("Card built: '%s' (%s)", result.lemma, result.source)
 
     # Fallback cards
     for lemma in not_found:
+        key = lemma.lower()
+        if key in added_lemmas:
+            logger.debug("Skipping duplicate fallback note for '%s'.", lemma)
+            continue
         transcript_example = _find_in_snippets(lemma, snippets) if snippets else None
         if not transcript_example:
             logger.warning(
@@ -410,6 +427,7 @@ def build_package(
             )
             skipped_count += 1
             continue
+        added_lemmas.add(key)
         deck.add_note(_build_fallback_note(lemma, transcript_example, model, video_id))
         fallback_count += 1
         logger.debug("Fallback card built: '%s'", lemma)

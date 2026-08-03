@@ -151,6 +151,13 @@ class TestBuildModel:
         model = _build_model()
         assert ".card" in model.css
 
+    def test_pill_css_is_outlined_not_filled(self):
+        # Regression guard: pills must render as a transparent background with
+        # a colored border, not the old filled-background design (issue #2).
+        model = _build_model()
+        assert "background: transparent" in model.css
+        assert "border: 1px solid" in model.css
+
 
 # -- _build_note --------------------------------------------------------------
 
@@ -333,6 +340,46 @@ class TestBuildPackage:
         assert result.fallback_count == 1
         assert result.skipped_count == 1
         assert result.total_cards == 2  # NOT 3 — skipped words produce no card
+
+    # -- Deduplication guard (issue #2) -------------------------------------
+    # definition.fetch_definitions() already dedupes its input lemma list
+    # before any API call, but build_package() itself had no independent
+    # guard. These check the second, defense-in-depth layer directly.
+
+    def test_duplicate_lemma_in_found_list_produces_one_card(self, sample_result):
+        duplicate = DefinitionResult(
+            lemma="Contaminate",  # differs in case only
+            definition=sample_result.definition,
+            example_dict=sample_result.example_dict,
+            example_dict2=sample_result.example_dict2,
+            example_transcript=sample_result.example_transcript,
+            synonyms=sample_result.synonyms,
+            antonyms=sample_result.antonyms,
+            part_of_speech=sample_result.part_of_speech,
+            source=sample_result.source,
+        )
+        result = build_package(VIDEO_ID, DECK_NAME, [sample_result, duplicate], [])
+        assert result.standard_count == 1
+        assert result.total_cards == 1
+
+    def test_duplicate_lemma_in_not_found_list_produces_one_card(self, sample_snippets):
+        result = build_package(
+            VIDEO_ID, DECK_NAME, [], ["develop", "DEVELOP"], sample_snippets
+        )
+        assert result.fallback_count == 1
+        assert result.total_cards == 1
+
+    def test_duplicate_lemma_across_found_and_not_found_produces_one_card(
+        self, sample_result, sample_snippets
+    ):
+        # Same lemma resolved (found) and also passed as not_found — the
+        # found note must win and no second fallback note gets written.
+        result = build_package(
+            VIDEO_ID, DECK_NAME, [sample_result], ["contaminate"], sample_snippets
+        )
+        assert result.standard_count == 1
+        assert result.fallback_count == 0
+        assert result.total_cards == 1
 
 
 # -- Integration --------------------------------------------------------------
