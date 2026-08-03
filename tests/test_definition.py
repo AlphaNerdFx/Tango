@@ -22,6 +22,7 @@ from pipeline.definition import (
     DefinitionResult,
     _cache_get,
     _cache_set,
+    _cache_set_key,
     _find_transcript_sentence,
     _parse_dictapi_response,
     _parse_mw_response,
@@ -463,7 +464,13 @@ class TestFetchDefinitions:
     def test_cache_hit_skips_fetch_definition_call(
         self, sample_definition_result
     ):
-        _cache_set(sample_definition_result)
+        # fetch_definitions() reads the cache via the composite "lemma::language"
+        # key (matching fetch_definition()'s own cache key format), so the seed
+        # here must use _cache_set_key() with that same composite key rather
+        # than the bare-lemma _cache_set(). Seeding with the bare key leaves
+        # the composite-keyed lookup unable to find it, causing a spurious
+        # cache miss and a real (mocked) fetch_definition call.
+        _cache_set_key(f"{sample_definition_result.lemma}::en", sample_definition_result)
         with patch("pipeline.definition.fetch_definition") as mock_fetch:
             result = fetch_definitions(["contaminate"], delay=0)
             mock_fetch.assert_not_called()
@@ -481,9 +488,15 @@ class TestFetchDefinitions:
     @patch("pipeline.definition.fetch_definition")
     @patch("pipeline.definition.time.sleep")
     def test_no_delay_for_cache_hits(self, mock_sleep, mock_fetch, sample_definition_result):
-        _cache_set(sample_definition_result)
+        # Same composite-key requirement as test_cache_hit_skips_fetch_definition_call
+        # above — see that test's comment. Also assert the cache actually hit
+        # (mock_fetch not called), since a single-item lemma list never
+        # triggers mock_sleep regardless of cache state, so mock_sleep alone
+        # cannot prove this test's own name.
+        _cache_set_key(f"{sample_definition_result.lemma}::en", sample_definition_result)
         fetch_definitions(["contaminate"], delay=0.5)
         mock_sleep.assert_not_called()
+        mock_fetch.assert_not_called()
 
     @patch("pipeline.definition.fetch_definition")
     def test_empty_lemma_list_returns_empty_batch(self, mock_fetch):
