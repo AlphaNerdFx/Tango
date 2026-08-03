@@ -33,7 +33,10 @@ verification session.
 - [x] CLI with default, review, and backlog modes
 - [x] `--list-languages` flag
 - [x] Makefile with setup, run, test, format, lint, clean targets
-- [x] 418 unit tests, no external dependencies in the default run
+- [x] 400+ unit tests, no external dependencies in the default run
+      (exact count drifts as tests are added; check `make test` output
+      rather than trusting a hardcoded number here — see CONTRIBUTING.md's
+      own stale "411" claim, corrected during this session)
 - [x] GitHub Actions CI on push and pull request
 - [x] Documentation set: PRD, SAD, SRD, ADR, code walkthrough
 - [x] GitHub community files: code of conduct, contributing, security policy
@@ -51,35 +54,38 @@ verification session.
 
 ## Critical
 
-- [ ] **Verify the WordNet fix is actually applied.**
-      Read `src/pipeline/definition.py`. Confirm the WordNet call is gated on
-      `language == "en"` and passes `lemma`, not `query_lemma`. Confirm
-      `TestWordNetLanguageGuard` exists in `tests/test_definition.py`. An
-      earlier session reported the file unchanged. If the fix is missing, the
-      four guard tests will fail, which is correct behaviour.
+All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
 
-- [ ] **Verify `cards.py` state against HEAD.**
-      `git diff HEAD -- src/pipeline/cards.py`. Determine whether the
-      `added_lemmas` deduplication guard and the outlined-pill CSS are present.
-      An earlier session reported zero changes to this file.
+- [x] **Verify the WordNet fix is actually applied.**
+      Confirmed: gated on `language == "en"`, passes `lemma` not `query_lemma`
+      (`definition.py:645`). `TestWordNetLanguageGuard` existed but 3 of its 4
+      tests mocked both definition sources dead, so they never actually
+      reached the code they claimed to guard — passed vacuously. Fixed
+      separately from the guard itself; see commit history.
 
-- [ ] **Re-run Step 5 verification after the lemma fixes.**
-      The last real-world run predates the `_is_valid_lemma` fix and produced a
-      card with the front "E". Re-run against the same French video and confirm
-      no single-letter cards. Compare the extracted lemma count against the
-      previous 209 — compounds and contractions should now be admitted, so the
-      count should rise.
+- [x] **Verify `cards.py` state against HEAD.**
+      Was actually zero diff from HEAD, as an earlier session suspected —
+      neither the `added_lemmas` guard nor the outlined-pill CSS existed.
+      Filed as issue #2, fixed, verified with 2 live runs (English bypass +
+      full CLI via `--process-backlog`), closed.
 
-- [ ] **Run an English-video verification.**
-      The French run cannot exercise definition, example, synonym, or antonym
-      paths because dictionaryapi.dev returns nothing for French. An English
-      video is the only way to validate those fields. Check specifically:
-      definitions are single-sentence, both dictionary example fields populate,
-      synonyms and antonyms appear, all fields respect the 256-character cap.
+- [x] **Re-run Step 5 verification after the lemma fixes.**
+      No single-letter cards in the real generated `.apkg` (confirmed via its
+      embedded SQLite). Lemma count held at 209, not higher as predicted —
+      but the *set* changed as expected: the pre-fix run's single-letter `'e'`
+      lemma is gone, `'semi-relevé'` is newly admitted. Net zero on count,
+      both intended effects confirmed via `vocabulary` table timestamps.
 
-- [ ] **Commit and tag v0.4.1.**
-      Only after all of the above pass. Suggested message:
-      `fix: proper noun and single-letter filtering, WordNet language guard, DICT_API_BASE URL, deduplication guards`
+- [x] **Run an English-video verification.**
+      39/39 real MW definitions, 0 duplicates, all fields under 256 chars,
+      synonyms on 38/39, antonyms on 11/39. Manually opened the result in
+      real Anki — this is how issue #10 (MW synonym parsing breaks on
+      Synonym Discussion words like "ask"/"shy") was found; SQLite-level
+      checks alone didn't catch it.
+
+- [x] **Commit and tag v0.4.1.**
+      Tagged. Commit message expanded from the original suggestion to
+      document what was actually verified, not just what changed.
 
 ---
 
