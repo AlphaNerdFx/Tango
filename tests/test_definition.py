@@ -524,3 +524,137 @@ class TestIntegration:
     def test_batch_real_words(self, sample_snippets):
         result = fetch_definitions(["water", "develop"], sample_snippets, delay=1.0)
         assert len(result.found) > 0
+
+# Append these to tests/test_definition.py
+# They cover the WordNet language-leak bug that Claude Code identified.
+
+class TestWordNetLanguageGuard:
+    """
+    WordNet is English-only. These tests ensure it can never inject English
+    synonyms or antonyms into a non-English card, and that it uses the
+    original lemma rather than the translated query word.
+
+    Every mock setup below must let fetch_definition() actually find a
+    definition. The original versions of these tests mocked every source
+    (_fetch_from_mw and _fetch_from_dictapi) to return None unconditionally,
+    which makes fetch_definition() return None at its own "no definition
+    found" guard (definition.py: `if not definition: ... return None`)
+    before the WordNet gate at line ~645 is ever reached. Three of the four
+    tests then wrapped their real assertion in `if mock_wn.called:` or
+    `if result:`, so they passed vacuously — they never actually ran the
+    code they were written to guard. Only the fourth test asserted
+    unconditionally, which is why it was the only one that failed.
+    """
+
+    @patch("pipeline.definition._fetch_from_dictapi")
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    def test_wordnet_not_called_for_non_english_language(
+        self, mock_wn, mock_dict
+    ):
+        """WordNet must not run when the transcript language is not English."""
+        # language == target_language == "fr" here, so both the native fetch
+        # and the definition fetch go through dictionaryapi.dev. Synonyms and
+        # antonyms are deliberately empty in this payload — if they were
+        # non-empty (like the shared dictapi_response fixture), the gate's
+        # emptiness check alone would skip WordNet regardless of language,
+        # and this test would pass even with the language check deleted.
+        mock_dict.return_value = [{
+            "word": "bonjour",
+            "meanings": [{
+                "partOfSpeech": "interjection",
+                "definitions": [{"definition": "hello"}],
+                "synonyms": [],
+                "antonyms": [],
+            }],
+        }]
+        fetch_definition("bonjour", use_cache=False, language="fr")
+        mock_wn.assert_not_called()
+
+    @patch("pipeline.definition._fetch_from_dictapi", return_value=None)
+    @patch("pipeline.definition._fetch_from_mw")
+    @patch("pipeline.definition._wordnet_synonyms_antonyms",
+           return_value=(["glad"], ["sad"]))
+    def test_wordnet_called_for_english_language(
+        self, mock_wn, mock_mw, mock_dict, mw_response
+    ):
+        """WordNet runs normally when the transcript language is English."""
+        # Native dictapi fetch returns None, so native_syns/native_ants stay
+        # empty. MW supplies the definition (mw_response has empty "syns",
+        # so it doesn't also fill native_syns), which satisfies the gate's
+        # emptiness check and lets _wordnet_synonyms_antonyms run.
+        mock_mw.return_value = mw_response
+        fetch_definition("happy", use_cache=False, language="en")
+        mock_wn.assert_called_once()
+
+    @patch("pipeline.definition._fetch_from_dictapi")
+    @patch("pipeline.definition._wordnet_synonyms_antonyms",
+           return_value=([], []))
+    def test_wordnet_receives_original_lemma_not_translation(
+        self, mock_wn, mock_dict
+    ):
+        """
+        When translation occurs, WordNet must receive the ORIGINAL lemma.
+        This is the regression guard for the query_lemma leak bug.
+
+        The original test passed language=def_language="en", under which
+        the translation branch (`if def_language and def_language !=
+        language`) never runs at all, so it could never have caught a
+        query_lemma leak regardless of the mock setup. Translation only
+        happens when the two differ, and WordNet only runs when the
+        transcript `language` is "en" — so the scenario that actually
+        exercises both at once is an English transcript translated to a
+        different definition language (not the French-transcript direction
+        used elsewhere in this class).
+        """
+        def _dictapi_side_effect(lemma, language="en"):
+            if language == "fr":
+                # Definition-fetch step (translated query "content" in fr).
+                # Empty synonyms/antonyms so this doesn't fill native_syns
+                # before the WordNet gate is checked.
+                return [{
+                    "word": lemma,
+                    "meanings": [{
+                        "partOfSpeech": "adjective",
+                        "definitions": [{"definition": "joyeux, satisfait"}],
+                        "synonyms": [],
+                        "antonyms": [],
+                    }],
+                }]
+            return None  # Native-fetch step (language="en") finds nothing.
+
+        mock_dict.side_effect = _dictapi_side_effect
+        with patch("pipeline.translation.translate_word", return_value="content"):
+            fetch_definition(
+                "happy", use_cache=False, language="en", def_language="fr"
+            )
+        mock_wn.assert_called_once()
+        called_with = mock_wn.call_args[0][0]
+        assert called_with == "happy", (
+            f"WordNet received '{called_with}' but must receive the "
+            f"original lemma 'happy', not the translated query 'content'."
+        )
+
+    @patch("pipeline.definition._fetch_from_dictapi", return_value=None)
+    @patch("pipeline.definition._fetch_from_mw")
+    @patch("pipeline.definition._wordnet_synonyms_antonyms",
+           return_value=(["english_syn"], ["english_ant"]))
+    def test_english_synonyms_never_leak_into_french_card(
+        self, mock_wn, mock_mw, mock_dict, mw_response
+    ):
+        """
+        End-to-end guard: a French word with DEF_LANG=en must never end up
+        with English synonyms in its Synonyms field.
+        """
+        mock_mw.return_value = mw_response
+        with patch("pipeline.translation.translate_word", return_value="hello"):
+            result = fetch_definition(
+                "bonjour", use_cache=False, language="fr", def_language="en"
+            )
+        assert result is not None, (
+            "fetch_definition() returned None — a definition must actually "
+            "be found for this test to meaningfully check the WordNet "
+            "language guard rather than passing vacuously."
+        )
+        mock_wn.assert_not_called()
+        assert "english_syn" not in result.synonyms
+        assert "english_ant" not in result.antonyms
