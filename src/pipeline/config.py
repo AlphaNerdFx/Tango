@@ -81,7 +81,7 @@ MW_API_KEY: str | None = os.getenv("MW_API_KEY")
 MW_API_BASE: str = "https://www.dictionaryapi.com/api/v3/references/collegiate/json"
 
 # dictionaryapi.dev — fallback, no key required
-DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries/en"
+DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
 
 # Seconds to wait for a definition API response before timing out
 API_TIMEOUT: float = float(os.getenv("API_TIMEOUT", "8"))

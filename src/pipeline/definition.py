@@ -45,6 +45,28 @@ import requests
 
 logger = logging.getLogger(__name__)
 
+
+def _wordnet_synonyms_antonyms(word: str) -> tuple:
+    """
+    Return (synonyms, antonyms) from WordNet for an English word.
+    Used to supplement empty synonym/antonym lists from API sources.
+    Returns empty lists if WordNet is unavailable or word not found.
+    """
+    try:
+        from nltk.corpus import wordnet as wn
+        synonyms: set = set()
+        antonyms: set = set()
+        for syn in wn.synsets(word)[:3]:
+            for lemma in syn.lemmas():
+                name = lemma.name().replace("_", " ")
+                if name.lower() != word.lower():
+                    synonyms.add(name)
+                for ant in lemma.antonyms():
+                    antonyms.add(ant.name().replace("_", " "))
+        return sorted(synonyms)[:5], sorted(antonyms)[:5]
+    except Exception:
+        return [], []
+
 # ── Constants (moved to config.py at end of project) ─────────────────────────
 
 from pipeline.config import (
@@ -109,6 +131,19 @@ class DefinitionNotFoundError(Exception):
 
 class MWApiKeyMissingError(Exception):
     """MW_API_KEY is not set — MW lookups will be skipped."""
+
+
+def _strip_accents(text: str) -> str:
+    """
+    Strip diacritical marks from accented characters.
+    Used as fallback when the accented form returns no API results.
+    Example: deteste -> deteste, etre -> etre.
+    """
+    import unicodedata
+    return "".join(
+        c for c in unicodedata.normalize("NFD", text)
+        if unicodedata.category(c) != "Mn"
+    )
 
 
 # ── MW markup cleaner ─────────────────────────────────────────────────────────
@@ -523,6 +558,20 @@ def fetch_definition(
             native_syns = nr.synonyms
             native_ants = nr.antonyms
 
+    # Fallback: try accent-stripped variant if native fetch returned nothing
+    if not native_ex1 and not native_syns:
+        stripped = _strip_accents(lemma)
+        if stripped != lemma:
+            fallback_data = _fetch_from_dictapi(stripped, language=language)
+            if fallback_data:
+                nr2 = _parse_dictapi_response(stripped, fallback_data, snippets)
+                if nr2:
+                    native_ex1  = nr2.example_dict
+                    native_ex2  = getattr(nr2, "example_dict2", None)
+                    native_syns = nr2.synonyms
+                    native_ants = nr2.antonyms
+                    logger.debug("Accent-stripped fallback used for '%s'.", lemma)
+
     # ── Step 2: Resolve query word for definition source ──────────────────────
     query_lemma = lemma
 
@@ -586,9 +635,34 @@ def fetch_definition(
         dot = cut.rfind(". ")
         return (cut[:dot + 1] if dot > 128 else cut.rstrip() + "...")
 
+    # Supplement synonyms and antonyms from WordNet, but ONLY when the
+    # transcript language is English. WordNet is an English-only resource.
+    #
+    # Critical: use `lemma` (original word), never `query_lemma`. When
+    # def_language differs from language, query_lemma holds the TRANSLATED
+    # word. Passing it here would write English synonyms into native_syns,
+    # which must always hold words in the original transcript language.
+    if language == "en" and (not native_syns or not native_ants):
+        wn_syns, wn_ants = _wordnet_synonyms_antonyms(lemma)
+        if not native_syns:
+            native_syns = wn_syns
+        if not native_ants:
+            native_ants = wn_ants
+
+    # Truncate definition at first sentence boundary for cleaner cards
+    def _clean_def(text):
+        if not text:
+            return ""
+        for sep in (". ", "; ", " : "):
+            idx = text.find(sep)
+            if idx > 20:
+                text = text[:idx + 1]
+                break
+        return _cap(text) or ""
+
     result = DefinitionResult(
         lemma=lemma,
-        definition=_cap(definition) or "",
+        definition=_clean_def(definition),
         example_dict=_cap(native_ex1),
         example_dict2=_cap(native_ex2),
         example_transcript=_cap(
@@ -634,11 +708,28 @@ def fetch_definitions(
     """
     batch = DefinitionBatchResult()
 
+    # Deduplicate lemma list while preserving first-appearance order.
+    # Prevents the same word producing multiple cards when it appears
+    # in both the NEW list and the user-approved QUEUE list.
+    seen: set = set()
+    unique_lemmas: list = []
+    for l in lemmas:
+        key = l.lower().strip()
+        if key and key not in seen:
+            seen.add(key)
+            unique_lemmas.append(l)
+    if len(unique_lemmas) < len(lemmas):
+        logger.info(
+            "Removed %d duplicate lemmas before fetching.",
+            len(lemmas) - len(unique_lemmas),
+        )
+    lemmas = unique_lemmas
+
     for i, lemma in enumerate(lemmas, start=1):
         logger.debug("Processing %d/%d: '%s'", i, len(lemmas), lemma)
 
-        # Check cache before sleeping
-        cached = _cache_get(lemma)
+        # Check cache before sleeping -- use composite key matching fetch_definition
+        cached = _cache_get(f"{lemma}::{def_language or language}")
         if cached:
             result = _cache_row_to_result(lemma, cached, snippets)
             batch.found.append(result)

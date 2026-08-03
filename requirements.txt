@@ -19,7 +19,7 @@ spacy==3.8.14
 # spaCy core transitive dependencies — pinned for stability
 thinc==8.3.13
 pydantic==2.13.4
-numpy==2.4.4
+numpy>=1.24,<2.3
 cymem==2.0.13
 preshed==3.0.13
 murmurhash==1.0.15
@@ -35,3 +35,6 @@ genanki==0.13.1
 
 # Environment management
 python-dotenv==1.2.2
+
+# WordNet for synonym/antonym supplementation
+nltk>=3.8

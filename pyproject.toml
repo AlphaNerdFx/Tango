@@ -39,6 +39,10 @@ dependencies = [
 
     # Environment variable management — .env file support
     "python-dotenv>=1.0,<2.0",
+
+    # WordNet for synonym/antonym supplementation
+    # After install run: python -m nltk.downloader wordnet omw-1.4
+    "nltk>=3.8",
 ]
 
 # =============================================================================

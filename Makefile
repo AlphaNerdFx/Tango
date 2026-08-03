@@ -2,9 +2,9 @@
 # yt-anki-pipeline — Makefile
 # =============================================================================
 # Targets:
-#   make all          — full first-time setup (tangovenv + install + spaCy model)
+#   make all          — full first-time setup (venv + install + spaCy model)
 #   make venv         — create virtual environment
-#   make install      — install package and all dependencies into tangovenv
+#   make install      — install package and all dependencies into venv
 #   make spacy-model  — download en_core_web_sm separately
 #   make test         — run unit tests only (no network, no Anki required)
 #   make test-all     — run full suite including integration tests
@@ -14,7 +14,7 @@
 #   make run          — run the pipeline (VIDEO_ID and DECK required)
 #   make review       — process the review.json file
 #   make backlog      — process the Anki backlog for a deck
-#   make clean        — remove tangovenv, output, cache files
+#   make clean        — remove venv, output, cache files
 #   make check-os     — warn if running on Windows without a compatible shell
 # =============================================================================
 
@@ -115,7 +115,9 @@ install: venv
 spacy-model: venv
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading spaCy model: $(SPACY_MODEL)\n"
 	@$(VENV_PYTHON) -m spacy download $(SPACY_MODEL) --quiet
-	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  spaCy model ready: $(SPACY_MODEL)\n"
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading NLTK WordNet data...\n"
+	@$(VENV_PYTHON) -m nltk.downloader wordnet omw-1.4 --quiet 2>/dev/null || true
+	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  spaCy model and NLTK data ready.\n"
 
 # -- translate-setup ---------------------------------------------------------
 

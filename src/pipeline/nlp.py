@@ -1,4 +1,6 @@
 """
+nlp.py
+------
 Responsible for one thing: given a clean transcript string, return an
 ordered dict of lemmas and their frequency counts.
 
@@ -20,6 +22,7 @@ not load the model.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 import spacy
@@ -82,18 +85,62 @@ def _get_model() -> Language:
 
 # ── Token filter ──────────────────────────────────────────────────────────────
 
+# Unicode-aware "letter" runs joined only by internal hyphens or apostrophes.
+# [^\W\d_] accepts é, ü, ñ, Cyrillic, CJK, etc. and rejects digits/underscores.
+# ’ is the typographic apostrophe YouTube transcripts often use instead
+# of ASCII '.
+_VALID_LEMMA = re.compile(r"^[^\W\d_]+(?:[-'’][^\W\d_]+)*$", re.UNICODE)
+
+
+def _is_valid_lemma(lemma: str) -> bool:
+    """
+    A lemma is valid if it is at least two characters, contains no
+    digits or underscores, and consists of alphabetic runs joined
+    only by internal hyphens or apostrophes.
+
+    Permits: semi-relevé, week-end, arc-en-ciel, aujourd'hui
+    Rejects: e, -, ->, -là, qu', 3d, semi-
+    """
+    if len(lemma) < 2:
+        return False
+    return bool(_VALID_LEMMA.match(lemma))
+
+
 def _is_valid_token(token) -> bool:
     """
     Return True if a token should be included in the vocabulary output.
 
-    Keeps:   alphabetic tokens with an accepted POS tag
-    Removes: punctuation, numbers, symbols, URLs, whitespace tokens
+    Keeps:   tokens whose lemma is a valid word (see _is_valid_lemma)
+             with an accepted POS tag
+    Removes: punctuation, numbers, symbols, single letters,
+             proper nouns (names, places, brands, organisations).
 
-    Note: stop words are intentionally NOT filtered here. A beginner
-    learner needs basic vocabulary (go, be, do, the) as much as advanced
-    words. Stop word filtering is left to the caller if ever needed.
+    Proper nouns are excluded because they rarely have dictionary
+    definitions and create noise cards. Single letters produce
+    meaningless flashcards. Stop words are kept because beginners
+    need basic vocabulary.
+
+    The vocabulary dict is keyed by token.lemma_, not token.text, so
+    validity is decided on the lemma alone. token.is_alpha describes
+    the surface form and is deliberately NOT checked here: real
+    compounds and contractions (semi-relevé, week-end, aujourd'hui)
+    have non-alphabetic surface forms, so gating on token.is_alpha
+    would reject them before _is_valid_lemma ever ran. _is_valid_lemma
+    already rejects punctuation, digits, and boundary-hyphen/apostrophe
+    fragments on its own -- it is not a narrower check that needs
+    token.is_alpha as a backstop.
     """
-    return token.is_alpha and token.pos_ in ACCEPTED_POS
+    if not _is_valid_lemma(token.lemma_):
+        return False
+    if token.pos_ not in ACCEPTED_POS:
+        return False
+    if token.pos_ == "PROPN":
+        return False
+    if token.ent_type_ in ("PERSON", "GPE", "ORG", "LOC", "NORP",
+                            "FAC", "PRODUCT", "EVENT", "WORK_OF_ART",
+                            "LAW", "LANGUAGE"):
+        return False
+    return True
 
 
 # ── Main processing function ──────────────────────────────────────────────────

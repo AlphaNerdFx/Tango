@@ -1,4 +1,6 @@
 """
+test_nlp.py
+
 All tests mock the spaCy model — no model installation required to run
 the unit suite.
 
@@ -20,6 +22,8 @@ from pipeline.nlp import (
     _is_valid_token,
 )
 
+
+# ── Fixtures ──────────────────────────────────────────────────────────────────
 
 def _make_token(text: str, lemma: str, pos: str,
                 is_alpha: bool = True, is_stop: bool = False):
@@ -65,6 +69,7 @@ def mock_spacy_model():
         yield mock_model
 
 
+# ── Sample token sets ─────────────────────────────────────────────────────────
 
 SAMPLE_TOKENS = [
     _make_token("running",       "run",           "VERB"),
@@ -80,6 +85,8 @@ SAMPLE_TOKENS = [
     _make_token("water",         "water",         "NOUN"),   # duplicate — frequency += 1
 ]
 
+
+# ── _is_valid_token ───────────────────────────────────────────────────────────
 
 class TestIsValidToken:
 
@@ -112,6 +119,9 @@ class TestIsValidToken:
 
     def test_accepted_pos_set_has_four_entries(self):
         assert ACCEPTED_POS == {"NOUN", "VERB", "ADJ", "ADV"}
+
+
+# ── process_transcript ────────────────────────────────────────────────────────
 
 class TestProcessTranscript:
 
@@ -193,6 +203,8 @@ class TestProcessTranscript:
         assert result == {}
 
 
+# ── get_sorted_by_frequency ───────────────────────────────────────────────────
+
 class TestGetSortedByFrequency:
 
     def test_returns_dict(self):
@@ -219,6 +231,9 @@ class TestGetSortedByFrequency:
     def test_empty_input_returns_empty(self):
         assert get_sorted_by_frequency({}) == {}
 
+
+# ── get_unique_lemmas ─────────────────────────────────────────────────────────
+
 class TestGetUniqueLemmas:
 
     def test_returns_list(self):
@@ -236,6 +251,9 @@ class TestGetUniqueLemmas:
 
     def test_empty_input_returns_empty_list(self):
         assert get_unique_lemmas({}) == []
+
+
+# ── Integration (real spaCy model required) ───────────────────────────────────
 
 @pytest.mark.integration
 class TestIntegration:
@@ -268,3 +286,113 @@ class TestIntegration:
         result = process_transcript("contamination runs through water quickly")
         keys = list(result.keys())
         assert keys.index("contamination") < keys.index("water")
+
+# -- Single letter and proper noun filtering ----------------------------------
+
+class TestTokenFilterExtended:
+
+    def test_single_letter_filtered(self):
+        """Single letter tokens must not appear in vocabulary."""
+        t = _make_token("a", "a", "NOUN", is_alpha=True)
+        assert not _is_valid_token(t)
+
+    def test_two_letter_token_passes(self):
+        """Two-letter tokens are allowed."""
+        t = _make_token("be", "be", "VERB", is_alpha=True)
+        assert _is_valid_token(t)
+
+    def test_proper_noun_filtered(self):
+        """PROPN tokens are excluded -- they are names, not vocabulary."""
+        t = _make_token("Paris", "Paris", "PROPN", is_alpha=True)
+        assert not _is_valid_token(t)
+
+    def test_person_entity_filtered(self):
+        """Named entities of type PERSON are excluded."""
+        t = _make_token("Emmanuel", "Emmanuel", "PROPN", is_alpha=True)
+        t.ent_type_ = "PERSON"
+        assert not _is_valid_token(t)
+
+    def test_org_entity_filtered(self):
+        """Named entities of type ORG are excluded."""
+        t = _make_token("Google", "Google", "PROPN", is_alpha=True)
+        t.ent_type_ = "ORG"
+        assert not _is_valid_token(t)
+
+    def test_regular_noun_with_entity_type_gpe_filtered(self):
+        """GPE (geopolitical entity) tokens are excluded."""
+        t = _make_token("France", "France", "PROPN", is_alpha=True)
+        t.ent_type_ = "GPE"
+        assert not _is_valid_token(t)
+
+    def test_surface_form_lemmatizing_to_single_char_filtered(self):
+        """
+        A 3-character surface form that lemmatizes to a 1-character
+        lemma must be filtered. The vocabulary dict is keyed by the
+        lemma, not the surface form, so a length check on token.text
+        alone misses this -- e.g. a French conjugated form collapsing
+        to the single-letter lemma "e".
+        """
+        t = _make_token("est", "e", "VERB", is_alpha=True)
+        assert not _is_valid_token(t)
+
+    def test_surface_form_lemmatizing_to_punctuation_filtered(self):
+        """
+        An alphabetic surface form that lemmatizes to a non-alphabetic
+        string must be filtered. token.is_alpha describes the surface
+        form only -- the lemma can contain characters (e.g. punctuation
+        from a contraction split) the surface form did not.
+        """
+        t = _make_token("qu'", "'", "NOUN", is_alpha=True)
+        assert not _is_valid_token(t)
+
+    def test_short_surface_form_with_valid_lemma_passes(self):
+        """
+        A short surface form whose lemma is a valid word must pass.
+        French 'va' (2 chars) lemmatizes to 'aller' (5 chars). Guards
+        against a future refactor reintroducing a length check on
+        token.text, which would silently drop short conjugated forms.
+        """
+        t = _make_token("va", "aller", "VERB", is_alpha=True)
+        assert _is_valid_token(t)
+
+    def test_hyphenated_compound_passes(self):
+        """Real compound adjectives must not be filtered."""
+        t = _make_token("semi-relevée", "semi-relevé", "ADJ", is_alpha=False)
+        assert _is_valid_token(t)
+
+    def test_trailing_hyphen_lemma_filtered(self):
+        """A lemma ending in a hyphen is a tokenizer artifact, not a word."""
+        t = _make_token("semi-", "semi-", "ADJ", is_alpha=False)
+        assert not _is_valid_token(t)
+
+    def test_leading_hyphen_lemma_filtered(self):
+        """'-là' is a demonstrative suffix fragment, not vocabulary."""
+        t = _make_token("-là", "-là", "ADV", is_alpha=False)
+        assert not _is_valid_token(t)
+
+    def test_typographic_apostrophe_permitted(self):
+        """YouTube transcripts often use U+2019 rather than ASCII apostrophe."""
+        t = _make_token("aujourd’hui", "aujourd’hui", "ADV", is_alpha=False)
+        assert _is_valid_token(t)
+
+    def test_digit_containing_lemma_filtered(self):
+        """Alphanumeric tokens are not vocabulary."""
+        t = _make_token("3d", "3d", "NOUN", is_alpha=False)
+        assert not _is_valid_token(t)
+
+    def test_punctuation_lemma_rejected_without_is_alpha_guard(self):
+        """
+        _is_valid_lemma is the sole gate -- token.is_alpha was removed
+        deliberately because it evaluates the surface form, not the lemma
+        the vocabulary dict is keyed by. This test pins that the regex
+        alone still rejects pure punctuation, so nobody reinstates the
+        surface-form guard as a "safety net" it never provided.
+        """
+        t = _make_token(">", ">", "ADJ", is_alpha=False)
+        assert not _is_valid_token(t)
+
+    def test_regular_noun_passes(self):
+        """Normal nouns with no entity type still pass."""
+        t = _make_token("water", "water", "NOUN", is_alpha=True)
+        t.ent_type_ = ""
+        assert _is_valid_token(t)
