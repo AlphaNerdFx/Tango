@@ -101,6 +101,39 @@ class TestFormatPills:
         assert "antonym-pill" in result
         assert "vocab-pill" not in result
 
+    # -- 256-char overflow handling (issue #11) ------------------------------
+
+    def test_never_exceeds_max_chars(self):
+        long_words = ["extraordinarily", "incomprehensible", "disproportionately",
+                      "unquestionably", "characteristically", "notwithstanding"]
+        result = _format_pills(long_words, "vocab-pill")
+        assert len(result) <= 256
+
+    def test_overflow_drops_whole_pills_not_partial(self):
+        # Every <span> that appears must have a matching </span> — no pill
+        # is ever cut mid-tag, only whole pills are dropped.
+        long_words = ["extraordinarily", "incomprehensible", "disproportionately",
+                      "unquestionably", "characteristically", "notwithstanding"]
+        result = _format_pills(long_words, "vocab-pill")
+        assert result.count("<span") == result.count("</span>")
+        # Confirm this scenario actually overflows without capping, so the
+        # test is exercising the overflow path and not passing vacuously.
+        uncapped_length = sum(len(f'<span class="vocab-pill">{w}</span>') + 1
+                               for w in long_words)
+        assert uncapped_length > 256
+
+    def test_overflow_keeps_earlier_pills_over_later_ones(self):
+        long_words = ["extraordinarily", "incomprehensible", "disproportionately",
+                      "unquestionably", "characteristically", "notwithstanding"]
+        result = _format_pills(long_words, "vocab-pill")
+        assert "extraordinarily" in result
+        assert "notwithstanding" not in result  # last one, pushed out
+
+    def test_small_lists_unaffected_by_cap(self):
+        result = _format_pills(["pollute", "taint"], "vocab-pill")
+        assert '<span class="vocab-pill">pollute</span>' in result
+        assert '<span class="vocab-pill">taint</span>' in result
+
 
 # -- _find_in_snippets --------------------------------------------------------
 

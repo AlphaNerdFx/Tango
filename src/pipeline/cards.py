@@ -246,21 +246,29 @@ def _build_model() -> genanki.Model:
 
 # -- Note builders ------------------------------------------------------------
 
-def _format_pills(words: list[str], css_class: str) -> str:
+def _format_pills(words: list[str], css_class: str, max_chars: int = 256) -> str:
+    """
+    Build pill HTML, stopping before any additional pill would push the
+    combined length past max_chars.
+
+    Deliberately does NOT use _truncate() here — that function looks for a
+    sentence boundary (". "), which pill HTML never contains, so it always
+    falls through to a blind character cut that can slice through the
+    middle of a <span> tag and produce invalid, unclosed HTML (issue #11).
+    Dropping a whole pill is better UX than a garbled partial one anyway.
+    """
     if not words:
         return ""
-    return " ".join(f'<span class="{css_class}">{w}</span>' for w in words)
-
-
-def _truncate(text: str, max_chars: int = 256) -> str:
-    """Truncate at last sentence boundary before max_chars."""
-    if len(text) <= max_chars:
-        return text
-    cut = text[:max_chars]
-    last_dot = cut.rfind(". ")
-    if last_dot > max_chars // 2:
-        return cut[:last_dot + 1]
-    return cut.rstrip() + "..."
+    pills: list[str] = []
+    total = 0
+    for word in words:
+        pill = f'<span class="{css_class}">{word}</span>'
+        added = len(pill) + (1 if pills else 0)  # +1 for the joining space
+        if total + added > max_chars:
+            break
+        pills.append(pill)
+        total += added
+    return " ".join(pills)
 
 
 def _build_note(
@@ -269,8 +277,8 @@ def _build_note(
     video_id: str,
 ) -> genanki.Note:
     """Build a recognition card. Fields match renamed Anki model fields."""
-    synonyms_html = _truncate(_format_pills(result.synonyms, "vocab-pill"))
-    antonyms_html = _truncate(_format_pills(result.antonyms, "antonym-pill"))
+    synonyms_html = _format_pills(result.synonyms, "vocab-pill")
+    antonyms_html = _format_pills(result.antonyms, "antonym-pill")
 
     return genanki.Note(
         model=model,
