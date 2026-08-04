@@ -84,6 +84,13 @@ API_TIMEOUT: float = float(os.getenv("API_TIMEOUT", "8"))
 # Cache hits do not trigger this delay
 API_DELAY: float = float(os.getenv("API_DELAY", "0.5"))
 
+# Consecutive server-error/timeout failures against one definition source
+# before the circuit breaker stops calling it for the rest of the run.
+# Does NOT count 404 ("word not found" — the source is healthy, just lacks
+# this word) as a failure, only 5xx/timeout/connection errors — see issue #1's
+# 404-vs-502 investigation for why that distinction matters.
+CIRCUIT_BREAKER_THRESHOLD: int = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "5"))
+
 # Proxy (youtube-transcript-api)
 
 # Webshare proxy credentials — recommended provider for youtube-transcript-api

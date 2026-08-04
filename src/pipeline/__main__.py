@@ -33,6 +33,7 @@ from pipeline import (
     transcript as transcript_module,
 )
 from pipeline.translation import reset_warning_state
+from pipeline.definition import reset_circuit_breaker
 from pipeline.language import (
     LanguageResolutionError,
     list_supported_languages,
@@ -221,8 +222,9 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
     else:
         def_language = None  # native mode — no translation needed
 
-    # Reset per-run translation warning state
+    # Reset per-run translation warning state and circuit breaker state
     reset_warning_state()
+    reset_circuit_breaker()
 
     # ── 1. Check not already processed ───────────────────────────────────────
     try:
@@ -340,6 +342,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
 
 def _run_review(args: argparse.Namespace, session: Session) -> None:
     deck_name = _select_deck(args.deck, session)
+    reset_circuit_breaker()
 
     to_add, to_skip = load_review_decisions()
 
@@ -388,6 +391,7 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
 
 def _run_backlog(args: argparse.Namespace, session: Session) -> None:
     deck_name = _select_deck(args.deck, session)
+    reset_circuit_breaker()
 
     _info(f"Processing Anki backlog for deck: {deck_name}")
 

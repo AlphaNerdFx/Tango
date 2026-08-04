@@ -41,6 +41,17 @@ def tmp_db(tmp_path, monkeypatch):
     yield
 
 
+@pytest.fixture(autouse=True)
+def reset_circuit_breaker_state():
+    """
+    Reset circuit breaker state before and after each test so a source
+    tripped in one test doesn't leak into the next.
+    """
+    def_module.reset_circuit_breaker()
+    yield
+    def_module.reset_circuit_breaker()
+
+
 @pytest.fixture
 def sample_snippets() -> dict:
     return {
@@ -439,6 +450,116 @@ class TestCache:
         _cache_set(updated)
         cached = _cache_get("contaminate")
         assert cached["definition"] == "updated definition"
+
+
+# ── Circuit breaker (issue #4) ───────────────────────────────────────────────
+
+def _mock_response(status_code: int, json_data=None, raises: bool = False):
+    """Build a mock requests.Response for circuit breaker tests."""
+    resp = MagicMock()
+    resp.status_code = status_code
+    resp.json.return_value = json_data if json_data is not None else {}
+    if raises:
+        import requests
+        resp.raise_for_status.side_effect = requests.exceptions.HTTPError(
+            f"{status_code} error"
+        )
+    else:
+        resp.raise_for_status.return_value = None
+    return resp
+
+
+class TestCircuitBreaker:
+
+    def test_does_not_trip_before_threshold(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(502, raises=True)
+            for _ in range(2):
+                def_module._fetch_from_dictapi("word", language="fr")
+        assert not def_module._circuit_is_tripped("dictapi:fr")
+
+    def test_trips_after_threshold_consecutive_server_errors(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(502, raises=True)
+            for _ in range(3):
+                def_module._fetch_from_dictapi("word", language="fr")
+        assert def_module._circuit_is_tripped("dictapi:fr")
+
+    def test_tripped_source_skips_network_call_entirely(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(502, raises=True)
+            for _ in range(3):
+                def_module._fetch_from_dictapi("word", language="fr")
+            assert mock_get.call_count == 3
+            # Breaker is now tripped -- next call must not touch the network.
+            def_module._fetch_from_dictapi("another_word", language="fr")
+            assert mock_get.call_count == 3
+
+    def test_404_does_not_count_as_a_failure(self, monkeypatch):
+        # Regression guard for issue #1's 404-vs-502 finding: a 404 means
+        # the source is healthy and the word is absent, not that the
+        # source is broken. Many consecutive 404s (realistic for a
+        # low-coverage language) must never trip the breaker.
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(404)
+            for _ in range(10):
+                def_module._fetch_from_dictapi("word", language="fr")
+        assert not def_module._circuit_is_tripped("dictapi:fr")
+        assert mock_get.call_count == 10  # every call actually hit the network
+
+    def test_success_resets_the_failure_count(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(502, raises=True)
+            def_module._fetch_from_dictapi("word", language="fr")
+            def_module._fetch_from_dictapi("word", language="fr")
+            # A success in between must reset the streak, not just pause it.
+            mock_get.return_value = _mock_response(200, json_data=[{"word": "word"}])
+            def_module._fetch_from_dictapi("word", language="fr")
+            mock_get.return_value = _mock_response(502, raises=True)
+            def_module._fetch_from_dictapi("word", language="fr")
+            def_module._fetch_from_dictapi("word", language="fr")
+        # Only 2 consecutive failures since the reset -- must not have tripped.
+        assert not def_module._circuit_is_tripped("dictapi:fr")
+
+    def test_sources_are_independent(self, monkeypatch):
+        # A tripped dictapi:fr breaker must not affect dictapi:en or mw.
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(502, raises=True)
+            for _ in range(3):
+                def_module._fetch_from_dictapi("word", language="fr")
+        assert def_module._circuit_is_tripped("dictapi:fr")
+        assert not def_module._circuit_is_tripped("dictapi:en")
+        assert not def_module._circuit_is_tripped("mw")
+
+    def test_reset_circuit_breaker_clears_tripped_state(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(502, raises=True)
+            for _ in range(3):
+                def_module._fetch_from_dictapi("word", language="fr")
+        assert def_module._circuit_is_tripped("dictapi:fr")
+        def_module.reset_circuit_breaker()
+        assert not def_module._circuit_is_tripped("dictapi:fr")
+
+    def test_connection_error_counts_as_failure(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        # Independent of whether a real MW_API_KEY happens to be set in this
+        # environment's .env -- _fetch_from_mw() returns early without
+        # touching the breaker at all if the key is falsy, which would make
+        # this test pass vacuously in a fresh clone or CI with no .env.
+        monkeypatch.setattr(def_module, "MW_API_KEY", "fake-test-key")
+        import requests
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.side_effect = requests.exceptions.ConnectionError("refused")
+            for _ in range(3):
+                def_module._fetch_from_mw("word")
+        assert def_module._circuit_is_tripped("mw")
 
 
 # ── fetch_definition ──────────────────────────────────────────────────────────

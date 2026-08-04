@@ -71,7 +71,7 @@ def _wordnet_synonyms_antonyms(word: str) -> tuple:
 
 from pipeline.config import (
     MW_API_KEY, MW_API_BASE, DICT_API_BASE,
-    API_TIMEOUT, API_DELAY, DB_PATH,
+    API_TIMEOUT, API_DELAY, DB_PATH, CIRCUIT_BREAKER_THRESHOLD,
 )
 
 
@@ -466,28 +466,94 @@ def _parse_dictapi_response(
     )
 
 
+# ── Circuit breaker ────────────────────────────────────────────────────────
+# After CIRCUIT_BREAKER_THRESHOLD consecutive failures against one source,
+# stop calling it for the rest of the run and treat further calls as an
+# immediate failure, no network request made. A run with 108 failing
+# lookups against a source that was down for the whole run paid a full
+# network timeout on every single one of them — roughly 2.6s/failure, 280s
+# total for that source alone.
+#
+# Only counts server errors, timeouts, and connection failures as failures.
+# A 404 does NOT count — it means the source is reachable and healthy, it
+# simply doesn't have this word (see issue #1's 404-vs-502 investigation:
+# "404 means the endpoint works and the word is absent. 502 means the
+# upstream server broke" — those are different failure modes and only the
+# second one should trip the breaker). Treating 404s as failures would trip
+# the breaker on any source with genuinely sparse coverage for a language
+# after only a few words, even though the source itself is working fine.
+#
+# Keyed by source name, or "source:language" for dictionaryapi.dev, since a
+# single run's native-language and target-language dictionaryapi.dev calls
+# can have very different reliability (e.g. a French-to-English run: the
+# French native lookups may be failing consistently per issue #1 while the
+# English target lookups work fine — one must not trip the other's breaker).
+_circuit_failures: dict[str, int] = {}
+_circuit_tripped: set[str] = set()
+
+
+def reset_circuit_breaker() -> None:
+    """
+    Clear all circuit breaker state. Call once at the start of each pipeline
+    run (mirrors translation.reset_warning_state()) so a source that tripped
+    in a previous run/process doesn't stay tripped — this module-level state
+    would otherwise leak across multiple calls within the same process (e.g.
+    tests, scratch scripts, or --review/--process-backlog re-invocations).
+    """
+    _circuit_failures.clear()
+    _circuit_tripped.clear()
+
+
+def _circuit_is_tripped(source: str) -> bool:
+    return source in _circuit_tripped
+
+
+def _circuit_record_failure(source: str) -> None:
+    count = _circuit_failures.get(source, 0) + 1
+    _circuit_failures[source] = count
+    if count >= CIRCUIT_BREAKER_THRESHOLD and source not in _circuit_tripped:
+        _circuit_tripped.add(source)
+        logger.warning(
+            "Circuit breaker tripped for '%s' after %d consecutive failures — "
+            "skipping it for the rest of this run.",
+            source, count,
+        )
+
+
+def _circuit_record_success(source: str) -> None:
+    _circuit_failures[source] = 0
+
+
 # ── API callers ───────────────────────────────────────────────────────────────
 
 def _fetch_from_mw(lemma: str) -> Optional[list]:
     """
     Call the MW Collegiate API for one word.
 
-    Returns the raw JSON list, or None if the key is missing or the call fails.
+    Returns the raw JSON list, or None if the key is missing, the circuit
+    breaker for "mw" is tripped, or the call fails.
     """
     api_key = MW_API_KEY
     if not api_key:
         logger.debug("MW_API_KEY not set — skipping MW lookup for '%s'.", lemma)
         return None
 
+    if _circuit_is_tripped("mw"):
+        logger.debug("Circuit breaker open for 'mw' — skipping '%s'.", lemma)
+        return None
+
     url = f"{MW_API_BASE}/{lemma}?key={api_key}"
     try:
         response = requests.get(url, timeout=API_TIMEOUT)
         response.raise_for_status()
+        _circuit_record_success("mw")
         return response.json()
     except requests.exceptions.HTTPError as exc:
         logger.warning("MW HTTP error for '%s': %s", lemma, exc)
+        _circuit_record_failure("mw")
     except requests.exceptions.RequestException as exc:
         logger.warning("MW request failed for '%s': %s", lemma, exc)
+        _circuit_record_failure("mw")
     return None
 
 
@@ -499,20 +565,32 @@ def _fetch_from_dictapi(lemma: str, language: str = "en") -> Optional[list]:
     When language is "fr", "de", "es" etc., queries the native language endpoint
     returning definitions in that language.
 
-    Returns the raw JSON list, or None on failure.
+    Returns the raw JSON list, or None if not found, the circuit breaker for
+    this language is tripped, or the call fails.
     """
+    source = f"dictapi:{language}"
+    if _circuit_is_tripped(source):
+        logger.debug("Circuit breaker open for '%s' — skipping '%s'.", source, lemma)
+        return None
+
     url = f"{DICT_API_BASE.rstrip('/')}/{language}/{lemma}"
     try:
         response = requests.get(url, timeout=API_TIMEOUT)
         if response.status_code == 404:
             logger.debug("dictionaryapi: '%s' not found.", lemma)
+            # Source responded and is healthy -- it just doesn't have this
+            # word. Not a failure; do not count it toward the breaker.
+            _circuit_record_success(source)
             return None
         response.raise_for_status()
+        _circuit_record_success(source)
         return response.json()
     except requests.exceptions.HTTPError as exc:
         logger.warning("dictionaryapi HTTP error for '%s': %s", lemma, exc)
+        _circuit_record_failure(source)
     except requests.exceptions.RequestException as exc:
         logger.warning("dictionaryapi request failed for '%s': %s", lemma, exc)
+        _circuit_record_failure(source)
     return None
 
 
