@@ -91,47 +91,37 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
 
 ## High
 
-- [ ] **Language-aware spaCy model selection.**
-      Currently every non-English video is processed with an English model.
-      This is the highest-impact correctness bug in the codebase. Full patch:
+- [x] **Language-aware spaCy model selection.** Closes #3, shipped in v0.4.3
+      across three commits (b5b0247, cf2dd90, d794211). Verified live: `--language
+      fr` alone now selects `fr_core_news_sm` automatically, no manual
+      `SPACY_MODEL` override needed; confirmed against real generated cards that
+      `allons`->`aller` and `toujours`->`toujours` now resolve correctly (were
+      `allon`/`toujour`). Surfaced a separate, real gap during verification —
+      `fr_core_news_sm`'s own verb-lemmatization accuracy is inconsistent on some
+      conjugated forms (e.g. "sors" vs "sortir") — filed as #13, not part of this
+      fix's scope.
 
-      1. Add `SPACY_MODELS` dict to `language.py` mapping BCP-47 codes to model
-         names: `en_core_web_sm`, `fr_core_news_sm`, `es_core_news_sm`,
-         `de_core_news_sm`, `it_core_news_sm`, `pt_core_news_sm`,
-         `nl_core_news_sm`, `ru_core_news_sm`, `pl_core_news_sm`,
-         `ro_core_news_sm`, `el_core_news_sm`, `da_core_news_sm`,
-         `sv_core_news_sm`, `nb_core_news_sm`, `fi_core_news_sm`,
-         `lt_core_news_sm`, `hr_core_news_sm`, `uk_core_news_sm`,
-         `sl_core_news_sm`, `mk_core_news_sm`, `ca_core_news_sm`,
-         `ja_core_news_sm`, `zh_core_web_sm`, `ko_core_news_sm`
-      2. Add `get_spacy_model(language_code)` with base-code fallback so
-         `fr-CA` resolves to `fr`, raising `SpacyModelUnavailableError` for
-         languages spaCy does not ship a model for
-      3. Change `nlp.py` to cache one model per language in `_nlp_models: dict`
-         rather than a single global, and accept a `language` parameter in
-         `process_transcript()`
-      4. Pass `language_code` through from `__main__.py`
-      5. Change the Makefile `spacy-model` target to accept `SPACY_LANG=fr`
-      6. Remove the now-dead `SPACY_MODEL` constant from `config.py` and `.env`
-      7. Add tests: English maps correctly, French maps correctly, regional
-         variants fall back to base, Chinese variants share one model,
-         unsupported languages raise, error message lists supported codes,
-         model cache is per-language
+- [x] **Resolve the 404-versus-502 distinction in issue #1.**
+      Investigated: retried `fr/bonjour` 5x (502, 404, 502, 502, 502) and swept
+      18 common French words plus an English control. Finding is more nuanced
+      than either original hypothesis: the 502s are **not** French-specific —
+      English showed the same flakiness in a comparable sample (3/5 failed) — so
+      this is a general dictionaryapi.dev reliability issue, not a broken French
+      backend specifically. But filtering the 502 noise out, the coverage gap is
+      still real and confirmed: across those 18 French words, every non-502
+      response was 404 (0 successes), while English's non-502 responses were 200
+      both times. Full data recorded on issue #1. Practical implication: the
+      circuit-breaker work below is now relevant to *all* languages, not just
+      non-English ones, since the 502 flakiness hits English too.
 
-- [ ] **Resolve the 404-versus-502 distinction in issue #1.**
-      `fr/bonjour` returned 502 while `fr/eau`, `fr/chat`, and `fr/maison`
-      returned 404. Those are different failures. 404 means the endpoint works
-      and the word is absent. 502 means the upstream server broke. If 502s
-      recur intermittently across different words, the French backend exists
-      and is unhealthy, which is a different problem with a different fix than
-      "no coverage". Retry `fr/bonjour` several times spaced out, test five
-      more common French words, record the distinction in the issue.
-
-- [ ] **Fix the flaky test.**
-      `test_cache_hit_skips_fetch_definition_call` failed once in five runs.
-      Probable cause: `_get_db()` opens a connection per call and `with conn:`
-      commits without closing. Add `try/finally: conn.close()` or refactor to a
-      context manager that closes.
+- [x] **Fix the flaky test.**
+      Was misdiagnosed here as SQLite connection leakage. Actual root cause,
+      found during the v0.4.1 verification pass: `test_cache_hit_skips_fetch_definition_call`
+      seeded the cache via `_cache_set()` (bare-lemma key) while
+      `fetch_definitions()` reads via a composite `lemma::language` key — a
+      deterministic mismatch, not flakiness (confirmed via 3/3 reproduction in
+      isolation, which the connection-leak theory couldn't explain since each
+      test already gets an isolated tmp_path DB). Fixed in 332b8fd.
 
 - [ ] **Circuit breaker for failing API sources.**
       A run with 108 failing lookups exceeded 280 seconds — roughly 2.6 seconds
