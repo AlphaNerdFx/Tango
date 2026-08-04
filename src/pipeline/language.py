@@ -185,6 +185,19 @@ class LanguageResolutionError(Exception):
     """
 
 
+class SpacyModelUnavailableError(Exception):
+    """
+    Raised when spaCy has no trained pipeline for the resolved language.
+
+    LANGUAGE_MAP supports 40 languages for transcript fetching, but spaCy
+    only ships trained pipelines for a subset of those -- this is a
+    separate, narrower coverage question. Previously nlp.py silently used
+    the English model for every language regardless (see ARCHITECTURE.md
+    9.1); this error replaces that silent wrong behaviour with an explicit
+    failure.
+    """
+
+
 def resolve_language_code(
     language_flag: Optional[str],
     deck_name: Optional[str],
@@ -370,3 +383,94 @@ def list_supported_languages() -> list[tuple[str, str]]:
         result.append((name.capitalize(), code))
 
     return result
+
+
+# =============================================================================
+# BCP-47 code -> spaCy model name
+# =============================================================================
+# spaCy only ships trained pipelines for these 24 languages. LANGUAGE_MAP
+# above supports 40 languages for transcript fetching -- that is a
+# different, wider coverage question. A language resolving successfully
+# via LANGUAGE_MAP does NOT guarantee a spaCy model exists for it.
+#
+# Previously nlp.py used a single hardcoded English model for every
+# language regardless, silently mangling non-English text with English
+# morphology rules (see ARCHITECTURE.md 9.1). get_spacy_model() replaces
+# that with an explicit lookup that fails loudly for languages spaCy
+# doesn't support, instead of guessing wrong.
+
+SPACY_MODELS: dict[str, str] = {
+    "en": "en_core_web_sm",
+    "fr": "fr_core_news_sm",
+    "es": "es_core_news_sm",
+    "de": "de_core_news_sm",
+    "it": "it_core_news_sm",
+    "pt": "pt_core_news_sm",
+    "nl": "nl_core_news_sm",
+    "ru": "ru_core_news_sm",
+    "pl": "pl_core_news_sm",
+    "ro": "ro_core_news_sm",
+    "el": "el_core_news_sm",
+    "da": "da_core_news_sm",
+    "sv": "sv_core_news_sm",
+    "nb": "nb_core_news_sm",
+    "fi": "fi_core_news_sm",
+    "lt": "lt_core_news_sm",
+    "hr": "hr_core_news_sm",
+    "uk": "uk_core_news_sm",
+    "sl": "sl_core_news_sm",
+    "mk": "mk_core_news_sm",
+    "ca": "ca_core_news_sm",
+    "ja": "ja_core_news_sm",
+    "zh": "zh_core_web_sm",
+    "ko": "ko_core_news_sm",
+}
+
+# Codes where LANGUAGE_MAP's resolved code doesn't match spaCy's model-
+# naming code. Checked before both the exact-match and base-code lookups
+# in get_spacy_model().
+#
+# "no" -> "nb": LANGUAGE_MAP resolves "norwegian" to the macrolanguage
+# code "no", but spaCy only ships a Bokmål-specific pipeline under "nb".
+# There is no "no" model -- without this alias, Norwegian would incorrectly
+# raise SpacyModelUnavailableError even though a usable model exists.
+_SPACY_CODE_ALIASES: dict[str, str] = {
+    "no": "nb",
+}
+
+
+def get_spacy_model(language_code: str) -> str:
+    """
+    Resolve the spaCy model name for a BCP-47 language code.
+
+    Tries an exact match first (after alias normalisation), then falls
+    back to the base code -- the part before a '-' -- so regional variants
+    like "fr-CA" or "zh-CN" resolve to the same model as "fr" / "zh".
+
+    Args:
+        language_code: BCP-47 code, e.g. "fr", "fr-CA", "zh-CN".
+
+    Returns:
+        spaCy model name, e.g. "fr_core_news_sm".
+
+    Raises:
+        SpacyModelUnavailableError: spaCy has no trained pipeline for this
+            language or its base code, even after alias normalisation.
+    """
+    code = language_code.strip().lower()
+    code = _SPACY_CODE_ALIASES.get(code, code)
+    if code in SPACY_MODELS:
+        return SPACY_MODELS[code]
+
+    base = code.split("-")[0]
+    base = _SPACY_CODE_ALIASES.get(base, base)
+    if base in SPACY_MODELS:
+        return SPACY_MODELS[base]
+
+    supported = ", ".join(sorted(SPACY_MODELS))
+    raise SpacyModelUnavailableError(
+        f"'{language_code}' isn't supported thus far.\n"
+        f"  spaCy has no trained pipeline for this language, so accurate\n"
+        f"  vocabulary extraction can't run for it yet.\n"
+        f"  Currently supported: {supported}"
+    )

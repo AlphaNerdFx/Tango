@@ -11,8 +11,11 @@ import pytest
 
 from pipeline.language import (
     LANGUAGE_MAP,
+    SPACY_MODELS,
     LanguageResolutionError,
+    SpacyModelUnavailableError,
     _infer_from_deck_name,
+    get_spacy_model,
     list_supported_languages,
     resolve_language_code,
     resolve_transcript,
@@ -272,6 +275,69 @@ class TestListSupportedLanguages:
     def test_minimum_40_languages(self):
         result = list_supported_languages()
         assert len(result) >= 40
+
+
+# ── get_spacy_model ──────────────────────────────────────────────────────────
+
+class TestGetSpacyModel:
+
+    def test_english_maps_correctly(self):
+        assert get_spacy_model("en") == "en_core_web_sm"
+
+    def test_french_maps_correctly(self):
+        assert get_spacy_model("fr") == "fr_core_news_sm"
+
+    def test_regional_variant_falls_back_to_base(self):
+        assert get_spacy_model("fr-CA") == "fr_core_news_sm"
+        assert get_spacy_model("fr-FR") == "fr_core_news_sm"
+
+    def test_chinese_variants_share_one_model(self):
+        # zh-CN and zh-TW both resolve to the same base "zh" model --
+        # spaCy doesn't ship separate simplified/traditional pipelines.
+        assert get_spacy_model("zh-CN") == "zh_core_web_sm"
+        assert get_spacy_model("zh-TW") == "zh_core_web_sm"
+
+    def test_case_insensitive(self):
+        assert get_spacy_model("FR") == "fr_core_news_sm"
+
+    def test_unsupported_language_raises(self):
+        with pytest.raises(SpacyModelUnavailableError):
+            get_spacy_model("ar")  # Arabic: in LANGUAGE_MAP, no spaCy model
+
+    def test_error_message_names_the_language_and_lists_supported(self):
+        with pytest.raises(SpacyModelUnavailableError) as exc_info:
+            get_spacy_model("th")
+        message = str(exc_info.value)
+        assert "th" in message
+        assert "fr" in message  # supported codes are listed
+
+    def test_error_message_says_not_supported_thus_far(self):
+        with pytest.raises(SpacyModelUnavailableError) as exc_info:
+            get_spacy_model("sw")
+        assert "isn't supported thus far" in str(exc_info.value)
+
+    def test_model_cache_is_per_language(self):
+        # get_spacy_model() itself is stateless (nlp.py owns the actual
+        # model cache) -- this just confirms two different languages
+        # resolve to two different model names, not a shared default.
+        assert get_spacy_model("fr") != get_spacy_model("de")
+
+    def test_norwegian_macrolanguage_code_resolves_via_alias(self):
+        # LANGUAGE_MAP resolves "norwegian" to "no", but spaCy's model is
+        # named "nb" (Bokmål-specific) -- there is no "no" model. Without
+        # the alias this would incorrectly raise as unsupported.
+        assert get_spacy_model("no") == "nb_core_news_sm"
+
+    def test_every_language_map_code_is_either_supported_or_raises_cleanly(self):
+        # Every code LANGUAGE_MAP can resolve to must either have a spaCy
+        # model or raise SpacyModelUnavailableError -- never a KeyError or
+        # anything else uncaught.
+        for code in set(LANGUAGE_MAP.values()):
+            try:
+                model = get_spacy_model(code)
+                assert model.endswith(("_sm",))
+            except SpacyModelUnavailableError:
+                pass
 
 
 # ── Integration ───────────────────────────────────────────────────────────────
