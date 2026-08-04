@@ -48,13 +48,15 @@ def _make_doc(tokens: list) -> MagicMock:
 @pytest.fixture(autouse=True)
 def reset_model_cache():
     """
-    Reset the lazy-loaded model cache before each test so tests are
-    fully isolated — one test loading a mock doesn't leak into the next.
+    Reset the lazy-loaded per-language model cache before each test so
+    tests are fully isolated — one test loading a mock doesn't leak into
+    the next.
     """
-    original = nlp_module._nlp_model
-    nlp_module._nlp_model = None
+    original = nlp_module._nlp_models.copy()
+    nlp_module._nlp_models.clear()
     yield
-    nlp_module._nlp_model = original
+    nlp_module._nlp_models.clear()
+    nlp_module._nlp_models.update(original)
 
 
 @pytest.fixture
@@ -197,6 +199,42 @@ class TestProcessTranscript:
             process_transcript("second call")
             mock_load.assert_called_once()
 
+    def test_defaults_to_english_model_when_language_omitted(self, mock_spacy_model):
+        mock_spacy_model.return_value = _make_doc([])
+        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+            process_transcript("some text")
+            mock_load.assert_called_once_with("en_core_web_sm")
+
+    def test_passes_correct_model_for_requested_language(self, mock_spacy_model):
+        mock_spacy_model.return_value = _make_doc([])
+        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+            process_transcript("un texte", language="fr")
+            mock_load.assert_called_once_with("fr_core_news_sm")
+
+    def test_unsupported_language_raises_spacy_model_unavailable(self):
+        with pytest.raises(nlp_module.SpacyModelUnavailableError):
+            process_transcript("some text", language="ar")
+
+    def test_two_languages_cached_independently(self, mock_spacy_model):
+        # Regression guard for the actual bug this feature fixes: processing
+        # a French transcript must not reuse an already-loaded English
+        # model, and vice versa -- each language gets its own spacy.load
+        # call, not a single shared global.
+        mock_spacy_model.return_value = _make_doc([])
+        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+            process_transcript("some text", language="en")
+            process_transcript("un texte", language="fr")
+            assert mock_load.call_count == 2
+            mock_load.assert_any_call("en_core_web_sm")
+            mock_load.assert_any_call("fr_core_news_sm")
+
+    def test_same_language_reuses_cached_model(self, mock_spacy_model):
+        mock_spacy_model.return_value = _make_doc([])
+        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+            process_transcript("premier texte", language="fr")
+            process_transcript("deuxième texte", language="fr")
+            mock_load.assert_called_once_with("fr_core_news_sm")
+
     def test_empty_doc_returns_empty_dict(self, mock_spacy_model):
         mock_spacy_model.return_value = _make_doc([])
         result = process_transcript("some transcript text")
@@ -259,30 +297,30 @@ class TestGetUniqueLemmas:
 class TestIntegration:
 
     def test_real_model_loads(self):
-        nlp_module._nlp_model = None
+        nlp_module._nlp_models.clear()
         result = process_transcript("Companies developed permanent photographic records.")
         assert isinstance(result, dict)
         assert len(result) > 0
 
     def test_real_lemmatization(self):
-        nlp_module._nlp_model = None
+        nlp_module._nlp_models.clear()
         result = process_transcript("running runs run")
         assert "run" in result
         assert result["run"] == 3
 
     def test_real_pos_filtering(self):
-        nlp_module._nlp_model = None
+        nlp_module._nlp_models.clear()
         result = process_transcript("the through with and but")
         # Prepositions and conjunctions should be filtered
         assert "through" not in result
 
     def test_real_frequency_count(self):
-        nlp_module._nlp_model = None
+        nlp_module._nlp_models.clear()
         result = process_transcript("water water water runs quickly")
         assert result["water"] == 3
 
     def test_real_first_appearance_order(self):
-        nlp_module._nlp_model = None
+        nlp_module._nlp_models.clear()
         result = process_transcript("contamination runs through water quickly")
         keys = list(result.keys())
         assert keys.index("contamination") < keys.index("water")

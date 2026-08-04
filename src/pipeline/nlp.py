@@ -12,21 +12,25 @@ by relevance, and for vocabulary level modelling in Phase 3.
 
 Dependencies:
     spacy
-    en_core_web_sm  (install: python -m spacy download en_core_web_sm)
+    A trained pipeline per language actually processed — see
+    language.SPACY_MODELS for which languages are supported and
+    `make spacy-model SPACY_LANG=<code>` to install one.
 
-The spaCy model is loaded lazily on first call to process_transcript()
-and cached for the lifetime of the process. Importing this module does
-not load the model.
+Each language's spaCy model is loaded lazily on first use and cached for
+the lifetime of the process — one model per language, not a single global
+model reused for every language regardless (that was the bug: see
+ARCHITECTURE.md 9.1). Importing this module does not load any model.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
 
 import spacy
 from spacy.language import Language
+
+from pipeline.language import SpacyModelUnavailableError, get_spacy_model
 
 logger = logging.getLogger(__name__)
 
@@ -37,19 +41,22 @@ logger = logging.getLogger(__name__)
 # ADV   — quickly, permanently
 ACCEPTED_POS: frozenset[str] = frozenset({"NOUN", "VERB", "ADJ", "ADV"})
 
-# ── Model name — change here only if upgrading ────────────────────────────────
-from pipeline.config import SPACY_MODEL as _MODEL_NAME
-
-# ── Lazy model cache ──────────────────────────────────────────────────────────
-_nlp_model: Optional[Language] = None
+# ── Lazy per-language model cache ─────────────────────────────────────────────
+# Keyed by spaCy model name rather than by BCP-47 code: several codes can
+# share one model (zh-CN and zh-TW both resolve to zh_core_web_sm via
+# get_spacy_model()'s base-code fallback), so keying by model name avoids
+# loading the same model twice under two different language keys.
+_nlp_models: dict[str, Language] = {}
 
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 
 class NLPModelNotFoundError(Exception):
     """
-    Raised when the spaCy model is not installed.
-    Fix: python -m spacy download en_core_web_sm
+    Raised when a resolved spaCy model exists in spaCy's catalog but isn't
+    installed in this environment.
+    Fix: python -m spacy download <model_name>
+         or: make spacy-model SPACY_LANG=<code>
     """
 
 
@@ -62,25 +69,32 @@ class EmptyTranscriptError(Exception):
 
 # ── Model loader ──────────────────────────────────────────────────────────────
 
-def _get_model() -> Language:
+def _get_model(language: str = "en") -> Language:
     """
-    Return the cached spaCy model, loading it on first call.
+    Return the cached spaCy model for this language, loading it on first
+    use for that language.
+
+    Args:
+        language: BCP-47 language code, e.g. "en", "fr", "zh-CN".
 
     Raises:
-        NLPModelNotFoundError: Model not installed.
+        SpacyModelUnavailableError: spaCy has no trained pipeline for this
+            language at all (propagated from language.get_spacy_model()).
+        NLPModelNotFoundError: The resolved model is a real spaCy model
+            but isn't installed in this environment.
     """
-    global _nlp_model
-    if _nlp_model is None:
-        logger.debug("Loading spaCy model: %s", _MODEL_NAME)
+    model_name = get_spacy_model(language)  # raises SpacyModelUnavailableError
+    if model_name not in _nlp_models:
+        logger.debug("Loading spaCy model: %s", model_name)
         try:
-            _nlp_model = spacy.load(_MODEL_NAME)
-            logger.info("spaCy model loaded: %s", _MODEL_NAME)
+            _nlp_models[model_name] = spacy.load(model_name)
+            logger.info("spaCy model loaded: %s", model_name)
         except OSError as exc:
             raise NLPModelNotFoundError(
-                f"spaCy model '{_MODEL_NAME}' not found. "
-                f"Run: python -m spacy download {_MODEL_NAME}"
+                f"spaCy model '{model_name}' not found. "
+                f"Run: python -m spacy download {model_name}"
             ) from exc
-    return _nlp_model
+    return _nlp_models[model_name]
 
 
 # ── Token filter ──────────────────────────────────────────────────────────────
@@ -145,7 +159,7 @@ def _is_valid_token(token) -> bool:
 
 # ── Main processing function ──────────────────────────────────────────────────
 
-def process_transcript(text: str) -> dict[str, int]:
+def process_transcript(text: str, language: str = "en") -> dict[str, int]:
     """
     Process a clean transcript string and return a vocabulary frequency dict.
 
@@ -156,6 +170,12 @@ def process_transcript(text: str) -> dict[str, int]:
     Args:
         text: Clean transcript string from get_snippets()["_full_text"].
               Must be non-empty.
+        language: BCP-47 code of the transcript's actual language, used to
+              select the matching spaCy model (see language.SPACY_MODELS).
+              Defaults to "en" for callers that don't pass one. Passing
+              the wrong language here reproduces the original bug this
+              parameter exists to fix — always pass the transcript's
+              resolved language, not a hardcoded default, in real use.
 
     Returns:
         Ordered dict mapping lemma (lowercase) → frequency count.
@@ -169,8 +189,10 @@ def process_transcript(text: str) -> dict[str, int]:
         }
 
     Raises:
-        EmptyTranscriptError:   text is empty or whitespace only.
-        NLPModelNotFoundError:  spaCy model not installed.
+        EmptyTranscriptError:        text is empty or whitespace only.
+        SpacyModelUnavailableError:  spaCy has no trained pipeline for
+                                     `language` at all.
+        NLPModelNotFoundError:       The resolved model isn't installed.
     """
     if not text or not text.strip():
         raise EmptyTranscriptError(
@@ -178,8 +200,8 @@ def process_transcript(text: str) -> dict[str, int]:
             "Ensure get_snippets() returned a non-empty '_full_text'."
         )
 
-    nlp = _get_model()
-    logger.info("Processing transcript: %d characters", len(text))
+    nlp = _get_model(language)
+    logger.info("Processing transcript: %d characters (language: %s)", len(text), language)
 
     doc = nlp(text)
 
