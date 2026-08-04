@@ -134,6 +134,19 @@ class TestFormatPills:
         assert '<span class="vocab-pill">pollute</span>' in result
         assert '<span class="vocab-pill">taint</span>' in result
 
+    # -- oversized single entry must not drop everything else (issue #12) --
+
+    def test_oversized_entry_after_short_ones_is_skipped_not_stopped(self):
+        result = _format_pills(["shortword", "a" * 300, "anotherfine"], "vocab-pill")
+        assert '<span class="vocab-pill">shortword</span>' in result
+        assert '<span class="vocab-pill">anotherfine</span>' in result
+        assert "a" * 300 not in result
+
+    def test_oversized_first_entry_does_not_empty_the_whole_result(self):
+        result = _format_pills(["a" * 300, "shortword"], "vocab-pill")
+        assert result != ""
+        assert '<span class="vocab-pill">shortword</span>' in result
+
 
 # -- _find_in_snippets --------------------------------------------------------
 

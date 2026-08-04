@@ -248,7 +248,7 @@ def _build_model() -> genanki.Model:
 
 def _format_pills(words: list[str], css_class: str, max_chars: int = 256) -> str:
     """
-    Build pill HTML, stopping before any additional pill would push the
+    Build pill HTML, skipping any individual pill that would push the
     combined length past max_chars.
 
     Deliberately does NOT use _truncate() here — that function looks for a
@@ -256,6 +256,11 @@ def _format_pills(words: list[str], css_class: str, max_chars: int = 256) -> str
     falls through to a blind character cut that can slice through the
     middle of a <span> tag and produce invalid, unclosed HTML (issue #11).
     Dropping a whole pill is better UX than a garbled partial one anyway.
+
+    Skips (via `continue`) rather than stops (via `break`) at an oversized
+    entry — an early entry that alone doesn't fit must not silently drop
+    every entry after it too, including short ones that would fit fine
+    (issue #12).
     """
     if not words:
         return ""
@@ -265,7 +270,7 @@ def _format_pills(words: list[str], css_class: str, max_chars: int = 256) -> str
         pill = f'<span class="{css_class}">{word}</span>'
         added = len(pill) + (1 if pills else 0)  # +1 for the joining space
         if total + added > max_chars:
-            break
+            continue
         pills.append(pill)
         total += added
     return " ".join(pills)
