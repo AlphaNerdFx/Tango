@@ -366,14 +366,25 @@ def _parse_mw_response(
     example_dict2 = examples_dict[1] if len(examples_dict) > 1 else None
 
     # ── Synonyms (from 'syns' field) ──────────────────────────────────────────
+    # MW's 'syns' field is NOT a flat comma-separated list — for any word with
+    # a real "Synonym Discussion" (a standard MW Collegiate feature covering
+    # nuanced near-synonyms), it's full prose with the actual synonym words
+    # individually marked {sc}word{/sc} (small-caps) inside complete sentences
+    # with no commas at all. Splitting the whole sentence on "," (the previous
+    # approach) produced one giant blob per sentence for any such word.
+    # Extracting the {sc} tags directly, instead of the surrounding prose, is
+    # required. See issue #10.
     synonyms: list[str] = []
     try:
+        seen = {lemma.lower()}
         for syn_group in entry.get("syns", []):
             for pl_pt in syn_group.get("pt", []):
                 if isinstance(pl_pt, list) and pl_pt[0] == "text":
-                    raw = _strip_mw_markup(pl_pt[1])
-                    # MW synonym text is comma-separated inline
-                    synonyms.extend([s.strip() for s in raw.split(",") if s.strip()])
+                    for word in re.findall(r"\{sc\}(.*?)\{/sc\}", pl_pt[1]):
+                        key = word.lower()
+                        if key not in seen:
+                            seen.add(key)
+                            synonyms.append(word)
     except (KeyError, IndexError, TypeError):
         pass
 

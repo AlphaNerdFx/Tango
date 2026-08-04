@@ -252,6 +252,81 @@ class TestParseMwResponse:
         ], sample_snippets)
         assert len(result.synonyms) <= 5
 
+    # -- Synonym Discussion parsing (issue #10) ------------------------------
+    # MW's real 'syns' field for words with a Synonym Discussion is full
+    # prose, not a comma-separated list — synonym words are individually
+    # marked {sc}word{/sc} inside complete sentences. This fixture is the
+    # real MW Collegiate API response structure for "ask" (fetched directly
+    # against the live API during investigation), not a synthetic guess.
+
+    ASK_SYNS_RESPONSE = [{
+        "fl": "verb",
+        "shortdef": ["to call on for an answer"],
+        "def": [],
+        "syns": [
+            {
+                "pl": "synonyms",
+                "pt": [
+                    ["text", "{sc}ask{/sc} {sc}question{/sc} {sc}interrogate{/sc} "
+                             "{sc}query{/sc} {sc}inquire{/sc} mean to address a "
+                             "person in order to gain information. {sc}ask{/sc} "
+                             "implies no more than the putting of a question. "],
+                    ["vis", [{"t": "{it}ask{/it} for directions"}]],
+                    ["text", " {sc}question{/sc} usually suggests the asking of "
+                             "series of questions. "],
+                    ["vis", [{"t": "{it}questioned{/it} them"}]],
+                ],
+            },
+            {
+                "pl": "synonyms",
+                "pt": [
+                    ["text", "{sc}ask{/sc} {sc}request{/sc} {sc}solicit{/sc} mean "
+                             "to seek to obtain by making one's wants known. "
+                             "{sc}ask{/sc} implies no more than the statement of "
+                             "the desire. "],
+                    ["vis", [{"t": "{it}ask{/it} a favor of a friend"}]],
+                ],
+            },
+        ],
+    }]
+
+    def test_synonym_discussion_produces_individual_words(self, sample_snippets):
+        result = _parse_mw_response("ask", self.ASK_SYNS_RESPONSE, sample_snippets)
+        # Every extracted synonym must be a single word/short phrase, never
+        # an entire explanatory sentence pulled in whole because no comma
+        # happened to appear in it.
+        for syn in result.synonyms:
+            assert " mean " not in syn, f"'{syn}' looks like unparsed prose, not a word"
+            assert len(syn) < 20, f"'{syn}' is suspiciously long for a single synonym"
+
+    def test_synonym_discussion_headword_excluded(self, sample_snippets):
+        result = _parse_mw_response("ask", self.ASK_SYNS_RESPONSE, sample_snippets)
+        assert "ask" not in [s.lower() for s in result.synonyms]
+
+    def test_synonym_discussion_expected_words_present(self, sample_snippets):
+        result = _parse_mw_response("ask", self.ASK_SYNS_RESPONSE, sample_snippets)
+        lowered = [s.lower() for s in result.synonyms]
+        # First 5 non-headword {sc} words across both syn groups, in order:
+        # question, interrogate, query, inquire, request (solicit is 6th,
+        # dropped by the synonyms[:5] cap).
+        assert lowered == ["question", "interrogate", "query", "inquire", "request"]
+
+    def test_synonym_discussion_dedupes_across_groups(self, sample_snippets):
+        # "ask" (the headword) and "question" both repeat across the two
+        # syn groups / multiple text segments — must not appear twice.
+        result = _parse_mw_response("ask", self.ASK_SYNS_RESPONSE, sample_snippets)
+        lowered = [s.lower() for s in result.synonyms]
+        assert len(lowered) == len(set(lowered))
+
+    def test_empty_syns_still_returns_empty_list(self, sample_snippets):
+        # Regression guard: words with no Synonym Discussion (e.g. "ache",
+        # "too" — verified against the live API) must still return an empty
+        # list cleanly, not error, so the WordNet fallback can take over.
+        result = _parse_mw_response("ache", [
+            {"fl": "verb", "shortdef": ["to hurt"], "def": [], "syns": []}
+        ], sample_snippets)
+        assert result.synonyms == []
+
     def test_no_snippets_gives_no_transcript_example(self, mw_response):
         result = _parse_mw_response("contaminate", mw_response, None)
         assert result.example_transcript is None
