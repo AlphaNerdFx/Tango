@@ -245,7 +245,9 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
     # ── 3. NLP ────────────────────────────────────────────────────────────────
     _info("Running spaCy NLP...")
     try:
-        vocabulary = nlp_module.process_transcript(snippets["_full_text"])
+        vocabulary = nlp_module.process_transcript(
+            snippets["_full_text"], language=language_code
+        )
     except Exception as exc:
         _err(f"NLP failed: {exc}")
         sys.exit(1)

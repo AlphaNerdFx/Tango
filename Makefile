@@ -5,7 +5,7 @@
 #   make all          — full first-time setup (venv + install + spaCy model)
 #   make venv         — create virtual environment
 #   make install      — install package and all dependencies into venv
-#   make spacy-model  — download en_core_web_sm separately
+#   make spacy-model  — download the spaCy model for SPACY_LANG (default: en)
 #   make test         — run unit tests only (no network, no Anki required)
 #   make test-all     — run full suite including integration tests
 #   make format       — auto-format source and test files with black
@@ -26,7 +26,7 @@ VENV_PYTHON   := $(VENV_DIR)/bin/python
 VENV_PIP      := $(VENV_DIR)/bin/pip
 VENV_ACTIVATE := $(VENV_DIR)/bin/activate
 
-SPACY_MODEL   := en_core_web_sm
+SPACY_LANG    ?= en
 MIN_PYTHON    := 3.9
 
 # Pipeline run defaults — override from CLI:
@@ -111,10 +111,25 @@ install: venv
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Dependencies installed.\n"
 
 # -- spacy-model --------------------------------------------------------------
+# Model name is resolved from SPACY_LANG via language.get_spacy_model() --
+# not duplicated here -- so this can never drift from the mapping nlp.py
+# actually uses. Matches the PYTHONPATH=src convention run/review/backlog
+# already use below rather than depending on `install`, which would force
+# a full pip reinstall pass on every invocation.
 
 spacy-model: venv
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading spaCy model: $(SPACY_MODEL)\n"
-	@$(VENV_PYTHON) -m spacy download $(SPACY_MODEL) --quiet
+	$(eval SPACY_MODEL_NAME := $(shell PYTHONPATH=src $(VENV_PYTHON) -c \
+		"from pipeline.language import get_spacy_model, SpacyModelUnavailableError; \
+		import sys; \
+		sys.stdout.write(get_spacy_model('$(SPACY_LANG)'))" 2>/dev/null))
+	@if [ -z "$(SPACY_MODEL_NAME)" ]; then \
+		printf "$(RED)$(BOLD)[err ]$(RESET)  '$(SPACY_LANG)' isn't supported thus far.\n"; \
+		printf "  Run $(CYAN)python -m pipeline --list-languages$(RESET) to see all languages,\n"; \
+		printf "  or check language.SPACY_MODELS for spaCy-supported codes specifically.\n"; \
+		exit 1; \
+	fi
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading spaCy model: $(SPACY_MODEL_NAME)\n"
+	@$(VENV_PYTHON) -m spacy download $(SPACY_MODEL_NAME) --quiet
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading NLTK WordNet data...\n"
 	@$(VENV_PYTHON) -m nltk.downloader wordnet omw-1.4 --quiet 2>/dev/null || true
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  spaCy model and NLTK data ready.\n"

@@ -67,12 +67,6 @@ CONFIDENCE_LOW: int = int(os.getenv("CONFIDENCE_LOW", "60"))
 # on short tokens due to partial ratio inflation
 SHORT_WORD_THRESHOLD: int = int(os.getenv("SHORT_WORD_THRESHOLD", "4"))
 
-# NLP
-
-# spaCy model name — upgrade to en_core_web_md/lg if POS accuracy is insufficient
-# After changing: run 'make spacy-model' to download the new model
-SPACY_MODEL: str = os.getenv("SPACY_MODEL", "en_core_web_sm")
-
 # Definition APIs
 
 # Merriam-Webster Collegiate API — primary definition source
