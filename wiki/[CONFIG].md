@@ -12,11 +12,15 @@ All configuration is done through the `.env` file in the project root. Copy `.en
 
 `CIRCUIT_BREAKER_THRESHOLD` — Consecutive failures against one definition source before the pipeline stops calling it for the rest of the run and falls back automatically. Default is 5.
 
-## Proxy (optional)
+## Proxy (optional, most users don't need this)
 
-`WEBSHARE_USERNAME` and `WEBSHARE_PASSWORD` — Webshare proxy credentials. Only needed if YouTube blocks your IP address, which shows up as a 429 error or connection timeout during transcript extraction. Get a free account at https://webshare.io with 10 proxies and 1GB per month.
+Most requests come from your own residential IP by default, which is exactly the traffic YouTube doesn't aggressively block. Only look at this section if you're actually getting a 429 error or connection timeout during transcript extraction.
 
-`PROXY_HTTP_URL` and `PROXY_HTTPS_URL` — Generic proxy URLs, an alternative to Webshare if you already have your own.
+This project doesn't recommend a specific provider. Webshare's free tier was tested here and made things worse, not better: transcript extraction failed with repeated 429s through the proxy but succeeded without it, because free-tier datacenter IPs are blocked more aggressively than residential ones. If you need a proxy, bring your own reputable one, a paid residential/mobile proxy you already trust, or a personal VPN.
+
+`PROXY_HTTP_URL` and `PROXY_HTTPS_URL` — Your own proxy URLs.
+
+`WEBSHARE_USERNAME` and `WEBSHARE_PASSWORD` — Alternative to the above, specifically for Webshare's credential format, if that's what you're using despite the note above.
 
 ## Anki connection
 

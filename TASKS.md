@@ -355,6 +355,32 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       (decline, accept-and-write, already-set-detection) with real `.env`
       files, not just mocked tests.
 
+- [x] **Stop implying a specific proxy is recommended.** Closes #8. SESSION.md
+      6.5 already recorded that a Webshare free-tier proxy made transcript
+      extraction worse, not better (repeated 429s through the proxy,
+      succeeded without it, since free-tier datacenter IPs get blocked more
+      aggressively than residential ones), but README and the wiki's config
+      page still documented `WEBSHARE_USERNAME`/`WEBSHARE_PASSWORD` first and
+      pointed at webshare.io's signup page, only mentioning the generic
+      `PROXY_HTTP_URL`/`PROXY_HTTPS_URL` variables as an afterthought. The
+      wiki's troubleshooting page already had this right from an earlier
+      session; config and README hadn't been brought in line with it.
+
+      Reordered both so the generic proxy variables come first with the
+      actual guidance (most users never need one, since default traffic
+      already comes from a residential IP; bring your own reputable
+      paid/VPN proxy if you're genuinely rate-limited; this project doesn't
+      recommend a specific provider), and Webshare-specific variables are
+      now framed as "if that's what you're already using," not the
+      suggested starting point.
+
+      Not attempted: the issue's third, explicitly optional idea, a fallback
+      path to paste/upload a transcript file directly and skip
+      `youtube-transcript-api` entirely for anyone blocked outright. That's
+      a real feature (new CLI flag, `transcript.py` changes, tests), not a
+      documentation fix, and deserves its own decision rather than being
+      bundled into a docs-only issue.
+
 - [ ] Hyphenated compound handling in the deck fuzzy match — `semi-relevé` is
       now admitted by the NLP filter but the fuzzy matcher has not been tested
       against hyphenated fronts.

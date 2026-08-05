@@ -57,10 +57,23 @@ run the pipeline:
 | Variable | Required | Description |
 |---|---|---|
 | MW_API_KEY | No | [Merriam-Webster API key](https://dictionaryapi.com/register/index.htm) (free, 1000 requests/day). Improves English definitions; dictionaryapi.dev is used automatically without one |
-| WEBSHARE_USERNAME | No | Webshare proxy username, needed if YouTube rate-limits your IP |
-| WEBSHARE_PASSWORD | No | Webshare proxy password |
+| PROXY_HTTP_URL, PROXY_HTTPS_URL | No | Your own proxy, only needed if YouTube starts rate-limiting your IP. See Proxy notes below before using one |
+| WEBSHARE_USERNAME, WEBSHARE_PASSWORD | No | Alternative to the above if you specifically use Webshare |
 | ANKI_HOST | No | AnkiConnect URL. WSL users: set to your Windows host IP |
 | LIBRETRANSLATE_URL | No | Local LibreTranslate server URL for translation mode |
+
+### Proxy notes
+
+Most users never need a proxy. Requests come from your own residential IP by
+default, which is exactly the traffic YouTube doesn't aggressively block.
+
+Webshare's free tier was tested and made things worse, not better: transcript
+extraction failed with repeated 429 errors through the proxy but succeeded
+without it, because free-tier datacenter IPs get blocked more aggressively
+than residential ones. This project doesn't recommend a specific provider,
+free or paid. If you're actually getting rate-limited, bring your own
+reputable proxy (a paid residential/mobile proxy you already trust, or a
+personal VPN).
 
 `LANGUAGE` and `DEF_LANG` are not `.env` variables. They're `make run` command
 arguments (`make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr DEF_LANG=en`), see
