@@ -1247,6 +1247,92 @@ class TestOmwSynonymsAntonyms:
         assert def_module._ensure_omw_loaded() is True
         assert def_module._ensure_omw_loaded() is True
 
+    # -- Synonym ordering under the 5-item cap ----------------------------
+    #
+    # Matched pair (CLAUDE.md section 5). The cap discards whatever doesn't
+    # fit, so ordering decides which words survive. These two fail in
+    # opposite directions: the first fails if selection is alphabetical,
+    # the second fails if synset order isn't preserved at all. Either one
+    # alone could be satisfied accidentally.
+
+    def test_cap_keeps_most_common_sense_over_alphabetically_earlier_words(self):
+        # "aujourd'hui" pools 7+ synonyms across 3 synsets. "maintenant"
+        # comes from synset 0 (presently.r.02, the everyday sense) but
+        # sorts late alphabetically, so an alphabetical cut dropped it in
+        # favour of "de notre temps" from the same pool. Verified against a
+        # real French run before this was fixed.
+        syns, _ = def_module._wordnet_synonyms_antonyms("aujourd'hui", "fr")
+        assert "maintenant" in syns
+
+    def test_synonyms_follow_synset_order_not_alphabetical_order(self):
+        # Guards the mechanism rather than one word's output. Note that
+        # asserting "the list isn't sorted" does NOT work: nltk returns
+        # lemma names alphabetically *within* a synset, so any word whose
+        # first synset alone fills all five slots comes back sorted no
+        # matter which selection rule is in force ("aujourd'hui" is one).
+        # "savoir" spans two synsets inside the cap, which is what makes
+        # the two rules distinguishable: "science" (first sense) must
+        # outrank "connaître" (later sense) despite sorting after it.
+        from nltk.corpus import wordnet as wn
+        def_module._ensure_omw_loaded()
+        word = "savoir"
+        syns, _ = def_module._wordnet_synonyms_antonyms(word, "fr")
+
+        first_sense = {
+            name.replace("_", " ").lower()
+            for name in wn.synsets(word, lang="fra")[0].lemma_names(lang="fra")
+            if name.replace("_", " ").lower() != word
+        }
+        kept = {s.lower() for s in syns}
+        kept_later = [s for s in syns if s.lower() not in first_sense]
+        dropped_first = first_sense - kept
+
+        # Without this the test is vacuous: it must be a word where a later
+        # sense actually made it into the output, or there is nothing for a
+        # first-sense word to have been displaced by.
+        assert kept_later, "word must contribute a later sense to prove ordering"
+        assert not dropped_first, (
+            f"dropped first-sense {sorted(dropped_first)} "
+            f"while keeping later-sense {kept_later}"
+        )
+
+    def test_synonyms_deduplicate_case_insensitively(self):
+        # The same lemma reached through two synsets must not occupy two of
+        # the five slots.
+        syns, _ = def_module._wordnet_synonyms_antonyms("aller", "fr")
+        lowered = [s.lower() for s in syns]
+        assert len(lowered) == len(set(lowered))
+
+    def test_concurrent_lookups_do_not_silently_lose_synonyms(self):
+        # Regression guard for a real, silent data-loss bug. nltk's WordNet
+        # reader seeks and reads a shared file handle, so concurrent
+        # lookups corrupted each other and raised AssertionError, which
+        # _wordnet_synonyms_antonyms swallowed into an empty result. A real
+        # French run lost synonyms on a different subset of cards every
+        # time (767/764/730 across three runs of the same video).
+        #
+        # "petit" is deliberate: it has 31 synsets, the most of any word
+        # checked, and was the last one still failing after the corpus
+        # warm-up alone fixed the others.
+        import concurrent.futures as cf
+
+        words = ["aller", "petit", "faire", "savoir", "croire", "monde"] * 4
+        with cf.ThreadPoolExecutor(max_workers=5) as ex:
+            results = list(
+                ex.map(lambda w: def_module._wordnet_synonyms_antonyms(w, "fr")[0], words)
+            )
+
+        assert all(results), (
+            f"{sum(1 for r in results if not r)} of {len(results)} concurrent "
+            "lookups came back empty"
+        )
+        # Same word must give the same answer regardless of thread timing.
+        per_word: dict = {}
+        for word, syns in zip(words, results):
+            per_word.setdefault(word, set()).add(tuple(syns))
+        for word, variants in per_word.items():
+            assert len(variants) == 1, f"{word} returned varying results: {variants}"
+
     def test_omw_language_codes_exclude_languages_confirmed_uncovered(self):
         # Direct regression guard for the specific finding ADR-008 records:
         # these five have no omw-2.0 data at all. If nltk's data ever

@@ -65,30 +65,46 @@ _OMW_LANGUAGE_CODES: dict[str, str] = {
     "ca": "cat", "ja": "jpn", "zh": "cmn",
 }
 
-_omw_loaded = False
-_omw_load_lock = threading.Lock()
+_omw_loaded_langs: set[str] = set()
+
+# Guards EVERY read of nltk's WordNet corpus, not just the one-time load.
+# See _wordnet_synonyms_antonyms for why reads need it too.
+_wordnet_lock = threading.Lock()
 
 
-def _ensure_omw_loaded() -> bool:
+def _ensure_omw_loaded(omw_lang: str = "eng") -> bool:
     """
-    Load Open Multilingual Wordnet's language index once per process.
+    Load WordNet/OMW data for one language, once per process, under a lock.
 
-    Returns False (without raising) if omw-2.0 isn't installed, so callers
+    Returns False (without raising) if the data isn't installed, so callers
     degrade to no synonyms rather than crashing -- this mirrors every other
     optional-enhancement source in this module. Needs omw-2.0 specifically;
     the older omw-1.4 package installs without error but this NLTK version
     never uses it (see ADR-008).
+
+    The warm-up query inside the lock is load-bearing, not a sanity check.
+    nltk loads each language's data lazily on that language's first
+    synsets() call, and that lazy load is NOT thread-safe: with a cold
+    corpus and DEFINITION_FETCH_WORKERS threads racing into it, most calls
+    raise (AssertionError from a half-populated index, or AttributeError on
+    a None file handle). _wordnet_synonyms_antonyms catches those and
+    returns empty, so the symptom was never an error -- just silently
+    missing synonyms on a varying subset of cards each run, measured at
+    7 of 8 words lost in a cold process. Forcing the load here, while
+    holding the lock, means worker threads only ever hit an already-warm
+    index. Tracked per language because each one loads separately.
     """
-    global _omw_loaded
-    if _omw_loaded:
+    if omw_lang in _omw_loaded_langs:
         return True
-    with _omw_load_lock:
-        if _omw_loaded:
+    with _wordnet_lock:
+        if omw_lang in _omw_loaded_langs:
             return True
         try:
             from nltk.corpus import wordnet as wn
-            wn.add_omw()
-            _omw_loaded = True
+            if omw_lang != "eng":
+                wn.add_omw()
+            wn.synsets("test", lang=omw_lang)
+            _omw_loaded_langs.add(omw_lang)
         except Exception:
             return False
     return True
@@ -101,6 +117,11 @@ def _wordnet_synonyms_antonyms(word: str, language: str = "en") -> tuple:
     Returns empty lists if WordNet/OMW is unavailable, the language isn't
     covered (see _OMW_LANGUAGE_CODES), or the word isn't found.
 
+    Synonyms come back in WordNet's synset order (most common sense first),
+    capped at 5. That ordering is load-bearing, not incidental: the cap
+    discards whatever doesn't fit, so ordering by anything other than
+    relevance throws away the most useful words. See the inline comment.
+
     Antonyms are only ever attempted for English. Confirmed directly
     against OMW: antonym relations are not carried over for non-English
     lemmas (empty in every case checked, and the one non-empty result
@@ -108,26 +129,52 @@ def _wordnet_synonyms_antonyms(word: str, language: str = "en") -> tuple:
     real antonym pair in the requested language) -- not worth the risk of
     writing an English antonym into a non-English field.
     """
-    omw_lang = _OMW_LANGUAGE_CODES.get(language)
-    if language != "en" and not omw_lang:
+    omw_lang = "eng" if language == "en" else _OMW_LANGUAGE_CODES.get(language)
+    if not omw_lang:
         return [], []
-    if language != "en" and not _ensure_omw_loaded():
+    # English needs this too: the core WordNet corpus has the same unsafe
+    # lazy first-load, it just wasn't the language that surfaced it.
+    if not _ensure_omw_loaded(omw_lang):
         return [], []
 
     try:
         from nltk.corpus import wordnet as wn
-        synonyms: set = set()
+        # Collect synonyms in WordNet's own synset order, NOT alphabetically.
+        # wn.synsets() returns senses roughly most-common-first, so synset 0's
+        # lemmas are the ones a learner actually wants. Sorting the pooled
+        # results alphabetically and then cutting at 5 discarded them whenever
+        # a later, rarer sense happened to contribute earlier letters --
+        # measured at 207 of 972 cards on a real French run. Concretely,
+        # "aujourd'hui" lost "maintenant" while keeping "de notre temps", and
+        # "faire" lost "mettre"/"organiser" while keeping "caguer"/"déféquer".
+        synonyms: list[str] = []
+        seen: set[str] = set()
         antonyms: set = set()
         lang_arg = {} if language == "en" else {"lang": omw_lang}
-        for syn in wn.synsets(word, **lang_arg)[:3]:
-            for lemma in syn.lemmas(**lang_arg):
-                name = lemma.name().replace("_", " ")
-                if name.lower() != word.lower():
-                    synonyms.add(name)
-                if language == "en":
-                    for ant in lemma.antonyms():
-                        antonyms.add(ant.name().replace("_", " "))
-        return sorted(synonyms)[:5], sorted(antonyms)[:5]
+        # Serialize the whole traversal. nltk's WordNet reader seeks and
+        # reads a shared file handle, so concurrent lookups corrupt each
+        # other's reads and raise AssertionError -- measured at 12 of 80
+        # lookups lost across DEFINITION_FETCH_WORKERS threads, silently,
+        # because the except below turns each one into "no synonyms".
+        # Warming the corpus first is necessary but not sufficient; the
+        # reads themselves race too.
+        #
+        # This costs nothing. These are local, already-warm lookups, and
+        # serialized they measured ~6x FASTER than the contended version
+        # (11ms vs 68ms for 80 lookups) on top of being correct. The
+        # thread pool exists for network I/O, which this is not.
+        with _wordnet_lock:
+            for syn in wn.synsets(word, **lang_arg)[:3]:
+                for lemma in syn.lemmas(**lang_arg):
+                    name = lemma.name().replace("_", " ")
+                    key = name.lower()
+                    if key != word.lower() and key not in seen:
+                        seen.add(key)
+                        synonyms.append(name)
+                    if language == "en":
+                        for ant in lemma.antonyms():
+                            antonyms.add(ant.name().replace("_", " "))
+        return synonyms[:5], sorted(antonyms)[:5]
     except Exception:
         return [], []
 
