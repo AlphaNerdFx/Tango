@@ -66,7 +66,7 @@ Each commit should do one thing. Avoid commits that mix unrelated changes.
 
 Open a pull request against the `main` branch. The title should follow the same conventional commits format as your commit messages. In the description, explain what the change does and why. Reference any related issues.
 
-The CI pipeline must pass before a pull request can be merged. It runs the unit test suite on Python 3.9, 3.10, 3.11, and 3.12.
+The CI pipeline must pass before a pull request can be merged. It runs the unit test suite on Python 3.10, 3.11, and 3.12. Python 3.9 isn't supported: spaCy 3.8 (a required dependency) has no compatible wheel for it.
 
 ## What not to change
 

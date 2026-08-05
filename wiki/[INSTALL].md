@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Python 3.9 or later
+- Python 3.10 or later
 - Anki desktop (https://apps.ankiweb.net)
 - AnkiConnect add-on installed in Anki (code: 2055492159)
 - Git

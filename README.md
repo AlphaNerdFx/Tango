@@ -1,7 +1,7 @@
 # Tango
 
 [![CI](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml/badge.svg)](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Version](https://img.shields.io/badge/version-v0.4.0--beta-orange)](https://github.com/youssefea/tango/releases/tag/v0.4.0)
 
@@ -33,7 +33,7 @@ Between extraction and card creation, Tango:
 
 ## Quick start
 
-Prerequisites: Python 3.9+, [Anki](https://apps.ankiweb.net/) desktop, [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on.
+Prerequisites: Python 3.10+, [Anki](https://apps.ankiweb.net/) desktop, [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on.
 
 ```bash
 git clone https://github.com/AlphaNerdFx/Tango.git
@@ -175,7 +175,7 @@ tango/
 
 ## Requirements
 
-- Python 3.9+
+- Python 3.10+
 - Anki desktop with AnkiConnect add-on (code: 2055492159)
 - Merriam-Webster API key (free tier)
 - spaCy model: python -m spacy download en_core_web_sm

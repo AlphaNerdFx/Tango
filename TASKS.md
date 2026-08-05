@@ -299,15 +299,22 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
 - [x] **CI Python version matrix.** Closes #7. `.github/workflows/ci.yml` ran a
       single job on Python 3.10 only, while CONTRIBUTING.md claimed a 3.9-3.12
       matrix that had never actually existed in this repo's history. Added
-      `strategy.matrix.python-version: ["3.9", "3.10", "3.11", "3.12"]` with
-      `fail-fast: false` so one failing version doesn't hide results from the
-      others. `pip install -e ".[dev]"` uses pyproject.toml's relaxed version
-      ranges, not requirements.txt's exact pins, so a matrix expansion doesn't
-      require touching dependency versions. Verified 3.10, 3.11, and 3.12
-      locally with the exact install-and-test steps CI runs (529 passed, 22
-      deselected, identically, on all three). 3.9 isn't installable in this
-      sandbox without root, so it's unverified locally; will be confirmed by
-      the real CI run once this is pushed.
+      `strategy.matrix.python-version` with `fail-fast: false` so one failing
+      version doesn't hide results from the others.
+
+      Initially matrixed `["3.9", "3.10", "3.11", "3.12"]`. Verified 3.10,
+      3.11, and 3.12 locally first (529 passed, 22 deselected, identically,
+      on all three) since 3.9 wasn't installable in this sandbox without
+      root, then pushed and let the real CI confirm 3.9. It failed for a
+      real reason, not a fluke: spaCy 3.8's `thinc` dependency has published
+      no wheel for Python 3.9 since `thinc>=8.3.10` (all of them declare
+      `Requires-Python >=3.10`), so `spacy>=3.8,<4.0` cannot install on 3.9
+      at all. `pyproject.toml`'s `requires-python = ">=3.9"` and the
+      README's "Python 3.9+" were never actually true once spaCy moved past
+      that point; this had simply never been tested before. Dropped 3.9:
+      `requires-python` is now `>=3.10`, matrix is `["3.10", "3.11",
+      "3.12"]`, README/CONTRIBUTING/wiki corrected to match. Confirmed via
+      the real CI run: all three remaining versions pass.
 
 - [ ] Hyphenated compound handling in the deck fuzzy match — `semi-relevé` is
       now admitted by the NLP filter but the fuzzy matcher has not been tested
