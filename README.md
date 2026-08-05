@@ -162,7 +162,7 @@ tango/
 - [x] Multilingual definitions: native language examples and synonyms
 - [x] Translation mode: English definitions of non-English words
 - [x] Fuzzy matching improvements for morphologically rich languages
-- [ ] Single-letter and proper noun filtering
+- [x] Single-letter and proper noun filtering
 - [ ] Additional synonym and antonym APIs
 - [x] Concurrent definition fetching via a bounded thread pool
 - [ ] Full CLI tool with Typer, proper flags, and error handling

@@ -113,19 +113,20 @@ DECK_ID                   genanki deck ID, 2059400110 — NEVER CHANGE
 CONFIDENCE_HIGH           fuzzy score above which a word is SKIP, default 90
 CONFIDENCE_LOW            fuzzy score below which a word is NEW, default 60
 SHORT_WORD_THRESHOLD      words shorter than this use exact match only, default 4
-SPACY_MODEL               spaCy model name, default "en_core_web_sm"
 MW_API_KEY                Merriam-Webster API key, from environment
 MW_API_BASE               MW Collegiate API base URL
 DICT_API_BASE             "https://api.dictionaryapi.dev/api/v2/entries"
 API_TIMEOUT               seconds before definition API timeout, default 8
 DEFINITION_FETCH_WORKERS  max concurrent definition lookups, default 5
+CIRCUIT_BREAKER_THRESHOLD consecutive failures before a source is skipped, default 5
 WEBSHARE_USERNAME         proxy credentials, optional
 WEBSHARE_PASSWORD         proxy credentials, optional
 PROXY_HTTP_URL            generic proxy alternative, optional
 PROXY_HTTPS_URL           generic proxy alternative, optional
 ```
 
-`SPACY_MODEL` is a known architectural gap — see section 9.1.
+Per-language spaCy model selection is not a config constant. It lives in
+`language.py`'s `SPACY_MODELS` mapping, described in section 3.2.
 
 ### 3.2 language.py
 
@@ -152,6 +153,16 @@ exact dictionary key lookup internally, so requesting `fr` will not match a
 transcript labelled `fr-FR`. This function iterates all available transcripts,
 finds those whose code starts with the requested base code, and among them
 prefers manually created transcripts over auto-generated ones.
+
+`SPACY_MODELS` maps 24 BCP-47 codes to their spaCy model name, e.g. `fr` to
+`fr_core_news_sm`. `get_spacy_model(language_code)` resolves a code against
+it: exact match first, then `_SPACY_CODE_ALIASES` for known BCP-47/spaCy
+naming mismatches (Norwegian's macrolanguage code `no` needs the Bokmål
+model `nb`), then the base code for regional variants like `zh-CN`. No match
+raises `SpacyModelUnavailableError` naming the languages that are supported.
+Closes #3; before this, every video regardless of language was tokenized
+with the English model, silently corrupting non-English lemmatization. See
+section 3.4 for how `nlp.py` caches the loaded models this returns.
 
 ### 3.3 transcript.py
 
@@ -183,16 +194,20 @@ entry as a snippet.
 
 Extracts vocabulary from transcript text using spaCy.
 
-The spaCy model is loaded lazily on first call to `process_transcript()`, not
-at module import. This matters because loading takes about a second and
-importing at module level would slow every test that imports `nlp.py`, even
-tests that never process text.
+Models are loaded lazily, not at module import, and cached in `_nlp_models`,
+a dict keyed by resolved model name rather than by language code. Loading
+takes about a second, so importing at module level would slow every test
+that imports `nlp.py`, even tests that never process text. Keying the cache
+by model name rather than code means language codes that share a model,
+such as `zh-CN` and `zh-TW` both resolving to the same Chinese pipeline,
+only load it once.
 
-`process_transcript(text)` passes the full text to the model, iterates the
-resulting tokens, calls `_is_valid_token()` on each, and builds a dictionary
-keyed by `token.lemma_.lower()` with frequency counts as values. Python
-dictionary insertion order is guaranteed since 3.7, which is how
-first-appearance ordering is preserved.
+`process_transcript(text, language="en")` resolves the model via
+`language.get_spacy_model(language)`, passes the full text through it,
+iterates the resulting tokens, calls `_is_valid_token()` on each, and builds
+a dictionary keyed by `token.lemma_.lower()` with frequency counts as
+values. Python dictionary insertion order is guaranteed since 3.7, which is
+how first-appearance ordering is preserved.
 
 `_is_valid_token(token)` is the filter. Current logic after this session's
 fixes:
@@ -720,7 +735,7 @@ Examples, synonyms, and antonyms from the native transcript language.
 Definition and class from the target output language. Rationale in ADR-005.
 
 The premise that dictionaryapi.dev provides usable non-English coverage turned
-out to be false. See section 9.2.
+out to be false. See section 9.1.
 
 ### 8.6 Deduplication at two layers
 
@@ -775,37 +790,66 @@ A live comparison against 15 uncached English words went from 34.6 seconds
 at `max_workers=1` to 5.3 seconds at the default of 5, a 6.5x speedup, with
 the same 15 of 15 words found in both runs.
 
+### 8.9 Language-aware spaCy model selection
+
+Until v0.4.3, `config.SPACY_MODEL` was a single static value, default
+`en_core_web_sm`, and `nlp.py` loaded it regardless of the resolved
+transcript language. Every French, Spanish, German, and other non-English
+video ever processed by this pipeline had been tokenized, lemmatized,
+POS-tagged, and NER-tagged with an English statistical model.
+
+Evidence in production output: `toujours` lemmatized to `toujour`, `allons`
+to `allon`, `venons` to `venon`, `reprenons` to `reprenon`. All are the
+English plural-stripping rule applied to French verb conjugations. Earlier
+in development these were misattributed to YouTube auto-caption quality.
+Wrong lemmas meant wrong dictionary lookups, so some fraction of "no
+definition found" results were lookups for words that did not exist. The
+proper-noun filter was also unvalidated for non-English, since `token.pos_`
+and `token.ent_type_` came from an English model reading foreign text.
+
+Fixed in three commits: `SPACY_MODELS` added to `language.py` with
+`get_spacy_model()` resolving codes to model names, `nlp.py`'s single
+`_nlp_model` global replaced with the `_nlp_models` per-model-name cache
+described in section 3.4, and `__main__.py` wired to pass the resolved
+language through to `process_transcript()`. Closes #3.
+
+### 8.10 Circuit breaker for failing definition sources
+
+Failed API lookups used to cost nearly as much as successful ones. A run
+with 108 failing lookups exceeded 280 seconds, roughly 2.6 seconds per
+failure, paying a full network timeout every time even though the source
+had already shown it was down.
+
+After `CIRCUIT_BREAKER_THRESHOLD` (default 5) consecutive failures against
+one source, `definition.py` stops calling it for the rest of the run and
+goes straight to the fallback. Only server errors, timeouts, and connection
+failures count as a failure. A 404 does not, since it means the source is
+reachable and simply lacks that word, which is a healthy outcome, not a
+failure, and would otherwise trip the breaker on any source with genuinely
+sparse coverage for a language after only a few words. See issue #1's
+404-versus-502 investigation for the evidence behind that distinction.
+Closes #4.
+
+### 8.11 WSL path translation for Anki auto-import
+
+`_prompt_import` builds the `.apkg` path with `Path.resolve()`, which under
+WSL produces a Linux-style path like `/mnt/c/Users/.../output/file.apkg`.
+AnkiConnect on the Windows side of a WSL setup cannot resolve that path,
+since it runs as a native Windows process with no knowledge of the WSL
+mount namespace.
+
+`_is_wsl()` checks `/proc/version` for the string "microsoft".
+`_translate_wsl_path()` converts `/mnt/<drive>/rest/of/path` to
+`<DRIVE>:\rest\of\path` when that check passes, and leaves the path
+untouched on native Linux or macOS. Verified live: an actual AnkiConnect
+import through this translation succeeded where the untranslated path
+failed. Closes #5.
+
 ---
 
 ## 9. Known architectural gaps
 
-### 9.1 spaCy model is not language-aware
-
-`config.SPACY_MODEL` is a single static value, default `en_core_web_sm`.
-`nlp.py` loads it regardless of the resolved transcript language.
-
-Every French, Spanish, German, and other non-English video ever processed by
-this pipeline was tokenized, lemmatized, POS-tagged, and NER-tagged with an
-English statistical model.
-
-Evidence in production output: `toujours` lemmatized to `toujour`, `allons` to
-`allon`, `venons` to `venon`, `reprenons` to `reprenon`. All are the English
-plural-stripping rule applied to French verb conjugations. Earlier in
-development these were misattributed to YouTube auto-caption quality.
-
-Consequences: wrong lemmas mean wrong dictionary lookups, so some fraction of
-"no definition found" results were lookups for words that do not exist. The
-proper-noun filter is also unvalidated for non-English because `token.pos_`
-and `token.ent_type_` come from an English model reading foreign text.
-
-A full patch exists in `TASKS.md` including a `SPACY_MODELS` mapping in
-`language.py`, a per-language model cache in `nlp.py`, and a
-`make spacy-model SPACY_LANG=fr` target. Not yet applied.
-
-Workaround in use: `SPACY_MODEL=fr_core_news_sm make run ...` as an
-environment override per run.
-
-### 9.2 dictionaryapi.dev has no meaningful non-English coverage
+### 9.1 dictionaryapi.dev has no meaningful non-English coverage
 
 Documented in GitHub issue #1 with curl evidence. The dual-source architecture
 in ADR-005 is correct as designed but produces empty example, synonym, and
@@ -818,29 +862,14 @@ Fixing this requires per-language dictionary sources. Candidates considered:
 Wiktionary raw API, PONS (12 languages, 1000 requests per month, bilingual
 pairs only). Needs its own ADR.
 
-### 9.3 No circuit breaker
-
-Failed API lookups cost nearly as much as successful ones. A run with 108
-failing lookups exceeded 280 seconds — roughly 2.6 seconds per failure, paying
-full network timeout each time.
-
-After N consecutive failures against one source the pipeline should stop
-calling it for the remainder of the run. The pattern is named after Netflix's
-Hystrix. Not implemented.
-
-### 9.4 WSL auto-import path translation
-
-`_prompt_import` sends a Linux path to Windows AnkiConnect. A translation
-function mapping `/mnt/c/` to `C:\` would fix it for WSL without breaking
-native Linux or macOS. Not implemented.
-
 ---
 
 ## 10. Test architecture
 
-418 unit tests across nine test files. All run without network, Anki, or
-installed models. Integration tests use `@pytest.mark.integration` and are
-excluded by the default `addopts` in `pyproject.toml`.
+480 unit tests across nine test files, 19 more marked integration and
+deselected by default. All run without network, Anki, or installed models.
+Integration tests use `@pytest.mark.integration` and are excluded by the
+default `addopts` in `pyproject.toml`.
 
 Mocking strategy: `unittest.mock.patch` and `MagicMock` with pytest as the
 runner. `unittest.mock` is used because there is no pytest-native equivalent —

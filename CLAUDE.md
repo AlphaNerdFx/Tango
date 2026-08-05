@@ -242,7 +242,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 418+ passing, 19 deselected.
+Expected: 480+ passing, 19 deselected.
 
 ### Quality
 

@@ -123,16 +123,16 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       isolation, which the connection-leak theory couldn't explain since each
       test already gets an isolated tmp_path DB). Fixed in 332b8fd.
 
-- [ ] **Circuit breaker for failing API sources.**
+- [x] **Circuit breaker for failing API sources.** Closes #4, shipped in v0.4.4.
       A run with 108 failing lookups exceeded 280 seconds — roughly 2.6 seconds
       per failure. After N consecutive failures against one source, stop
       calling it for the remainder of the run and go straight to the fallback.
       Note that concurrent fetching does not substitute for this — five
       threads hitting a dead source at once still waste five timeouts.
 
-- [ ] **WSL path translation for Anki auto-import.**
+- [x] **WSL path translation for Anki auto-import.** Closes #5, shipped in v0.4.4.
       `_prompt_import` sends `/mnt/c/...` to Windows AnkiConnect, which cannot
-      resolve it. Add a translation mapping `/mnt/<drive>/` to `<DRIVE>:\` when
+      resolve it. Added a translation mapping `/mnt/<drive>/` to `<DRIVE>:\` when
       running under WSL, detected via `/proc/version` containing "microsoft".
 
 ---
