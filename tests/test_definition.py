@@ -10,6 +10,7 @@ Run all (needs keys):   pytest tests/test_definition.py
 
 import json
 import sqlite3
+import threading
 import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -635,26 +636,26 @@ class TestFetchDefinitions:
     @patch("pipeline.definition.fetch_definition")
     def test_returns_batch_result(self, mock_fetch, sample_definition_result):
         mock_fetch.return_value = sample_definition_result
-        result = fetch_definitions(["contaminate"], delay=0)
+        result = fetch_definitions(["contaminate"])
         assert isinstance(result, DefinitionBatchResult)
 
     @patch("pipeline.definition.fetch_definition")
     def test_found_list_populated(self, mock_fetch, sample_definition_result):
         mock_fetch.return_value = sample_definition_result
-        result = fetch_definitions(["contaminate"], delay=0)
+        result = fetch_definitions(["contaminate"])
         assert len(result.found) == 1
         assert result.found[0].lemma == "contaminate"
 
     @patch("pipeline.definition.fetch_definition")
     def test_not_found_list_populated(self, mock_fetch):
         mock_fetch.return_value = None
-        result = fetch_definitions(["xyzqwerty"], delay=0)
+        result = fetch_definitions(["xyzqwerty"])
         assert "xyzqwerty" in result.not_found
 
     @patch("pipeline.definition.fetch_definition")
     def test_processes_all_lemmas(self, mock_fetch, sample_definition_result):
         mock_fetch.return_value = sample_definition_result
-        result = fetch_definitions(["contaminate", "water", "develop"], delay=0)
+        result = fetch_definitions(["contaminate", "water", "develop"])
         assert mock_fetch.call_count == 3
 
     def test_cache_hit_skips_fetch_definition_call(
@@ -668,35 +669,79 @@ class TestFetchDefinitions:
         # cache miss and a real (mocked) fetch_definition call.
         _cache_set_key(f"{sample_definition_result.lemma}::en", sample_definition_result)
         with patch("pipeline.definition.fetch_definition") as mock_fetch:
-            result = fetch_definitions(["contaminate"], delay=0)
+            result = fetch_definitions(["contaminate"])
             mock_fetch.assert_not_called()
         assert "contaminate" in result.from_cache
 
-    @patch("pipeline.definition.fetch_definition")
-    @patch("pipeline.definition.time.sleep")
-    def test_delay_applied_between_live_calls(self, mock_sleep, mock_fetch, sample_definition_result):
-        mock_fetch.return_value = sample_definition_result
-        fetch_definitions(["water", "develop", "permanent"], delay=0.5)
-        # Delay applied between calls — first call has no delay, rest do
-        assert mock_sleep.call_count == 2
-        mock_sleep.assert_called_with(0.5)
+    def test_all_cache_hits_never_start_thread_pool(self, sample_definition_result):
+        # If every lemma is cached, fetch_definitions() should never even
+        # construct a ThreadPoolExecutor — there is nothing for it to do.
+        _cache_set_key(f"{sample_definition_result.lemma}::en", sample_definition_result)
+        with patch("pipeline.definition.ThreadPoolExecutor") as mock_pool:
+            fetch_definitions(["contaminate"])
+            mock_pool.assert_not_called()
 
     @patch("pipeline.definition.fetch_definition")
-    @patch("pipeline.definition.time.sleep")
-    def test_no_delay_for_cache_hits(self, mock_sleep, mock_fetch, sample_definition_result):
-        # Same composite-key requirement as test_cache_hit_skips_fetch_definition_call
-        # above — see that test's comment. Also assert the cache actually hit
-        # (mock_fetch not called), since a single-item lemma list never
-        # triggers mock_sleep regardless of cache state, so mock_sleep alone
-        # cannot prove this test's own name.
-        _cache_set_key(f"{sample_definition_result.lemma}::en", sample_definition_result)
-        fetch_definitions(["contaminate"], delay=0.5)
-        mock_sleep.assert_not_called()
-        mock_fetch.assert_not_called()
+    def test_concurrent_fetch_respects_max_workers(self, mock_fetch):
+        # Each fake fetch blocks until released, letting us count how many
+        # are in flight at once. If the pool ignored max_workers, all 6
+        # lemmas would run at once instead of in batches of 2.
+        in_flight = 0
+        peak = 0
+        lock = threading.Lock()
+        release = threading.Event()
+
+        def fake_fetch(lemma, *args, **kwargs):
+            nonlocal in_flight, peak
+            with lock:
+                in_flight += 1
+                peak = max(peak, in_flight)
+            release.wait(timeout=1)
+            with lock:
+                in_flight -= 1
+            return DefinitionResult(lemma=lemma, definition="d", example_dict=None,
+                                     example_dict2=None, example_transcript=None,
+                                     synonyms=[], antonyms=[],
+                                     part_of_speech="n", source="dictionaryapi")
+
+        mock_fetch.side_effect = fake_fetch
+        lemmas = [f"word{i}" for i in range(6)]
+
+        def run():
+            fetch_definitions(lemmas, max_workers=2)
+
+        t = threading.Thread(target=run)
+        t.start()
+        # Give the pool time to saturate its workers before releasing them.
+        import time as _time
+        _time.sleep(0.2)
+        release.set()
+        t.join(timeout=5)
+
+        assert peak <= 2
+
+    @patch("pipeline.definition.fetch_definition")
+    def test_results_returned_in_first_appearance_order(self, mock_fetch):
+        # Threads can finish in any order. The batch's order must still
+        # match the input list, not completion order, since downstream
+        # card generation assumes first-appearance ordering.
+        def fake_fetch(lemma, *args, **kwargs):
+            import time as _time
+            # Make the first lemma finish last, to prove ordering isn't
+            # just an accident of submission order.
+            _time.sleep(0.05 if lemma == "alpha" else 0.0)
+            return DefinitionResult(lemma=lemma, definition="d", example_dict=None,
+                                     example_dict2=None, example_transcript=None,
+                                     synonyms=[], antonyms=[],
+                                     part_of_speech="n", source="dictionaryapi")
+
+        mock_fetch.side_effect = fake_fetch
+        result = fetch_definitions(["alpha", "beta", "gamma"], max_workers=3)
+        assert [r.lemma for r in result.found] == ["alpha", "beta", "gamma"]
 
     @patch("pipeline.definition.fetch_definition")
     def test_empty_lemma_list_returns_empty_batch(self, mock_fetch):
-        result = fetch_definitions([], delay=0)
+        result = fetch_definitions([])
         mock_fetch.assert_not_called()
         assert result.found == []
         assert result.not_found == []
@@ -718,7 +763,7 @@ class TestIntegration:
         assert result is None
 
     def test_batch_real_words(self, sample_snippets):
-        result = fetch_definitions(["water", "develop"], sample_snippets, delay=1.0)
+        result = fetch_definitions(["water", "develop"], sample_snippets)
         assert len(result.found) > 0
 
 # Append these to tests/test_definition.py

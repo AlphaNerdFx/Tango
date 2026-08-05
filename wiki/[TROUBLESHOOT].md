@@ -44,6 +44,8 @@ This happens if you run the pipeline on the same video twice without `pipeline.d
 
 ## Processing is very slow
 
-Each word requires at least one API call with a 0.5 second delay between calls. A 100-word vocabulary extraction takes 2-12 minutes depending on cache state. Words already in the SQLite cache are instant. Second runs of similar videos are significantly faster.
+Each word requires at least one API call to a definition source. Since v0.4.5, up to 5 of these run concurrently through a bounded thread pool instead of one at a time, so a 100-word vocabulary extraction should be well under the old 2-12 minute range depending on cache state and how the dictionary APIs are responding that day. Words already in the SQLite cache are instant. Second runs of similar videos are significantly faster.
+
+If you want more or fewer concurrent lookups, set `DEFINITION_FETCH_WORKERS` in your `.env` file. Lower it if a dictionary API starts returning errors under load, raise it if your network can take more.
 
 Translation mode adds additional latency per word for the translation step.

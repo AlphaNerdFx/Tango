@@ -8,9 +8,9 @@ Complete system documentation. Read alongside `CLAUDE.md`.
 
 Tango is a single-machine Python pipeline. It runs as a command-line tool,
 processes one YouTube video per invocation, and writes one `.apkg` file per run.
-All state is stored in a local SQLite database. There is no server component, no
-async I/O, and no concurrency. API calls are sequential with a configurable
-delay between them.
+All state is stored in a local SQLite database. There is no server component and
+no async I/O. Definition lookups are the one place with concurrency, a bounded
+thread pool, described in the design patterns section below.
 
 ---
 
@@ -102,27 +102,27 @@ one place to look to find what a setting is.
 Constants defined here:
 
 ```
-DB_PATH               SQLite database path, default "pipeline.db"
-OUTPUT_DIR            .apkg output directory, default "output"
-REVIEW_FILE           deferred queue file, default "review.json"
-ANKI_HOST             AnkiConnect URL, default "http://localhost:8765"
-ANKI_VERSION          AnkiConnect API version, fixed at 6
-ANKI_TIMEOUT          seconds before AnkiConnect timeout, default 5
-MODEL_ID              genanki model ID, 1607392319 — NEVER CHANGE
-DECK_ID               genanki deck ID, 2059400110 — NEVER CHANGE
-CONFIDENCE_HIGH       fuzzy score above which a word is SKIP, default 90
-CONFIDENCE_LOW        fuzzy score below which a word is NEW, default 60
-SHORT_WORD_THRESHOLD  words shorter than this use exact match only, default 4
-SPACY_MODEL           spaCy model name, default "en_core_web_sm"
-MW_API_KEY            Merriam-Webster API key, from environment
-MW_API_BASE           MW Collegiate API base URL
-DICT_API_BASE         "https://api.dictionaryapi.dev/api/v2/entries"
-API_TIMEOUT           seconds before definition API timeout, default 8
-API_DELAY             seconds between live API calls, default 0.5
-WEBSHARE_USERNAME     proxy credentials, optional
-WEBSHARE_PASSWORD     proxy credentials, optional
-PROXY_HTTP_URL        generic proxy alternative, optional
-PROXY_HTTPS_URL       generic proxy alternative, optional
+DB_PATH                   SQLite database path, default "pipeline.db"
+OUTPUT_DIR                .apkg output directory, default "output"
+REVIEW_FILE               deferred queue file, default "review.json"
+ANKI_HOST                 AnkiConnect URL, default "http://localhost:8765"
+ANKI_VERSION              AnkiConnect API version, fixed at 6
+ANKI_TIMEOUT              seconds before AnkiConnect timeout, default 5
+MODEL_ID                  genanki model ID, 1607392319 — NEVER CHANGE
+DECK_ID                   genanki deck ID, 2059400110 — NEVER CHANGE
+CONFIDENCE_HIGH           fuzzy score above which a word is SKIP, default 90
+CONFIDENCE_LOW            fuzzy score below which a word is NEW, default 60
+SHORT_WORD_THRESHOLD      words shorter than this use exact match only, default 4
+SPACY_MODEL               spaCy model name, default "en_core_web_sm"
+MW_API_KEY                Merriam-Webster API key, from environment
+MW_API_BASE               MW Collegiate API base URL
+DICT_API_BASE             "https://api.dictionaryapi.dev/api/v2/entries"
+API_TIMEOUT               seconds before definition API timeout, default 8
+DEFINITION_FETCH_WORKERS  max concurrent definition lookups, default 5
+WEBSHARE_USERNAME         proxy credentials, optional
+WEBSHARE_PASSWORD         proxy credentials, optional
+PROXY_HTTP_URL            generic proxy alternative, optional
+PROXY_HTTPS_URL           generic proxy alternative, optional
 ```
 
 `SPACY_MODEL` is a known architectural gap — see section 9.1.
@@ -308,10 +308,13 @@ main entry point. Sequence:
 8. Cap every text field at 256 characters at a sentence boundary.
 9. Build and cache a `DefinitionResult`.
 
-`fetch_definitions(lemmas, snippets, delay, language, def_language)` batches the
-above. It deduplicates the lemma list case-insensitively while preserving order
-before making any API call, then applies `delay` between live calls. Cache hits
-skip the delay.
+`fetch_definitions(lemmas, snippets, max_workers, language, def_language)`
+batches the above. It deduplicates the lemma list case-insensitively while
+preserving order, resolves cache hits sequentially, then fetches the
+remaining lemmas concurrently through a `ThreadPoolExecutor` bounded by
+`max_workers`. Results are reassembled in original first-appearance order
+regardless of which thread finishes first. See section 8.8 for why a thread
+pool was used instead of `asyncio`.
 
 `_parse_mw_response` navigates Merriam-Webster's nested structure. The
 definition is in the flat `shortdef` list. Examples are buried in
@@ -733,6 +736,45 @@ the batch loop used the bare lemma while `fetch_definition` used the composite
 key caused every cache lookup to miss, which manifested as repeated cards for
 the same word.
 
+### 8.8 Bounded thread pool for definition fetching, not asyncio
+
+`fetch_definitions` used to call `fetch_definition` one lemma at a time, with
+a fixed delay between calls. Two ways to make this concurrent were on the
+table: rewrite the definition and translation code on `asyncio` and `aiohttp`,
+or keep the existing synchronous `requests` calls and dispatch them across a
+bounded thread pool.
+
+The pool was chosen. Every downstream piece this touches, MW response
+parsing, dictionaryapi response parsing, the circuit breaker, the WordNet
+lookup, and the translation module's interactive terminal prompt, is
+synchronous code written and tested as synchronous code. An `asyncio` rewrite
+would need an async HTTP client and either an async rewrite of all of that
+code or `run_in_executor` calls wrapping the synchronous version anyway, which
+is most of the work of a thread pool with none of its benefit. A
+`ThreadPoolExecutor` gets the same overlapping I/O with a much smaller change
+to the existing call graph.
+
+`DEFINITION_FETCH_WORKERS` (default 5) bounds how many lookups run at once,
+which keeps a burst of new vocabulary from opening dozens of simultaneous
+connections to a single dictionary API. Cache hits are still resolved
+sequentially before the pool starts, since a local SQLite read has nothing to
+gain from a worker thread. Results are collected into a dict keyed by lemma
+and reassembled into the batch in original first-appearance order afterward,
+since completion order across threads is not the same as input order and the
+rest of the pipeline assumes deterministic, first-appearance ordering.
+
+Real OS threads, unlike `asyncio` tasks on a single event loop, can genuinely
+run at the same instant on different cores, so anything they share needs an
+actual lock rather than relying on cooperative scheduling. Two places needed
+one: the circuit breaker's failure counters in `definition.py`, which do a
+read-modify-write on a shared dict, and the translation module's Tier 3
+interactive prompt, which reads and writes a shared per-pair choice cache and
+calls `input()`. Both are now wrapped in a `threading.Lock`.
+
+A live comparison against 15 uncached English words went from 34.6 seconds
+at `max_workers=1` to 5.3 seconds at the default of 5, a 6.5x speedup, with
+the same 15 of 15 words found in both runs.
+
 ---
 
 ## 9. Known architectural gaps
@@ -786,16 +828,7 @@ After N consecutive failures against one source the pipeline should stop
 calling it for the remainder of the run. The pattern is named after Netflix's
 Hystrix. Not implemented.
 
-### 9.4 Sequential API calls
-
-`API_DELAY` of 0.5 seconds between calls plus network latency means a 100-word
-video takes 2 to 12 minutes. `asyncio` with `aiohttp` would reduce this by
-roughly 80 percent. Targeted for v1.0.0.
-
-Note that async parallelises waiting rather than eliminating it, so it does not
-substitute for the circuit breaker.
-
-### 9.5 WSL auto-import path translation
+### 9.4 WSL auto-import path translation
 
 `_prompt_import` sends a Linux path to Windows AnkiConnect. A translation
 function mapping `/mnt/c/` to `C:\` would fix it for WSL without breaking

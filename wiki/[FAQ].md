@@ -6,7 +6,7 @@ Anki's spaced repetition algorithm is the most studied and widely used in langua
 
 ## Why does it take so long to process a video?
 
-Each vocabulary word requires at least one API call to a definition source. These calls are made sequentially with a 0.5 second delay between them to avoid rate limits. A 100-word video with a cold cache takes 2-12 minutes. Words already in the SQLite cache are instant, so repeated runs on similar content are faster. Async API calls are planned for v1.0.0 which should reduce processing time by 80 percent.
+Each vocabulary word requires at least one API call to a definition source. As of v0.4.5, up to 5 of these calls run at once through a bounded thread pool, so a 100-word video with a cold cache is much faster than the old one-at-a-time approach. Words already in the SQLite cache are instant, so repeated runs on similar content are faster still. The concurrency limit is configurable via the `DEFINITION_FETCH_WORKERS` environment variable if you want to trade speed for a gentler load on the dictionary APIs.
 
 ## Why are antonyms often missing?
 

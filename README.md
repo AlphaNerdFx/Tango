@@ -164,7 +164,7 @@ tango/
 - [x] Fuzzy matching improvements for morphologically rich languages
 - [ ] Single-letter and proper noun filtering
 - [ ] Additional synonym and antonym APIs
-- [ ] Async definition fetching for faster processing
+- [x] Concurrent definition fetching via a bounded thread pool
 - [ ] Full CLI tool with Typer, proper flags, and error handling
 - [ ] Dockerfile for cloud deployment
 - [ ] User vocabulary profiles from Anki review history

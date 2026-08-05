@@ -28,6 +28,7 @@ import logging
 import os
 import sys
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
@@ -332,41 +333,50 @@ def translate_word(
     if not interactive:
         return None
 
-    # If user already made a choice for this pair this run, honour it silently
-    if pair in _user_choice:
-        stored = _user_choice[pair]
-        if stored == "continue":
+    # definition.py now fetches words concurrently across several threads
+    # (see fetch_definitions()), and more than one of them can need
+    # translation for the same language pair at the same time. Everything
+    # from here down, including the interactive input() call and the
+    # check-then-set on _user_choice, is serialized under one lock so only
+    # one thread ever prompts for a given run, and every other thread that
+    # arrives here simply picks up the decision the first one made instead
+    # of racing on _user_choice or overlapping prompts on the same terminal.
+    with _prompt_lock:
+        # If user already made a choice for this pair this run, honour it silently
+        if pair in _user_choice:
+            stored = _user_choice[pair]
+            if stored == "continue":
+                return None
+            elif stored == "exit":
+                raise TranslationUnavailableError(
+                    f"Translation unavailable for {pair}. Exiting."
+                )
+            # "download" — model should now be installed, try again
+            try:
+                return translate_local(word, from_code, to_code)
+            except ModelNotInstalledError:
+                return None
+
+        _warn_translation_unavailable(pair)
+        choice = _prompt_translation_options(from_code, to_code)
+        _user_choice[pair] = choice
+
+        if choice == "download":
+            success = download_model(from_code, to_code)
+            if success:
+                result = translate_local(word, from_code, to_code)
+                return result
+            print(f"  Download failed. Continuing without translation for this run.")
+            _user_choice[pair] = "continue"
             return None
-        elif stored == "exit":
+
+        elif choice == "continue":
+            return None
+
+        else:  # exit
             raise TranslationUnavailableError(
                 f"Translation unavailable for {pair}. Exiting."
             )
-        # "download" — model should now be installed, try again
-        try:
-            return translate_local(word, from_code, to_code)
-        except ModelNotInstalledError:
-            return None
-
-    _warn_translation_unavailable(pair)
-    choice = _prompt_translation_options(from_code, to_code)
-    _user_choice[pair] = choice
-
-    if choice == "download":
-        success = download_model(from_code, to_code)
-        if success:
-            result = translate_local(word, from_code, to_code)
-            return result
-        print(f"  Download failed. Continuing without translation for this run.")
-        _user_choice[pair] = "continue"
-        return None
-
-    elif choice == "continue":
-        return None
-
-    else:  # exit
-        raise TranslationUnavailableError(
-            f"Translation unavailable for {pair}. Exiting."
-        )
 
 
 # ── Internal prompt helpers ───────────────────────────────────────────────────
@@ -375,6 +385,10 @@ def translate_word(
 _warned_this_run:    set[str]   = set()
 _warned_slow:        set[str]   = set()
 _user_choice:        dict[str, str] = {}  # pair -> "download" | "continue" | "exit"
+
+# Serializes the Tier 3 interactive prompt in translate_word() -- see the
+# comment at that call site for why this exists.
+_prompt_lock = threading.Lock()
 
 
 def _warn_local_translation_slow(pair: str) -> None:

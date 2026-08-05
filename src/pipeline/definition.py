@@ -25,9 +25,13 @@ Dependencies:
     sqlite3 (stdlib)
 
 Environment variables:
-    MW_API_KEY     — Merriam-Webster Collegiate API key (required for MW)
-    API_DELAY      — Seconds to wait between calls (default 0.5)
-    DB_PATH        — Path to SQLite database (default pipeline.db)
+    MW_API_KEY                 — Merriam-Webster Collegiate API key (required for MW)
+    DEFINITION_FETCH_WORKERS   — Max concurrent lookups in flight (default 5)
+    DB_PATH                    — Path to SQLite database (default pipeline.db)
+
+fetch_definitions() fetches live (non-cached) words concurrently via a
+thread pool rather than one at a time. See ARCHITECTURE.md's design
+patterns section for why a thread pool was chosen over asyncio/aiohttp.
 """
 
 from __future__ import annotations
@@ -36,7 +40,8 @@ import logging
 import os
 import re
 import sqlite3
-import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
@@ -71,7 +76,7 @@ def _wordnet_synonyms_antonyms(word: str) -> tuple:
 
 from pipeline.config import (
     MW_API_KEY, MW_API_BASE, DICT_API_BASE,
-    API_TIMEOUT, API_DELAY, DB_PATH, CIRCUIT_BREAKER_THRESHOLD,
+    API_TIMEOUT, DB_PATH, CIRCUIT_BREAKER_THRESHOLD, DEFINITION_FETCH_WORKERS,
 )
 
 
@@ -491,6 +496,15 @@ def _parse_dictapi_response(
 _circuit_failures: dict[str, int] = {}
 _circuit_tripped: set[str] = set()
 
+# fetch_definitions() now runs live lookups concurrently across several
+# threads (see DEFINITION_FETCH_WORKERS), and multiple threads can update
+# the same source's failure count at once. A plain read-modify-write like
+# `_circuit_failures[source] = _circuit_failures.get(source, 0) + 1` is not
+# atomic across two bytecodes, so two threads could both read the same
+# count before either writes back, undercounting a real failure streak.
+# This lock makes each read-modify-write on the breaker state atomic.
+_circuit_lock = threading.Lock()
+
 
 def reset_circuit_breaker() -> None:
     """
@@ -500,28 +514,32 @@ def reset_circuit_breaker() -> None:
     would otherwise leak across multiple calls within the same process (e.g.
     tests, scratch scripts, or --review/--process-backlog re-invocations).
     """
-    _circuit_failures.clear()
-    _circuit_tripped.clear()
+    with _circuit_lock:
+        _circuit_failures.clear()
+        _circuit_tripped.clear()
 
 
 def _circuit_is_tripped(source: str) -> bool:
-    return source in _circuit_tripped
+    with _circuit_lock:
+        return source in _circuit_tripped
 
 
 def _circuit_record_failure(source: str) -> None:
-    count = _circuit_failures.get(source, 0) + 1
-    _circuit_failures[source] = count
-    if count >= CIRCUIT_BREAKER_THRESHOLD and source not in _circuit_tripped:
-        _circuit_tripped.add(source)
-        logger.warning(
-            "Circuit breaker tripped for '%s' after %d consecutive failures — "
-            "skipping it for the rest of this run.",
-            source, count,
-        )
+    with _circuit_lock:
+        count = _circuit_failures.get(source, 0) + 1
+        _circuit_failures[source] = count
+        if count >= CIRCUIT_BREAKER_THRESHOLD and source not in _circuit_tripped:
+            _circuit_tripped.add(source)
+            logger.warning(
+                "Circuit breaker tripped for '%s' after %d consecutive failures — "
+                "skipping it for the rest of this run.",
+                source, count,
+            )
 
 
 def _circuit_record_success(source: str) -> None:
-    _circuit_failures[source] = 0
+    with _circuit_lock:
+        _circuit_failures[source] = 0
 
 
 # ── API callers ───────────────────────────────────────────────────────────────
@@ -771,26 +789,33 @@ def fetch_definition(
 def fetch_definitions(
     lemmas: list[str],
     snippets: Optional[dict] = None,
-    delay: float = API_DELAY,
+    max_workers: int = DEFINITION_FETCH_WORKERS,
     language: str = "en",
     def_language: Optional[str] = None,
 ) -> DefinitionBatchResult:
     """
-    Fetch definitions for a list of lemmas in first-appearance order.
+    Fetch definitions for a list of lemmas, returned in first-appearance
+    order regardless of which lookup happens to complete first.
 
-    Processes each lemma sequentially with a configurable delay between
-    live API calls to stay within rate limits. Cache hits incur no delay.
+    Cache hits are resolved first, sequentially (a local SQLite read is
+    fast enough that there is nothing to gain from a thread pool there).
+    The remaining lemmas, the ones that actually need a live API call, are
+    then fetched concurrently through a thread pool bounded by max_workers,
+    which is what keeps this from overwhelming a source with a burst of
+    simultaneous requests -- see ARCHITECTURE.md's design patterns section
+    for why a thread pool was chosen over asyncio/aiohttp for this.
 
     This function is designed to be called with the full NEW word list
     from deck.check_vocabulary(). Words in the SKIP or QUEUE lists
     should not be passed here.
 
     Args:
-        lemmas:   Ordered list of lemmas (new words only).
-        snippets: Output of transcript.get_snippets(). Pass for transcript
-                  example sentences. Pass None to skip.
-        delay:    Seconds to wait between live API calls. Default from
-                  API_DELAY env var (0.5s). Set 0 in tests.
+        lemmas:      Ordered list of lemmas (new words only).
+        snippets:    Output of transcript.get_snippets(). Pass for transcript
+                     example sentences. Pass None to skip.
+        max_workers: Maximum concurrent live lookups. Default from
+                     DEFINITION_FETCH_WORKERS env var (5). Set 1 in tests
+                     that need strictly sequential, deterministic ordering.
 
     Returns:
         DefinitionBatchResult with found, not_found, and from_cache lists.
@@ -814,30 +839,44 @@ def fetch_definitions(
         )
     lemmas = unique_lemmas
 
-    for i, lemma in enumerate(lemmas, start=1):
-        logger.debug("Processing %d/%d: '%s'", i, len(lemmas), lemma)
-
-        # Check cache before sleeping -- use composite key matching fetch_definition
+    # Cache hits first, sequentially -- resolves most of the batch on a
+    # cache-warm second run without ever touching the thread pool.
+    to_fetch: list[str] = []
+    for lemma in lemmas:
         cached = _cache_get(f"{lemma}::{def_language or language}")
         if cached:
             result = _cache_row_to_result(lemma, cached, snippets)
             batch.found.append(result)
             batch.from_cache.append(lemma)
-            continue
-
-        # Live API call — apply delay between requests
-        if i > 1:
-            time.sleep(delay)
-
-        result = fetch_definition(
-                lemma, snippets, use_cache=False,
-                language=language, def_language=def_language,
-            )
-
-        if result:
-            batch.found.append(result)
         else:
-            batch.not_found.append(lemma)
+            to_fetch.append(lemma)
+
+    # Concurrent live fetch for whatever's left, preserving first-appearance
+    # order in the output even though threads complete out of order.
+    if to_fetch:
+        results: dict[str, Optional[DefinitionResult]] = {}
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_lemma = {
+                executor.submit(
+                    fetch_definition, lemma, snippets,
+                    False, language, def_language,
+                ): lemma
+                for lemma in to_fetch
+            }
+            for future in as_completed(future_to_lemma):
+                lemma = future_to_lemma[future]
+                try:
+                    results[lemma] = future.result()
+                except Exception:
+                    logger.exception("Unexpected error fetching '%s'.", lemma)
+                    results[lemma] = None
+
+        for lemma in to_fetch:
+            result = results[lemma]
+            if result:
+                batch.found.append(result)
+            else:
+                batch.not_found.append(lemma)
 
     logger.info(
         "Batch complete: %d found (%d cached) / %d not found",

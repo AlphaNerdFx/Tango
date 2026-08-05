@@ -80,9 +80,12 @@ DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
 # Seconds to wait for a definition API response before timing out
 API_TIMEOUT: float = float(os.getenv("API_TIMEOUT", "8"))
 
-# Seconds to wait between live API calls — keeps requests under rate limits
-# Cache hits do not trigger this delay
-API_DELAY: float = float(os.getenv("API_DELAY", "0.5"))
+# Maximum number of definition lookups in flight at once. Replaces the old
+# fixed API_DELAY sleep-between-calls approach — rate limiting is now done
+# by bounding concurrency rather than pacing a sequential loop. See
+# ARCHITECTURE.md's design-patterns section for why a thread pool was used
+# instead of asyncio/aiohttp.
+DEFINITION_FETCH_WORKERS: int = int(os.getenv("DEFINITION_FETCH_WORKERS", "5"))
 
 # Consecutive server-error/timeout failures against one definition source
 # before the circuit breaker stops calling it for the rest of the run.

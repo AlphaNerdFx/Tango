@@ -127,7 +127,8 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       A run with 108 failing lookups exceeded 280 seconds — roughly 2.6 seconds
       per failure. After N consecutive failures against one source, stop
       calling it for the remainder of the run and go straight to the fallback.
-      Note that async I/O does not substitute for this.
+      Note that concurrent fetching does not substitute for this — five
+      threads hitting a dead source at once still waste five timeouts.
 
 - [ ] **WSL path translation for Anki auto-import.**
       `_prompt_import` sends `/mnt/c/...` to Windows AnkiConnect, which cannot
@@ -138,11 +139,27 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
 
 ## Medium
 
-- [ ] **Async definition fetching.**
-      Replace sequential `requests` calls with `asyncio` plus `aiohttp`.
-      Expected to reduce a 100-word video from 2-12 minutes to under 3 minutes.
-      Must preserve the per-source rate limiting and the SQLite cache
-      behaviour.
+- [x] **Concurrent definition fetching.**
+      Implemented with a `ThreadPoolExecutor` rather than `asyncio` plus
+      `aiohttp`. The definition APIs are called through the synchronous
+      `requests` library, and every call site downstream of them (MW parsing,
+      dictionaryapi parsing, the circuit breaker, WordNet lookups, and the
+      translation module's interactive prompt) is also synchronous. Moving to
+      `asyncio` would mean either rewriting all of that on an async HTTP
+      client or wrapping the existing synchronous code in `run_in_executor`
+      calls anyway, which is most of the work of a thread pool with none of
+      the benefit. A bounded thread pool gets the same concurrent I/O with a
+      much smaller diff: a lemma still results in one `fetch_definition`
+      call, just dispatched to a worker thread instead of run inline.
+      `DEFINITION_FETCH_WORKERS` (default 5) caps how many run at once, cache
+      hits are still resolved sequentially first since a local SQLite read
+      has nothing to gain from a thread, and the circuit breaker's shared
+      state and the translation module's interactive prompt were both
+      audited and locked for real thread safety, not just async-safety. A
+      live timing run against 15 uncached English words went from 34.6s at
+      `max_workers=1` to 5.3s at the default of 5, a 6.5x speedup, with no
+      change in which words were found. See ARCHITECTURE.md's design
+      patterns section for the full writeup.
 
 - [ ] **`--force` flag to reprocess a video.**
       Currently `check_video_not_processed` warns and exits with no override.
