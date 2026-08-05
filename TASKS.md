@@ -135,6 +135,38 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       Live-verified: the same video went from 0 to 552 unique lemmas after
       the fix, including 67 confirmed-real single-character words.
 
+- [x] **ADR-008: per-language dictionary sources, evidence-based candidate
+      evaluation.** Followed up on issue #1's 9/9 non-English 0%-coverage
+      finding above by evaluating real alternatives instead of continuing to
+      reason from dictionaryapi.dev alone: PONS (rejected, bilingual pairs
+      and a 1000-req/month cap), Open Multilingual Wordnet (real synonyms
+      for 18 languages, but `.definition()`/`.examples()` stay in English
+      regardless of the `lang=` parameter, and antonyms are effectively
+      empty for non-English), and Wiktionary's raw wikitext API (real
+      native-language definitions confirmed for French/German/Russian, but
+      needs a per-language-edition parser). Full evidence and candidate
+      writeups in `docs/ADR-008-per-language-dictionary-sources.md`.
+
+      **Option A shipped: OMW synonym/antonym supplementation.** Extended
+      `_wordnet_synonyms_antonyms()` to call OMW's `lang=` parameter for the
+      18 covered languages, gated by a new `_OMW_LANGUAGE_CODES` map.
+      Same class of bug as the earlier Wiktionary-example fix on issue #1:
+      the first implementation only reached the found-definition code path,
+      which almost never executes for a language dictionaryapi.dev can't
+      find anything for. Fixed by threading the same OMW lookup into the
+      not-found fallback path. Live-verified against the French video from
+      issue #1: fallback cards with real synonyms went from 0 to 767 of 972.
+
+      **Option B prototyped, not shipped.** Real native-language
+      definitions are retrievable (French 10/15, German 8/14, Russian
+      10/14 on real vocabulary, not single spot-checked words), but three
+      problems surfaced that need real design work first: Wikimedia's
+      anonymous rate limit triggers a 429 after ~8-10 requests regardless
+      of per-request delay; some entries return leftover template syntax as
+      a "successful" extraction rather than failing cleanly; and nested
+      templates break single-pass regex stripping. Filed as issue #16
+      rather than folded into this pass.
+
 - [x] **Language-aware spaCy model selection.** Closes #3, shipped in v0.4.3
       across three commits (b5b0247, cf2dd90, d794211). Verified live: `--language
       fr` alone now selects `fr_core_news_sm` automatically, no manual

@@ -693,10 +693,11 @@ is why it is an optional dependency group rather than a base dependency.
 ### 6.6 WordNet via NLTK
 
 Local corpus, no network at runtime. Downloaded once via
-`python -m nltk.downloader wordnet omw-1.4`.
+`python -m nltk.downloader wordnet omw-2.0` (not `omw-1.4` -- see 8.18).
 
-English only. Used exclusively to supplement empty synonym and antonym lists
-when the transcript language is English.
+Used to supplement empty synonym lists for English plus 18 other languages
+via Open Multilingual Wordnet (see 8.18). Antonyms remain English-only;
+OMW does not carry reliable antonym relations for non-English synsets.
 
 ---
 
@@ -1095,6 +1096,41 @@ Live-verified: the same video went from 0 to 552 unique lemmas after the
 fix, including 67 manually-confirmed real single-character words. Closes
 #15.
 
+### 8.18 Open Multilingual Wordnet synonyms for non-English languages
+
+ADR-008 evaluated real alternatives to dictionaryapi.dev for non-English
+definitions/synonyms/antonyms (see 9.1). OMW's `lang=` parameter gives
+real, genuine native-language synonym words for 18 languages beyond
+English -- confirmed directly, not from vendor claims -- via
+`_OMW_LANGUAGE_CODES` in `definition.py`. It does not give real
+native-language definitions: `.definition()`/`.examples()` on every
+matched synset stay in English regardless of `lang=`, since OMW only
+translates the lemma-to-synset mapping layer, not the synset's own text.
+Antonyms are likewise not extended past English -- `lemma.antonyms()`
+returns empty for non-English lemmas in every case tested.
+
+Requires the `omw-2.0` NLTK package, not `omw-1.4`: this NLTK version's
+`wn._omw_reader` looks for `omw-2.0` specifically, so `omw-1.4` downloads
+successfully but its data is silently never used. Both discovered while
+building this and CLAUDE.md's setup instructions have been corrected
+accordingly.
+
+Same class of bug as 8.13's Wiktionary example fix, found the same way:
+the first implementation only called the OMW lookup from inside
+`fetch_definition()`'s found-definition branch, near the very end of the
+function. Since dictionaryapi.dev has ~0% definition coverage for most
+non-English languages (9.1), that branch almost never executes, so a real
+pipeline run showed zero synonyms even though the unit tests, which call
+the function directly, all passed. Fixed the same way as 8.13: threaded
+the same OMW lookup into `_fetch_definition_or_fallback_example()`, and
+added `DefinitionBatchResult.not_found_synonyms`/`not_found_antonyms`
+mappings alongside the existing `not_found_examples` one, consumed by
+`build_package()`/`_build_fallback_note()` the same way.
+
+Live-verified against the French video from 9.1: fallback cards with real
+French synonyms went from 0 to 767 of 972 (e.g. "Aujourd'hui" ->
+actuellement, bientôt, de nos jours, de notre temps, désormais).
+
 ---
 
 ## 9. Known architectural gaps
@@ -1113,21 +1149,30 @@ dual-source architecture in ADR-005 is correct as designed; the premise
 that dictionaryapi.dev has usable non-English data does not hold for any
 language tested so far, not just French.
 
-Section 8.13 closes the example-sentence half of this via Wiktionary;
-definitions, part of speech, synonyms, and antonyms are unaffected by that
-fix and remain this gap's open remainder. A verification run against a
-French video produced 209 words with 0 definitions found either before or
-after the Wiktionary fix (`fetch_definition` still requires a real
-definition to return a "found" result), but fallback cards improved from
-0 to 111 (of 200) carrying a real dictionary example instead of an empty
-field, and dropped words (nothing to show at all) fell from 30 to 9.
+Section 8.13 closes the example-sentence half of this via Wiktionary, and
+8.18 closes the synonym half for 18 languages via OMW. Definitions, part
+of speech, and antonyms remain unaffected by either fix and are this
+gap's open remainder for every non-English language. A verification run
+against a French video produced 1047 words with 0 definitions found
+either before or after those fixes (`fetch_definition` still requires a
+real definition to return a "found" result), but fallback cards now carry
+a real dictionary example or real synonyms far more often than an empty
+field.
 
-Fixing definitions, synonyms, and antonyms requires per-language dictionary
-sources (Larousse for French, DWDS for German, RAE for Spanish, or similar).
-Needs its own ADR given the per-language maintenance burden. Given the
-confirmed scope, this is no longer a French-specific nice-to-have: it is
-the only path to non-English definitions working at all, for every
-supported language.
+ADR-008 (`docs/ADR-008-per-language-dictionary-sources.md`) evaluated real
+alternatives for the remaining gap. Wiktionary's raw wikitext API
+(`action=parse&prop=wikitext`, distinct from the REST endpoint 8.13 uses)
+is the only one confirmed to return real native-language definitions --
+tested against real vocabulary, not single spot-checked words: French
+10/15, German 8/14, Russian 10/14. Not shipped: a production version needs
+a rate-limit backoff strategy (Wikimedia 429s after roughly 8-10
+unauthenticated requests, independent of per-request delay), garbage-output
+detection (some entries return leftover template syntax, e.g. Russian
+`{{семантика|`, as if it were a successful extraction), and a recursive
+template stripper (nested templates like `{{пример|...{{выдел|...}}...}}`
+break single-pass regex removal). Tracked as issue #16, not folded into
+8.18's pass given how much heavier this turned out to be than the ADR's
+original single-word spot checks suggested.
 
 ---
 
