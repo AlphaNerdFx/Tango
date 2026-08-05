@@ -27,7 +27,7 @@ VENV_PIP      := $(VENV_DIR)/bin/pip
 VENV_ACTIVATE := $(VENV_DIR)/bin/activate
 
 SPACY_LANG    ?= en
-MIN_PYTHON    := 3.9
+MIN_PYTHON    := 3.10
 
 # Pipeline run defaults — override from CLI:
 #   make run VIDEO_ID=LV_NoD2M54w DECK="Language::English"
@@ -98,7 +98,7 @@ venv: check-os
 	fi
 	@$(VENV_PYTHON) -c \
 		"import sys; v=sys.version_info; \
-		exit(0) if (v.major,v.minor)>=(3,9) \
+		exit(0) if (v.major,v.minor)>=(3,10) \
 		else print('Python $(MIN_PYTHON)+ required, found '+str(v.major)+'.'+str(v.minor)) or exit(1)"
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Python version check passed.\n"
 
