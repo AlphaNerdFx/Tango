@@ -213,7 +213,7 @@ pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 python -m spacy download fr_core_news_md     # French is pinned to "md", see issue #13
 python -m spacy download es_core_news_sm     # or any other code in language.SPACY_MODELS
-python -m nltk.downloader wordnet omw-1.4
+python -m nltk.downloader wordnet omw-2.0     # not omw-1.4 -- this NLTK version silently ignores it
 ```
 
 ### Run

@@ -139,7 +139,7 @@ spacy-model: venv
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading spaCy model: $(SPACY_MODEL_NAME)\n"
 	@$(VENV_PYTHON) -m spacy download $(SPACY_MODEL_NAME) --quiet
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading NLTK WordNet data...\n"
-	@$(VENV_PYTHON) -m nltk.downloader wordnet omw-1.4 --quiet 2>/dev/null || true
+	@$(VENV_PYTHON) -m nltk.downloader wordnet omw-2.0 --quiet 2>/dev/null || true
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  spaCy model and NLTK data ready.\n"
 
 # -- translate-setup ---------------------------------------------------------
