@@ -1159,12 +1159,18 @@ per 80 lookups), and the thread pool exists for network I/O, which this
 is not. Synonym coverage is now 89% (107/120) and stable run to run,
 against a varying ~78% before.
 
-**Sense mixing, and why English is treated differently.** Each synset is
-a distinct sense, so consulting three of them merged unrelated meanings
-onto a single card and even crossed parts of speech: "prêt" returned
-"emprunt" (a loan, noun) beside "rapide" (quick, adjective). Non-English
-now reads only the top synset. The cost is real and was measured across
-933 French cards before choosing:
+**Sense mixing, and why English is treated differently.** A *synset* is
+WordNet's unit of meaning: one sense of a word, together with every word
+sharing that sense. A word with several meanings belongs to several
+synsets, so the number consulted decides how many distinct meanings get
+pooled onto one card. "prêt" has three: ready (adjective), loan (noun),
+quick (adjective).
+
+Consulting all three merged unrelated meanings and crossed parts of
+speech, putting "emprunt" (a loan, noun) beside "rapide" (quick,
+adjective) on the same adjective's card. Non-English now reads the top
+two. The cost is real and was measured across 933 French cards before
+choosing:
 
 | synsets consulted | cards with any synonym | avg synonyms per card |
 |---|---|---|
@@ -1172,10 +1178,20 @@ now reads only the top synset. The cost is real and was measured across
 | 2 | 701/933 (75%) | 3.31 |
 | 3 | 733/933 (79%) | 3.69 |
 
-Narrowing to one is a deliberate trade of quantity for coherence, not a
-free win: "prêt" now returns nothing rather than something misleading.
-Widening the slice is a one-line change if coverage matters more than
-precision for a given language.
+Two is the shipped setting and is explicitly provisional. It bounds the
+problem without solving it: "prêt" still returns "emprunt", a noun on an
+adjective's card, because that is its second sense. What two does buy is
+excluding third-sense noise ("second" -> "2d"/"2e") while holding 75%
+coverage, four points off the widest setting. One sense is genuinely
+coherent but drops 138 more cards to no synonyms at all, and its top
+sense is not reliably the useful one -- "petit" reduces to "guère"
+("hardly"), an adverb sense, because WordNet orders senses by English
+frequency rather than by usefulness in the target language.
+
+Expected to be revisited once a real per-language dictionary source
+lands (issue #16). The limit is one line in `_wordnet_synonyms_antonyms`,
+and a test pins it from both sides so changing it fails loudly rather
+than silently altering card content.
 
 English keeps three. The sense mixing was diagnosed on OMW's non-English
 data; English reads Princeton WordNet directly and was never the
