@@ -164,13 +164,22 @@ def _wordnet_synonyms_antonyms(word: str, language: str = "en") -> tuple:
         # (11ms vs 68ms for 80 lookups) on top of being correct. The
         # thread pool exists for network I/O, which this is not.
         #
-        # Non-English takes only the FIRST synset. Each synset is a
-        # distinct sense, so pooling several merged unrelated meanings onto
-        # one card and even crossed parts of speech -- "prêt" returned
-        # "emprunt" (a loan, noun) beside "rapide" (quick, adjective).
-        # Restricting to the top sense costs real coverage on a French run
-        # (79% -> 64% of cards get any synonym at all): a deliberate trade
-        # of quantity for coherence.
+        # A synset is one sense of a word: the set of words sharing that
+        # exact meaning. A word with several meanings appears in several
+        # synsets, so the slice below decides how many distinct meanings
+        # get pooled onto a single card.
+        #
+        # Non-English takes the top TWO senses. This is a provisional
+        # middle setting, not a settled answer -- it is the compromise
+        # between coherence and coverage, both measured on a real French
+        # run: 3 senses gave 79% of cards a synonym but merged unrelated
+        # meanings and crossed parts of speech ("prêt" returning "emprunt",
+        # a loan/noun, beside "rapide", quick/adjective); 1 sense was
+        # coherent but dropped coverage to 64%; 2 holds 75% while
+        # excluding the third-sense noise. It does not fully solve sense
+        # mixing -- a word's second sense can still differ from its first
+        # -- and is expected to be revisited once a real per-language
+        # dictionary source lands (issue #16). See ARCHITECTURE.md 8.18.
         #
         # English deliberately keeps the wider slice. The sense-mixing was
         # diagnosed on OMW's non-English data; English reads Princeton
@@ -178,8 +187,8 @@ def _wordnet_synonyms_antonyms(word: str, language: str = "en") -> tuple:
         # measured a straight regression -- 14/15 -> 9/15 words with any
         # synonym at all, with "happy", "large", "quick", "house" and
         # "think" all going empty because their top synset contains only
-        # the word itself. See ARCHITECTURE.md 8.18.
-        synset_limit = 3 if language == "en" else 1
+        # the word itself.
+        synset_limit = 3 if language == "en" else 2
         with _wordnet_lock:
             for syn in wn.synsets(word, **lang_arg)[:synset_limit]:
                 for lemma in syn.lemmas(**lang_arg):

@@ -1300,14 +1300,21 @@ class TestOmwSynonymsAntonyms:
             f"while keeping later-sense {kept_later}"
         )
 
-    def test_non_english_uses_only_the_top_sense(self):
-        # Pairs with the ordering test above. "prêt" is the case that drove
-        # this: its second and third synsets are a noun ("emprunt", a loan)
-        # and an adjective ("rapide", quick), two unrelated meanings that
-        # used to land on one card together.
+    def test_non_english_is_capped_at_exactly_two_senses(self):
+        # Pins the provisional non-English setting from both sides, so
+        # neither widening nor narrowing it passes unnoticed (see
+        # synset_limit in definition.py). "prêt" has three senses: ready
+        # (adjective), loan (noun, -> "emprunt"), quick (adjective, ->
+        # "rapide").
+        #
+        # Worth stating plainly: two senses does NOT fully resolve sense
+        # mixing. "emprunt" is a noun landing on an adjective's card, and
+        # it is admitted here deliberately as the price of coverage. This
+        # setting is temporary pending a real per-language dictionary
+        # source (issue #16).
         syns, _ = def_module._wordnet_synonyms_antonyms("prêt", "fr")
-        assert "emprunt" not in syns
-        assert "rapide" not in syns
+        assert "emprunt" in syns, "second sense missing -- narrowed below two?"
+        assert "rapide" not in syns, "third sense present -- widened past two?"
 
     def test_english_still_uses_multiple_senses(self):
         # Guards the other half: narrowing English too was measured as a
