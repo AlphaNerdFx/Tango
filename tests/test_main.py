@@ -182,6 +182,88 @@ class TestPromptImport:
             with patch("requests.post", side_effect=requests.exceptions.ConnectionError):
                 _prompt_import(tmp_apkg)
 
+    def test_wsl_path_actually_gets_translated_before_sending(self, tmp_path):
+        # End-to-end wiring check, not just _translate_wsl_path() in
+        # isolation: _prompt_import() must actually call it and send the
+        # translated path to AnkiConnect, under a real /mnt/<drive> path
+        # this time (unlike tmp_apkg, which lives under /tmp and never
+        # exercised the translation at all).
+        apkg_path = Path("/mnt/c/fake/output/video_20260101_000000.apkg")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"result": True, "error": None}
+        with patch("pipeline.__main__._is_wsl", return_value=True), \
+             patch("pipeline.__main__.Path.resolve", return_value=apkg_path), \
+             patch("builtins.input", return_value="y"), \
+             patch("requests.post", return_value=mock_response) as mock_post:
+            _prompt_import(apkg_path)
+            path_sent = mock_post.call_args[1]["json"]["params"]["path"]
+        assert path_sent == "C:\\fake\\output\\video_20260101_000000.apkg"
+
+
+# ── WSL path translation (issue #5) ──────────────────────────────────────────
+
+from pipeline.__main__ import _is_wsl, _translate_wsl_path
+
+
+class TestIsWsl:
+
+    def test_true_when_proc_version_mentions_microsoft(self):
+        with patch("builtins.open", MagicMock(
+            return_value=MagicMock(
+                __enter__=lambda self: MagicMock(
+                    read=lambda: "Linux version 5.15.0 (Microsoft@...)"
+                ),
+                __exit__=lambda *a: None,
+            )
+        )):
+            assert _is_wsl() is True
+
+    def test_false_on_native_linux(self):
+        with patch("builtins.open", MagicMock(
+            return_value=MagicMock(
+                __enter__=lambda self: MagicMock(
+                    read=lambda: "Linux version 6.1.0-generic (gcc...)"
+                ),
+                __exit__=lambda *a: None,
+            )
+        )):
+            assert _is_wsl() is False
+
+    def test_false_when_proc_version_missing(self):
+        # e.g. macOS or Windows native, no /proc filesystem at all
+        with patch("builtins.open", side_effect=FileNotFoundError):
+            assert _is_wsl() is False
+
+
+class TestTranslateWslPath:
+
+    def test_translates_mnt_path_under_wsl(self):
+        with patch("pipeline.__main__._is_wsl", return_value=True):
+            result = _translate_wsl_path("/mnt/c/Users/name/output/file.apkg")
+            assert result == "C:\\Users\\name\\output\\file.apkg"
+
+    def test_uppercases_drive_letter(self):
+        with patch("pipeline.__main__._is_wsl", return_value=True):
+            result = _translate_wsl_path("/mnt/d/videos/clip.apkg")
+            assert result.startswith("D:\\")
+
+    def test_noop_when_not_wsl(self):
+        with patch("pipeline.__main__._is_wsl", return_value=False):
+            path = "/mnt/c/Users/name/file.apkg"
+            assert _translate_wsl_path(path) == path
+
+    def test_noop_for_non_mnt_path_even_under_wsl(self):
+        # e.g. pytest's tmp_path, which lives under /tmp, not /mnt/<drive>
+        with patch("pipeline.__main__._is_wsl", return_value=True):
+            path = "/tmp/pytest-abc/output/file.apkg"
+            assert _translate_wsl_path(path) == path
+
+    def test_noop_for_home_path_under_wsl(self):
+        with patch("pipeline.__main__._is_wsl", return_value=True):
+            path = "/home/user/output/file.apkg"
+            assert _translate_wsl_path(path) == path
+
+
 class TestPrintSummary:
 
     def test_prints_without_error(self, tmp_apkg, capsys):

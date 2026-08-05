@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -86,12 +87,52 @@ def _setup_logging(verbose: bool) -> None:
 
 # ── AnkiConnect import ────────────────────────────────────────────────────────
 
+def _is_wsl() -> bool:
+    """
+    Detect whether this process is running inside WSL (Windows Subsystem
+    for Linux). Under WSL, paths under /mnt/<drive>/ need translation to
+    Windows drive-letter paths before Windows-side AnkiConnect can resolve
+    them — see _translate_wsl_path().
+    """
+    try:
+        with open("/proc/version") as f:
+            return "microsoft" in f.read().lower()
+    except FileNotFoundError:
+        return False
+
+
+def _translate_wsl_path(path: str) -> str:
+    """
+    Translate a WSL mount path (e.g. /mnt/c/Users/name/file.apkg) to its
+    Windows equivalent (C:\\Users\\name\\file.apkg).
+
+    No-op when not running under WSL, or when the path doesn't match the
+    /mnt/<drive>/ pattern (already a native path, or a WSL-internal path
+    with no Windows equivalent, e.g. under /home).
+
+    Anki running natively on Windows under WSL2 is a common setup (see
+    the WSL Setup wiki page), and AnkiConnect's importPackage action
+    resolves the path on the Windows side — a Linux path is meaningless
+    to it.
+    """
+    if not _is_wsl():
+        return path
+    match = re.match(r"^/mnt/([a-zA-Z])/(.*)$", path)
+    if not match:
+        return path
+    drive, rest = match.group(1), match.group(2)
+    return f"{drive.upper()}:\\{rest.replace('/', chr(92))}"
+
+
 def _prompt_import(apkg_path: Path) -> None:
     """
     Ask the user if they want to auto-import the .apkg into Anki.
 
     Requires Anki to be running with AnkiConnect.
-    Uses the absolute path — AnkiConnect requires this.
+    Uses the absolute path — AnkiConnect requires this. Under WSL, the
+    path is translated to its Windows equivalent first (see
+    _translate_wsl_path()) since Windows-side AnkiConnect can't resolve
+    a Linux /mnt/... path.
 
     Constraint: only works when Anki is running on the same machine
     as the pipeline. If running on a remote server, this will fail
@@ -109,7 +150,7 @@ def _prompt_import(apkg_path: Path) -> None:
 
     try:
         import requests as req
-        absolute_path = str(apkg_path.resolve())
+        absolute_path = _translate_wsl_path(str(apkg_path.resolve()))
         response = req.post(
             deck_module.ANKI_HOST,
             json={
