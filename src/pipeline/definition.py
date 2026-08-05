@@ -163,8 +163,25 @@ def _wordnet_synonyms_antonyms(word: str, language: str = "en") -> tuple:
         # serialized they measured ~6x FASTER than the contended version
         # (11ms vs 68ms for 80 lookups) on top of being correct. The
         # thread pool exists for network I/O, which this is not.
+        #
+        # Non-English takes only the FIRST synset. Each synset is a
+        # distinct sense, so pooling several merged unrelated meanings onto
+        # one card and even crossed parts of speech -- "prêt" returned
+        # "emprunt" (a loan, noun) beside "rapide" (quick, adjective).
+        # Restricting to the top sense costs real coverage on a French run
+        # (79% -> 64% of cards get any synonym at all): a deliberate trade
+        # of quantity for coherence.
+        #
+        # English deliberately keeps the wider slice. The sense-mixing was
+        # diagnosed on OMW's non-English data; English reads Princeton
+        # WordNet directly and was never the complaint. Narrowing it too
+        # measured a straight regression -- 14/15 -> 9/15 words with any
+        # synonym at all, with "happy", "large", "quick", "house" and
+        # "think" all going empty because their top synset contains only
+        # the word itself. See ARCHITECTURE.md 8.18.
+        synset_limit = 3 if language == "en" else 1
         with _wordnet_lock:
-            for syn in wn.synsets(word, **lang_arg)[:3]:
+            for syn in wn.synsets(word, **lang_arg)[:synset_limit]:
                 for lemma in syn.lemmas(**lang_arg):
                     name = lemma.name().replace("_", " ")
                     key = name.lower()

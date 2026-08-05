@@ -1269,19 +1269,23 @@ class TestOmwSynonymsAntonyms:
         # asserting "the list isn't sorted" does NOT work: nltk returns
         # lemma names alphabetically *within* a synset, so any word whose
         # first synset alone fills all five slots comes back sorted no
-        # matter which selection rule is in force ("aujourd'hui" is one).
-        # "savoir" spans two synsets inside the cap, which is what makes
-        # the two rules distinguishable: "science" (first sense) must
-        # outrank "connaître" (later sense) despite sorting after it.
+        # matter which selection rule is in force.
+        #
+        # English on purpose. Cross-sense ordering can only be observed
+        # where more than one synset is consulted, and non-English is
+        # deliberately capped at a single synset (see the synset_limit
+        # comment in definition.py). "build" spans senses inside the cap:
+        # "physique" and "habitus" (first sense) must outrank the later
+        # senses despite sorting after "anatomy"/"bod"/"chassis".
         from nltk.corpus import wordnet as wn
-        def_module._ensure_omw_loaded()
-        word = "savoir"
-        syns, _ = def_module._wordnet_synonyms_antonyms(word, "fr")
+        def_module._ensure_omw_loaded("eng")
+        word = "build"
+        syns, _ = def_module._wordnet_synonyms_antonyms(word, "en")
 
         first_sense = {
-            name.replace("_", " ").lower()
-            for name in wn.synsets(word, lang="fra")[0].lemma_names(lang="fra")
-            if name.replace("_", " ").lower() != word
+            lemma.name().replace("_", " ").lower()
+            for lemma in wn.synsets(word)[0].lemmas()
+            if lemma.name().lower() != word
         }
         kept = {s.lower() for s in syns}
         kept_later = [s for s in syns if s.lower() not in first_sense]
@@ -1295,6 +1299,24 @@ class TestOmwSynonymsAntonyms:
             f"dropped first-sense {sorted(dropped_first)} "
             f"while keeping later-sense {kept_later}"
         )
+
+    def test_non_english_uses_only_the_top_sense(self):
+        # Pairs with the ordering test above. "prêt" is the case that drove
+        # this: its second and third synsets are a noun ("emprunt", a loan)
+        # and an adjective ("rapide", quick), two unrelated meanings that
+        # used to land on one card together.
+        syns, _ = def_module._wordnet_synonyms_antonyms("prêt", "fr")
+        assert "emprunt" not in syns
+        assert "rapide" not in syns
+
+    def test_english_still_uses_multiple_senses(self):
+        # Guards the other half: narrowing English too was measured as a
+        # straight regression (14/15 -> 9/15 words with any synonym at
+        # all), because many English words have a top synset containing
+        # only the word itself.
+        for word in ("happy", "large", "quick", "think"):
+            syns, _ = def_module._wordnet_synonyms_antonyms(word, "en")
+            assert syns, f"{word} lost all synonyms"
 
     def test_synonyms_deduplicate_case_insensitively(self):
         # The same lemma reached through two synsets must not occupy two of
