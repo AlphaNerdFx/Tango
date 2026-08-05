@@ -1128,8 +1128,36 @@ mappings alongside the existing `not_found_examples` one, consumed by
 `build_package()`/`_build_fallback_note()` the same way.
 
 Live-verified against the French video from 9.1: fallback cards with real
-French synonyms went from 0 to 767 of 972 (e.g. "Aujourd'hui" ->
-actuellement, bientôt, de nos jours, de notre temps, désormais).
+French synonyms went from 0 to 767 of 972.
+
+Two further defects surfaced only by reading that run's actual card
+output, both silent, neither visible to a unit test that called the
+function once on one word:
+
+**Ranking.** Pooled synonyms were sorted alphabetically before the
+five-item cap, so spelling decided which survived rather than relevance.
+WordNet returns senses most-common-first, so the alphabetical cut
+systematically discarded the useful words: 207 of 972 cards were
+affected, "aujourd'hui" losing "maintenant" while keeping "de notre
+temps", and "faire" losing "mettre"/"organiser" while keeping the vulgar
+"caguer"/"déféquer". Synset order is now preserved through the cap.
+The ordering is load-bearing, not cosmetic -- the cap discards whatever
+does not fit, so ordering by anything but relevance throws away the best
+results.
+
+**Thread safety.** nltk's WordNet reader seeks and reads a shared file
+handle, and loads each language's data lazily on first use. Neither is
+safe under `DEFINITION_FETCH_WORKERS` threads: concurrent lookups raised
+`AssertionError`, which the function's own `except` swallowed into "no
+synonyms". The only symptom was a different subset of cards missing
+synonyms on every run of the same video (767/764/730 across three).
+Warm-up now happens under the lock, per language, and the reads
+themselves are serialized too -- warming alone was necessary but not
+sufficient. Serializing is free here: these are local, already-warm
+lookups that measured ~6x faster serialized than contended (11ms vs 68ms
+per 80 lookups), and the thread pool exists for network I/O, which this
+is not. Synonym coverage is now 89% (107/120) and stable run to run,
+against a varying ~78% before.
 
 ---
 
