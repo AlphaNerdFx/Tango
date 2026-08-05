@@ -91,6 +91,50 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
 
 ## High
 
+- [x] **Multi-language testing pass.** Real pipeline runs, real videos, across 9
+      never-before-tested languages (German, Spanish, Portuguese, Japanese,
+      Russian, Korean, Chinese, plus fresh French and English runs), rather
+      than continuing to reason from French alone. Found two real bugs and
+      one major escalation of a known issue.
+
+      **dictionaryapi.dev confirmed broken for every non-English language,
+      not just French.** 9/9 non-English languages tested came back at 0%
+      definition coverage (French 0/1047, German 0/419, Spanish 0/279,
+      Portuguese 0/126, Japanese 0/32, Russian 0/701, Korean 0/119, Chinese
+      0/552), against English's 269/274 (98%). Confirmed independently of
+      our code with direct requests: `de/Auto` 502, `es/casa` 502,
+      `pt/casa` 404, `fr/maison` 404, `ja/水` 404, `en/house` 200. Posted
+      to issue #1, which now reads as "only works for English," not
+      "coverage varies by language."
+
+      **SQLite cache lock contention was discarding successful lookups.**
+      A concurrent English run hit `sqlite3.OperationalError: database is
+      locked` inside `_cache_set_key`, which propagated out of
+      `fetch_definition()` after it had already built a valid result, so
+      `fetch_definitions()`'s executor loop recorded the word as not-found.
+      Root cause: schema setup ran on every `_get_db()` call rather than
+      once, and DDL takes a stronger lock than a plain write, so
+      `DEFINITION_FETCH_WORKERS` concurrent connections were contending
+      harder than the actual cache traffic needed. Fixed: schema runs once
+      per `DB_PATH`, connections use a 30s busy timeout instead of
+      sqlite3's 5s default, and both cache functions fail soft on a
+      `sqlite3.Error` instead of propagating.
+
+      **Chinese vocabulary extraction returned zero words.** Closes #15.
+      `zh_core_web_sm` leaves `token.lemma_` empty for every token, since
+      Chinese has no inflectional morphology for a lemmatizer to normalize
+      away. The vocabulary dict is keyed by the lemma, so every token
+      failed `_is_valid_lemma`'s length check and the entire language
+      silently produced nothing, no error raised anywhere. Added
+      `_effective_lemma()`, falling back to `token.text` when `lemma_` is
+      empty. Found a second, related gap in the same investigation: the
+      two-character minimum (added to reject French lemmatization debris)
+      isn't universal -- Chinese has many legitimate one-character words
+      (人, 大, 水, 好, 不). Added a CJK Unicode-range exemption for single
+      characters specifically, while still rejecting single Latin letters.
+      Live-verified: the same video went from 0 to 552 unique lemmas after
+      the fix, including 67 confirmed-real single-character words.
+
 - [x] **Language-aware spaCy model selection.** Closes #3, shipped in v0.4.3
       across three commits (b5b0247, cf2dd90, d794211). Verified live: `--language
       fr` alone now selects `fr_core_news_sm` automatically, no manual

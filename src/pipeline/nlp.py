@@ -105,19 +105,58 @@ def _get_model(language: str = "en") -> Language:
 # of ASCII '.
 _VALID_LEMMA = re.compile(r"^[^\W\d_]+(?:[-'’][^\W\d_]+)*$", re.UNICODE)
 
+# The two-character minimum below exists to reject Indo-European
+# lemmatization debris -- a botched French lemma collapsing to a single
+# letter like "e" (see ARCHITECTURE.md 8.4). It does not generalize to
+# every language: Chinese, Japanese, and Korean all have real one-character
+# words (人 "person", 大 "big", 水 "water"), confirmed live against
+# zh_core_web_sm output, not assumed. A single character in one of these
+# ranges is exempted from the length check rather than rejected outright.
+_CJK_RANGES = (
+    (0x4E00, 0x9FFF),   # CJK Unified Ideographs (Chinese, Japanese Kanji, Korean Hanja)
+    (0x3040, 0x309F),   # Hiragana
+    (0x30A0, 0x30FF),   # Katakana
+    (0xAC00, 0xD7A3),   # Hangul syllables
+)
+
+
+def _is_single_cjk_character(lemma: str) -> bool:
+    if len(lemma) != 1:
+        return False
+    code_point = ord(lemma)
+    return any(lo <= code_point <= hi for lo, hi in _CJK_RANGES)
+
 
 def _is_valid_lemma(lemma: str) -> bool:
     """
     A lemma is valid if it is at least two characters, contains no
     digits or underscores, and consists of alphabetic runs joined
-    only by internal hyphens or apostrophes.
+    only by internal hyphens or apostrophes. A single CJK character
+    (see _CJK_RANGES) is exempt from the length minimum.
 
-    Permits: semi-relevé, week-end, arc-en-ciel, aujourd'hui
+    Permits: semi-relevé, week-end, arc-en-ciel, aujourd'hui, 人, 水
     Rejects: e, -, ->, -là, qu', 3d, semi-
     """
     if len(lemma) < 2:
-        return False
+        return _is_single_cjk_character(lemma)
     return bool(_VALID_LEMMA.match(lemma))
+
+
+def _effective_lemma(token) -> str:
+    """
+    Return the token's lemma, falling back to its surface text when the
+    model doesn't populate one.
+
+    Not every spaCy pipeline fills lemma_. Confirmed directly against
+    zh_core_web_sm: it leaves lemma_ empty for every single token, since
+    Chinese has no inflectional morphology for a lemmatizer to normalize
+    away -- the surface form already is the canonical form. Without this
+    fallback, _is_valid_lemma("") fails its length check for every token,
+    and Chinese vocabulary extraction silently returns zero words. Not
+    degraded output -- total, silent failure for the whole language, with
+    no error raised anywhere to say so.
+    """
+    return token.lemma_ or token.text
 
 
 def _is_valid_token(token) -> bool:
@@ -134,17 +173,17 @@ def _is_valid_token(token) -> bool:
     meaningless flashcards. Stop words are kept because beginners
     need basic vocabulary.
 
-    The vocabulary dict is keyed by token.lemma_, not token.text, so
-    validity is decided on the lemma alone. token.is_alpha describes
-    the surface form and is deliberately NOT checked here: real
-    compounds and contractions (semi-relevé, week-end, aujourd'hui)
-    have non-alphabetic surface forms, so gating on token.is_alpha
-    would reject them before _is_valid_lemma ever ran. _is_valid_lemma
-    already rejects punctuation, digits, and boundary-hyphen/apostrophe
-    fragments on its own -- it is not a narrower check that needs
-    token.is_alpha as a backstop.
+    The vocabulary dict is keyed by the effective lemma (see
+    _effective_lemma), not token.text, so validity is decided on that,
+    not the raw surface form. token.is_alpha describes the surface form
+    and is deliberately NOT checked here: real compounds and contractions
+    (semi-relevé, week-end, aujourd'hui) have non-alphabetic surface
+    forms, so gating on token.is_alpha would reject them before
+    _is_valid_lemma ever ran. _is_valid_lemma already rejects punctuation,
+    digits, and boundary-hyphen/apostrophe fragments on its own -- it is
+    not a narrower check that needs token.is_alpha as a backstop.
     """
-    if not _is_valid_lemma(token.lemma_):
+    if not _is_valid_lemma(_effective_lemma(token)):
         return False
     if token.pos_ not in ACCEPTED_POS:
         return False
@@ -209,7 +248,7 @@ def process_transcript(text: str, language: str = "en") -> dict[str, int]:
     for token in doc:
         if not _is_valid_token(token):
             continue
-        lemma = token.lemma_.lower()
+        lemma = _effective_lemma(token).lower()
         if lemma in vocabulary:
             vocabulary[lemma] += 1
         else:

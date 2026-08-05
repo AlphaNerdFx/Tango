@@ -215,18 +215,23 @@ only load it once.
 `process_transcript(text, language="en")` resolves the model via
 `language.get_spacy_model(language)`, passes the full text through it,
 iterates the resulting tokens, calls `_is_valid_token()` on each, and builds
-a dictionary keyed by `token.lemma_.lower()` with frequency counts as
-values. Python dictionary insertion order is guaranteed since 3.7, which is
-how first-appearance ordering is preserved.
+a dictionary keyed by `_effective_lemma(token).lower()` with frequency
+counts as values. Python dictionary insertion order is guaranteed since
+3.7, which is how first-appearance ordering is preserved.
 
-`_is_valid_token(token)` is the filter. Current logic after this session's
-fixes:
+`_effective_lemma(token)` returns `token.lemma_ or token.text`. Not every
+spaCy pipeline populates `lemma_` -- `zh_core_web_sm` leaves it empty for
+every token, since Chinese has no inflectional morphology to normalize
+away. Without this fallback, Chinese vocabulary extraction silently
+returns nothing. See section 8.17.
+
+`_is_valid_token(token)` is the filter:
 
 ```python
-if not _is_valid_lemma(token.lemma_):    return False
-if token.pos_ not in ACCEPTED_POS:       return False
-if token.pos_ == "PROPN":                return False
-if token.ent_type_ in NAMED_ENTITY_TYPES: return False
+if not _is_valid_lemma(_effective_lemma(token)): return False
+if token.pos_ not in ACCEPTED_POS:                return False
+if token.pos_ == "PROPN":                         return False
+if token.ent_type_ in NAMED_ENTITY_TYPES:          return False
 return True
 ```
 
@@ -244,6 +249,13 @@ _VALID_LEMMA = re.compile(r"^[^\W\d_]+(?:[-'\u2019][^\W\d_]+)*$", re.UNICODE)
 
 Permits `semi-relevé`, `week-end`, `arc-en-ciel`, `aujourd'hui`.
 Rejects `e`, `-`, `->`, `-là`, `qu'`, `3d`, `semi-`.
+
+The two-character minimum is exempted for a single character in the CJK
+Unified Ideographs, Hiragana, Katakana, or Hangul syllable Unicode ranges
+(`_is_single_cjk_character`), so real one-character words like 人, 大, 水
+pass while a single Latin letter like `e` still does not. See section 8.17
+for why the exemption is script-specific rather than a blanket length
+change.
 
 `token.is_alpha` was deliberately removed as a filter. See section 8.4.
 
@@ -1026,29 +1038,96 @@ specific line. Both fixed. All three wizard paths (decline, accept and
 write, already-set detection) verified live against real `.env` files
 before being called done, not just via mocked tests.
 
+### 8.16 SQLite cache resilience under real thread concurrency
+
+`fetch_definitions()`'s thread pool (section 8.8) means several lemmas can
+read and write the definition cache at the same instant, each through its
+own `_get_db()` connection. Found live, during a multi-language testing
+pass, not in a synthetic test: a concurrent English run hit
+`sqlite3.OperationalError: database is locked` inside `_cache_set_key`,
+called as the last step of `fetch_definition()` right before `return
+result`. Since that call could raise, the exception propagated out of an
+otherwise-successful lookup, and `fetch_definitions()`'s executor loop
+caught it and recorded the word as not-found -- a definition that had
+already been fetched successfully, discarded by a caching side effect.
+
+Root cause was `_get_db()` running full schema setup (`CREATE TABLE IF NOT
+EXISTS`, an `ALTER TABLE` migration attempt) on every single call, not
+once. DDL statements take a stronger lock than a plain read or write, so
+every one of several concurrent connections was contending for a heavier
+lock than the actual cache traffic needed. Fixed three ways: schema setup
+now runs once per `DB_PATH` (guarded by a lock, keyed by path so tests
+using a fresh tmp database per test still initialize correctly),
+connections request a 30 second busy timeout instead of sqlite3's 5
+second default, and `_cache_get`/`_cache_set_key` both fail soft on a
+`sqlite3.Error`, logging and continuing rather than propagating. Caching
+is an optimization; a lock timeout must never turn an already-successful
+lookup into a lost one.
+
+### 8.17 Chinese vocabulary extraction: the lemma fallback and CJK exemption
+
+Found in the same multi-language testing pass: a real Chinese video with
+154 confirmed transcript snippets produced zero unique lemmas. Not
+degraded output, total silent failure, no error raised anywhere to say
+so. Confirmed directly against `zh_core_web_sm`: it leaves `token.lemma_`
+empty for every single token, since Chinese has no inflectional
+morphology for a lemmatizer to normalize away. `_is_valid_token` and the
+vocabulary loop both keyed off `token.lemma_` directly, so
+`_is_valid_lemma("")` failed its length check for every token in the
+transcript.
+
+Added `_effective_lemma(token)`, returning `token.lemma_ or token.text`,
+used consistently everywhere a lemma is read so the fallback can't drift
+out of sync between the validity check and the dict key.
+
+A second, related gap surfaced in the same investigation:
+`_is_valid_lemma`'s two-character minimum (added to reject Indo-European
+lemmatization debris, a botched French lemma collapsing to a single
+letter like "e", see 8.4) isn't a universal rule. Chinese has many
+legitimate one-character words -- 人 (person), 大 (big), 水 (water), 好
+(good), 不 (not) -- that the same length check was rejecting even before
+the empty-lemma issue is considered. Added `_is_single_cjk_character`,
+exempting a single character from the length minimum only when it falls
+in the CJK Unified Ideographs, Hiragana, Katakana, or Hangul syllable
+Unicode ranges. A single Latin letter is unaffected and still rejected.
+
+Live-verified: the same video went from 0 to 552 unique lemmas after the
+fix, including 67 manually-confirmed real single-character words. Closes
+#15.
+
 ---
 
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
 
-Documented in GitHub issue #1 with curl evidence. The dual-source architecture
-in ADR-005 is correct as designed but produces essentially no definitions for
-non-English languages, since dictionaryapi.dev's coverage for them is
-near-zero. Section 8.13 closes the example-sentence half of this via
-Wiktionary; definitions, part of speech, synonyms, and antonyms are
-unaffected by that fix and remain this gap's open remainder.
+Documented in GitHub issue #1, originally with French-only curl evidence.
+A later multi-language testing pass (section 8.17) confirmed this is not a
+French-specific gap: 9 of 9 non-English languages tested came back at 0%
+definition coverage against real videos -- French 0/1047, German 0/419,
+Spanish 0/279, Portuguese 0/126, Japanese 0/32, Russian 0/701, Korean
+0/119, Chinese 0/552 -- against English's 269/274 (98%). Confirmed
+independently of our code with direct requests: `de/Auto` 502, `es/casa`
+502, `pt/casa` 404, `fr/maison` 404, `ja/水` 404, `en/house` 200. The
+dual-source architecture in ADR-005 is correct as designed; the premise
+that dictionaryapi.dev has usable non-English data does not hold for any
+language tested so far, not just French.
 
-A verification run against a French video produced 209 words with 0
-definitions found either before or after the Wiktionary fix (fetch_definition
-still requires a real definition to return a "found" result), but fallback
-cards improved from 0 to 111 (of 200) carrying a real dictionary example
-instead of an empty field, and dropped words (nothing to show at all) fell
-from 30 to 9.
+Section 8.13 closes the example-sentence half of this via Wiktionary;
+definitions, part of speech, synonyms, and antonyms are unaffected by that
+fix and remain this gap's open remainder. A verification run against a
+French video produced 209 words with 0 definitions found either before or
+after the Wiktionary fix (`fetch_definition` still requires a real
+definition to return a "found" result), but fallback cards improved from
+0 to 111 (of 200) carrying a real dictionary example instead of an empty
+field, and dropped words (nothing to show at all) fell from 30 to 9.
 
 Fixing definitions, synonyms, and antonyms requires per-language dictionary
 sources (Larousse for French, DWDS for German, RAE for Spanish, or similar).
-Needs its own ADR given the per-language maintenance burden.
+Needs its own ADR given the per-language maintenance burden. Given the
+confirmed scope, this is no longer a French-specific nice-to-have: it is
+the only path to non-English definitions working at all, for every
+supported language.
 
 ---
 

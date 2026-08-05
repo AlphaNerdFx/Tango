@@ -19,6 +19,9 @@ from pipeline.nlp import (
     EmptyTranscriptError,
     NLPModelNotFoundError,
     ACCEPTED_POS,
+    _effective_lemma,
+    _is_single_cjk_character,
+    _is_valid_lemma,
     _is_valid_token,
 )
 
@@ -121,6 +124,63 @@ class TestIsValidToken:
 
     def test_accepted_pos_set_has_four_entries(self):
         assert ACCEPTED_POS == {"NOUN", "VERB", "ADJ", "ADV"}
+
+    def test_empty_lemma_falls_back_to_text(self):
+        # zh_core_web_sm leaves lemma_ empty for every token, confirmed
+        # live. Without the fallback this is indistinguishable from an
+        # invalid/empty lemma and gets filtered, silently dropping all
+        # Chinese vocabulary.
+        t = _make_token("人", "", "NOUN")
+        assert _is_valid_token(t)
+
+    def test_non_empty_lemma_is_not_overridden_by_text(self):
+        # Companion to the test above: when lemma_ IS populated, it must
+        # still be lemma_ that gets used, not silently replaced by text --
+        # a single test passing here can't prove the fallback is
+        # conditional rather than unconditional.
+        t = _make_token("running", "run", "VERB")
+        assert _effective_lemma(t) == "run"
+
+
+class TestEffectiveLemma:
+
+    def test_uses_lemma_when_present(self):
+        assert _effective_lemma(_make_token("ran", "run", "VERB")) == "run"
+
+    def test_falls_back_to_text_when_lemma_empty(self):
+        assert _effective_lemma(_make_token("人", "", "NOUN")) == "人"
+
+
+class TestSingleCjkCharacter:
+
+    @pytest.mark.parametrize("char", ["人", "大", "水", "去", "了"])
+    def test_common_single_chinese_characters_accepted(self, char):
+        assert _is_single_cjk_character(char)
+
+    def test_single_hiragana_accepted(self):
+        assert _is_single_cjk_character("あ")
+
+    def test_single_hangul_syllable_accepted(self):
+        assert _is_single_cjk_character("가")
+
+    def test_single_latin_letter_rejected(self):
+        # The exemption is script-specific -- "e" (the original French
+        # lemmatization-debris case this length check exists for) must
+        # still be rejected, not accidentally let through by a check
+        # that's too broad.
+        assert not _is_single_cjk_character("e")
+
+    def test_multi_character_cjk_string_rejected(self):
+        # This function only exempts single characters from the length
+        # minimum. A real multi-character CJK word must still pass
+        # through the normal _VALID_LEMMA regex, not this exemption.
+        assert not _is_single_cjk_character("人们")
+
+    def test_single_cjk_character_passes_is_valid_lemma(self):
+        assert _is_valid_lemma("人")
+
+    def test_single_latin_letter_still_fails_is_valid_lemma(self):
+        assert not _is_valid_lemma("e")
 
 
 # ── process_transcript ────────────────────────────────────────────────────────
@@ -241,6 +301,21 @@ class TestProcessTranscript:
         mock_spacy_model.return_value = _make_doc([])
         result = process_transcript("some transcript text")
         assert result == {}
+
+    def test_chinese_style_empty_lemmas_still_produce_vocabulary(self, mock_spacy_model):
+        # Reproduces the real bug live-verified against zh_core_web_sm: a
+        # doc where every token has lemma_ == "" (real Chinese pipeline
+        # behavior, not a hypothetical) used to extract zero vocabulary
+        # from a real 154-snippet transcript. Fixed via _effective_lemma
+        # falling back to token.text.
+        tokens = [
+            _make_token("人", "", "NOUN"),
+            _make_token("大", "", "VERB"),
+            _make_token("人", "", "NOUN"),  # repeat, should increment frequency
+        ]
+        mock_spacy_model.return_value = _make_doc(tokens)
+        result = process_transcript("我 大 人", language="zh")
+        assert result == {"人": 2, "大": 1}
 
 
 # ── get_sorted_by_frequency ───────────────────────────────────────────────────
