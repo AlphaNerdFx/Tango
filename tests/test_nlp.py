@@ -209,7 +209,9 @@ class TestProcessTranscript:
         mock_spacy_model.return_value = _make_doc([])
         with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
             process_transcript("un texte", language="fr")
-            mock_load.assert_called_once_with("fr_core_news_sm")
+            # "md", not "sm" -- French is pinned to the medium model, see
+            # issue #13. Other languages still default to "sm".
+            mock_load.assert_called_once_with("fr_core_news_md")
 
     def test_unsupported_language_raises_spacy_model_unavailable(self):
         with pytest.raises(nlp_module.SpacyModelUnavailableError):
@@ -226,14 +228,14 @@ class TestProcessTranscript:
             process_transcript("un texte", language="fr")
             assert mock_load.call_count == 2
             mock_load.assert_any_call("en_core_web_sm")
-            mock_load.assert_any_call("fr_core_news_sm")
+            mock_load.assert_any_call("fr_core_news_md")
 
     def test_same_language_reuses_cached_model(self, mock_spacy_model):
         mock_spacy_model.return_value = _make_doc([])
         with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
             process_transcript("premier texte", language="fr")
             process_transcript("deuxième texte", language="fr")
-            mock_load.assert_called_once_with("fr_core_news_sm")
+            mock_load.assert_called_once_with("fr_core_news_md")
 
     def test_empty_doc_returns_empty_dict(self, mock_spacy_model):
         mock_spacy_model.return_value = _make_doc([])

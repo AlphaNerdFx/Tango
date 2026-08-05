@@ -22,6 +22,7 @@ and the language's own endonym where it differs significantly.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Optional
 
@@ -398,10 +399,30 @@ def list_supported_languages() -> list[tuple[str, str]]:
 # morphology rules (see ARCHITECTURE.md 9.1). get_spacy_model() replaces
 # that with an explicit lookup that fails loudly for languages spaCy
 # doesn't support, instead of guessing wrong.
-
+#
+# Every entry defaults to the smallest ("sm") model tier except "fr",
+# which is pinned to "md" -- see issue #13. The small French model's POS
+# tagger inconsistently misclassifies common conjugated verb forms
+# ("sors" tagged NOUN or ADV depending on sentence context instead of
+# VERB), and when the POS is wrong the lemmatizer never attempts verb
+# normalization, so the same verb produces multiple different lemmas
+# ("sortir" vs "sors") and duplicate cards. Verified directly: "md" fixed
+# every one of 3 real reproduction sentences that "sm" got wrong,
+# consistently, not just for one lucky sentence.
+#
+# This is not assumed to generalize to the other 23 languages. A parallel
+# test against Spanish's analogous "juego" (play, verb vs noun homograph)
+# showed "md" fix one misclassification but introduce a different one
+# (NOUN in "sm" became PROPN in "md", still wrong) -- the size/accuracy
+# tradeoff is a per-language-model training-data question, not something
+# a single global rule can answer for all 24 languages at once.
+# SPACY_MODEL_SIZE_OVERRIDE below exists so anyone hitting a similar
+# problem in another language can test a larger model for themselves
+# without a code change, rather than us guessing which of the other 23
+# would actually benefit.
 SPACY_MODELS: dict[str, str] = {
     "en": "en_core_web_sm",
-    "fr": "fr_core_news_sm",
+    "fr": "fr_core_news_md",
     "es": "es_core_news_sm",
     "de": "de_core_news_sm",
     "it": "it_core_news_sm",
@@ -438,6 +459,14 @@ _SPACY_CODE_ALIASES: dict[str, str] = {
     "no": "nb",
 }
 
+# Optional global override for every language's model size tier, e.g. "md"
+# or "lg". Unset by default, which means each language uses exactly what
+# SPACY_MODELS specifies. Applies uniformly to whichever language is in use
+# rather than requiring a code change per language -- see the comment above
+# SPACY_MODELS for why we are not picking a size per language ourselves
+# beyond the one (French) we have directly verified.
+SPACY_MODEL_SIZE_OVERRIDE: str | None = os.getenv("SPACY_MODEL_SIZE_OVERRIDE") or None
+
 
 def get_spacy_model(language_code: str) -> str:
     """
@@ -447,11 +476,15 @@ def get_spacy_model(language_code: str) -> str:
     back to the base code -- the part before a '-' -- so regional variants
     like "fr-CA" or "zh-CN" resolve to the same model as "fr" / "zh".
 
+    If SPACY_MODEL_SIZE_OVERRIDE is set, the resolved model's size suffix
+    is replaced with it regardless of language, e.g. "md" turns
+    "es_core_news_sm" into "es_core_news_md".
+
     Args:
         language_code: BCP-47 code, e.g. "fr", "fr-CA", "zh-CN".
 
     Returns:
-        spaCy model name, e.g. "fr_core_news_sm".
+        spaCy model name, e.g. "fr_core_news_md".
 
     Raises:
         SpacyModelUnavailableError: spaCy has no trained pipeline for this
@@ -460,12 +493,12 @@ def get_spacy_model(language_code: str) -> str:
     code = language_code.strip().lower()
     code = _SPACY_CODE_ALIASES.get(code, code)
     if code in SPACY_MODELS:
-        return SPACY_MODELS[code]
+        return _apply_size_override(SPACY_MODELS[code])
 
     base = code.split("-")[0]
     base = _SPACY_CODE_ALIASES.get(base, base)
     if base in SPACY_MODELS:
-        return SPACY_MODELS[base]
+        return _apply_size_override(SPACY_MODELS[base])
 
     supported = ", ".join(sorted(SPACY_MODELS))
     raise SpacyModelUnavailableError(
@@ -474,3 +507,11 @@ def get_spacy_model(language_code: str) -> str:
         f"  vocabulary extraction can't run for it yet.\n"
         f"  Currently supported: {supported}"
     )
+
+
+def _apply_size_override(model_name: str) -> str:
+    """Swap model_name's size suffix for SPACY_MODEL_SIZE_OVERRIDE, if set."""
+    if not SPACY_MODEL_SIZE_OVERRIDE:
+        return model_name
+    prefix, _, _size = model_name.rpartition("_")
+    return f"{prefix}_{SPACY_MODEL_SIZE_OVERRIDE}"

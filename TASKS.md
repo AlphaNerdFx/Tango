@@ -238,6 +238,40 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       would need its own ADR given the per-language maintenance burden.
       Not attempted here.
 
+- [x] **French verb lemmatization accuracy (#13), partially fixed.**
+      `fr_core_news_sm`'s POS tagger inconsistently misclassified common
+      conjugated verbs depending on sentence context (`sors` tagged NOUN or
+      ADV instead of VERB), and a wrong POS meant the lemmatizer never
+      attempted verb normalization, producing duplicate cards for the same
+      verb ("sortir" and "sors" as two separate cards).
+
+      Confirmed directly with real spaCy calls: `fr_core_news_md` got all 3
+      of issue #13's original reproduction sentences right, consistently,
+      where `sm` got 2 of 3 wrong. Pinned French to `md` in `SPACY_MODELS`.
+      Live-verified against the same video: "Sortir" now appears once,
+      "Sors" no longer appears at all.
+
+      Does not generalize automatically to the other 23 supported
+      languages. A parallel test against Spanish's analogous "juego" (play,
+      verb/noun homograph) showed `md` trade one wrong POS for a different
+      one (NOUN in `sm` became PROPN in `md`, still wrong) rather than
+      fixing it -- the size/accuracy tradeoff is a per-language-model
+      training-data question, not something one global rule answers for
+      every language. Added `SPACY_MODEL_SIZE_OVERRIDE` as a general,
+      language-agnostic env var so anyone hitting a similar problem in
+      another language can test a larger model without a code change,
+      instead of us guessing which of the other 23 would actually benefit.
+
+      Does not fix everything issue #13 reported. "Joue" (play, present
+      tense) still doesn't normalize to "jouer" even with `md`, despite
+      spaCy correctly tagging it VERB with complete
+      `Mood=Ind|Tense=Pres|VerbForm=Fin` morphology -- confirmed this is a
+      lemmatizer lookup-table gap independent of POS tagging, and confirmed
+      the same category of bug in Spanish ("cocino" stays "cocino" instead
+      of "cocinar" in both `sm` and `md`). Not something a bigger model or
+      more of our own code fixes; it's the underlying spaCy language
+      pipeline's own lemmatizer data. Issue #13 stays open for this half.
+
 - [ ] **Separate synonym and antonym API source.**
       Antonyms are empty on roughly 99 percent of cards. WordNet helps for
       English only. Investigate Datamuse API — free, no key, has an

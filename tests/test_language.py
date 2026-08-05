@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import pipeline.language as language_module
 from pipeline.language import (
     LANGUAGE_MAP,
     SPACY_MODELS,
@@ -285,11 +286,15 @@ class TestGetSpacyModel:
         assert get_spacy_model("en") == "en_core_web_sm"
 
     def test_french_maps_correctly(self):
-        assert get_spacy_model("fr") == "fr_core_news_sm"
+        # "md", not "sm" -- see issue #13. The small model inconsistently
+        # misclassifies common conjugated verbs (POS wrong depending on
+        # context), which stops the lemmatizer from normalizing them to
+        # their infinitive at all.
+        assert get_spacy_model("fr") == "fr_core_news_md"
 
     def test_regional_variant_falls_back_to_base(self):
-        assert get_spacy_model("fr-CA") == "fr_core_news_sm"
-        assert get_spacy_model("fr-FR") == "fr_core_news_sm"
+        assert get_spacy_model("fr-CA") == "fr_core_news_md"
+        assert get_spacy_model("fr-FR") == "fr_core_news_md"
 
     def test_chinese_variants_share_one_model(self):
         # zh-CN and zh-TW both resolve to the same base "zh" model --
@@ -298,7 +303,7 @@ class TestGetSpacyModel:
         assert get_spacy_model("zh-TW") == "zh_core_web_sm"
 
     def test_case_insensitive(self):
-        assert get_spacy_model("FR") == "fr_core_news_sm"
+        assert get_spacy_model("FR") == "fr_core_news_md"
 
     def test_unsupported_language_raises(self):
         with pytest.raises(SpacyModelUnavailableError):
@@ -328,6 +333,29 @@ class TestGetSpacyModel:
         # the alias this would incorrectly raise as unsupported.
         assert get_spacy_model("no") == "nb_core_news_sm"
 
+    # -- SPACY_MODEL_SIZE_OVERRIDE (issue #13) ------------------------------
+    # A general, language-agnostic escape hatch: anyone hitting a similar
+    # lemmatization problem in a language other than French can try a
+    # bigger model without a code change, rather than us guessing which of
+    # the other 23 languages would actually benefit.
+
+    @pytest.mark.parametrize("language,base_model", [
+        ("de", "de_core_news"), ("es", "es_core_news"), ("ja", "ja_core_news"),
+    ])
+    def test_override_applies_to_any_language(self, monkeypatch, language, base_model):
+        monkeypatch.setattr(language_module, "SPACY_MODEL_SIZE_OVERRIDE", "md")
+        assert get_spacy_model(language) == f"{base_model}_md"
+
+    def test_override_replaces_a_non_default_size_too(self, monkeypatch):
+        # French already defaults to "md" -- an override must still apply
+        # cleanly on top of that, not produce "fr_core_news_md_lg" or similar.
+        monkeypatch.setattr(language_module, "SPACY_MODEL_SIZE_OVERRIDE", "lg")
+        assert get_spacy_model("fr") == "fr_core_news_lg"
+
+    def test_no_override_by_default(self):
+        assert language_module.SPACY_MODEL_SIZE_OVERRIDE is None
+        assert get_spacy_model("de") == "de_core_news_sm"
+
     def test_every_language_map_code_is_either_supported_or_raises_cleanly(self):
         # Every code LANGUAGE_MAP can resolve to must either have a spaCy
         # model or raise SpacyModelUnavailableError -- never a KeyError or
@@ -335,7 +363,11 @@ class TestGetSpacyModel:
         for code in set(LANGUAGE_MAP.values()):
             try:
                 model = get_spacy_model(code)
-                assert model.endswith(("_sm",))
+                # "fr" is a deliberate exception (issue #13); every other
+                # language stays on the small tier until individually
+                # verified the same way.
+                assert model.endswith(("_sm", "_md")) if code == "fr" \
+                    else model.endswith("_sm")
             except SpacyModelUnavailableError:
                 pass
 

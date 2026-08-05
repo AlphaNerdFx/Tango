@@ -155,14 +155,24 @@ finds those whose code starts with the requested base code, and among them
 prefers manually created transcripts over auto-generated ones.
 
 `SPACY_MODELS` maps 24 BCP-47 codes to their spaCy model name, e.g. `fr` to
-`fr_core_news_sm`. `get_spacy_model(language_code)` resolves a code against
-it: exact match first, then `_SPACY_CODE_ALIASES` for known BCP-47/spaCy
-naming mismatches (Norwegian's macrolanguage code `no` needs the Bokmål
-model `nb`), then the base code for regional variants like `zh-CN`. No match
-raises `SpacyModelUnavailableError` naming the languages that are supported.
-Closes #3; before this, every video regardless of language was tokenized
-with the English model, silently corrupting non-English lemmatization. See
-section 3.4 for how `nlp.py` caches the loaded models this returns.
+`fr_core_news_md` (French is the one language pinned to the medium model
+rather than small, see section 8.14). `get_spacy_model(language_code)`
+resolves a code against it: exact match first, then `_SPACY_CODE_ALIASES`
+for known BCP-47/spaCy naming mismatches (Norwegian's macrolanguage code
+`no` needs the Bokmål model `nb`), then the base code for regional variants
+like `zh-CN`. No match raises `SpacyModelUnavailableError` naming the
+languages that are supported. Closes #3; before this, every video
+regardless of language was tokenized with the English model, silently
+corrupting non-English lemmatization. See section 3.4 for how `nlp.py`
+caches the loaded models this returns.
+
+`SPACY_MODEL_SIZE_OVERRIDE`, an optional environment variable, replaces the
+resolved model's size suffix for every language uniformly (e.g. `md` turns
+whatever `SPACY_MODELS` returns into its medium-model equivalent). Unset by
+default, so nobody's download or processing time changes without opting
+in. Exists as a general escape hatch for the same class of problem French
+hit in section 8.14, without us having to verify a size upgrade for all 24
+languages ourselves before anyone can try one.
 
 ### 3.3 transcript.py
 
@@ -922,6 +932,44 @@ words dropped for having no definition, no dictionary example, and no
 transcript match went from 30 to 9, and 111 of the resulting 200 fallback
 cards carry a real French example sentence that was previously blank.
 Closes the example-sentence portion of #1.
+
+### 8.14 Per-language spaCy model size, verified rather than assumed
+
+Issue #13 traced the "Sortir"/"Sors" duplicate-card bug to
+`fr_core_news_sm`'s POS tagger: it inconsistently misclassified common
+conjugated verb forms as NOUN or ADV instead of VERB depending on sentence
+context, and when the POS is wrong the lemmatizer never attempts verb
+normalization, so the surface form becomes its own lemma instead of
+collapsing to the infinitive.
+
+Direct comparison against `fr_core_news_md` on the issue's 3 real
+reproduction sentences: `md` got all 3 right, consistently; `sm` got 2 of 3
+wrong. `SPACY_MODELS["fr"]` now points at the medium model. Live-verified:
+reprocessing the same video, "Sortir" now appears once and "Sors" does not
+appear at all.
+
+This is not assumed to generalize to the other 23 supported languages, and
+a parallel test showed it does not automatically: Spanish's analogous
+"juego" (play, a verb/noun homograph like "sors") went from misclassified
+NOUN in `sm` to misclassified PROPN in `md`, a different wrong answer, not
+a fix. Model size versus lemmatization accuracy is a per-language, per-
+model training-data question. `SPACY_MODEL_SIZE_OVERRIDE` (an env var
+checked in `get_spacy_model()`) exists so anyone hitting a similar problem
+in another language can test a larger model for themselves without a code
+change, rather than us guessing which of the other 23 languages would
+actually benefit from a default we have not verified.
+
+A separate, smaller bug survives model size entirely: "joue" (play,
+present tense) never normalizes to "jouer" in either `sm` or `md`, despite
+spaCy correctly tagging it VERB with complete
+`Mood=Ind|Tense=Pres|VerbForm=Fin` morphology. The model has everything it
+needs and still gets the lemma wrong, which points at a gap in the
+lemmatizer's own lookup table for that specific word form, not a POS or
+model-size problem. Spanish shows the same category of bug independently
+("cocino" stays "cocino" instead of "cocinar" in both sizes). Neither a
+bigger model nor more of our own code fixes this; it is the underlying
+spaCy language pipeline's own lemmatizer data. Issue #13 stays open for
+this half.
 
 ---
 
