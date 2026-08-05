@@ -296,6 +296,19 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
 
 ## Low
 
+- [x] **CI Python version matrix.** Closes #7. `.github/workflows/ci.yml` ran a
+      single job on Python 3.10 only, while CONTRIBUTING.md claimed a 3.9-3.12
+      matrix that had never actually existed in this repo's history. Added
+      `strategy.matrix.python-version: ["3.9", "3.10", "3.11", "3.12"]` with
+      `fail-fast: false` so one failing version doesn't hide results from the
+      others. `pip install -e ".[dev]"` uses pyproject.toml's relaxed version
+      ranges, not requirements.txt's exact pins, so a matrix expansion doesn't
+      require touching dependency versions. Verified 3.10, 3.11, and 3.12
+      locally with the exact install-and-test steps CI runs (529 passed, 22
+      deselected, identically, on all three). 3.9 isn't installable in this
+      sandbox without root, so it's unverified locally; will be confirmed by
+      the real CI run once this is pushed.
+
 - [ ] Hyphenated compound handling in the deck fuzzy match — `semi-relevé` is
       now admitted by the NLP filter but the fuzzy matcher has not been tested
       against hyphenated fronts.
