@@ -280,6 +280,7 @@ def _build_note(
     result: DefinitionResult,
     model: genanki.Model,
     video_id: str,
+    language: str = "en",
 ) -> genanki.Note:
     """Build a recognition card. Fields match renamed Anki model fields."""
     synonyms_html = _format_pills(result.synonyms, "vocab-pill")
@@ -299,7 +300,11 @@ def _build_note(
             video_id,                                    # VideoID
             result.source,                               # Source
         ],
-        guid=genanki.guid_for(result.lemma, video_id),
+        # language is part of the GUID (issue #14) so the same video
+        # reprocessed in a second language doesn't collide on a cognate
+        # lemma ("train" in English and French both hash the same way
+        # without this) and get silently dropped as an existing note.
+        guid=genanki.guid_for(result.lemma, video_id, language),
         tags=["yt-anki", video_id],
     )
 
@@ -309,6 +314,7 @@ def _build_fallback_note(
     example_transcript: Optional[str],
     model: genanki.Model,
     video_id: str,
+    language: str = "en",
 ) -> genanki.Note:
     return genanki.Note(
         model=model,
@@ -324,7 +330,7 @@ def _build_fallback_note(
             video_id,                                        # VideoID
             "not_found",                                     # Source
         ],
-        guid=genanki.guid_for(lemma, video_id),
+        guid=genanki.guid_for(lemma, video_id, language),
         tags=["yt-anki", video_id, "no-definition"],
     )
 
@@ -376,6 +382,7 @@ def build_package(
     found: list[DefinitionResult],
     not_found: list[str],
     snippets: Optional[dict] = None,
+    language: str = "en",
 ) -> PackageResult:
     """
     Build an Anki .apkg package from definition results.
@@ -388,6 +395,10 @@ def build_package(
         not_found:  Lemmas with no definition from either API.
         snippets:   Output of transcript.get_snippets(). Used for fallback
                     card transcript sentences.
+        language:   Resolved transcript language code, folded into each
+                    note's GUID (issue #14) so the same video processed in
+                    two languages doesn't collide on a lemma that happens
+                    to be spelled the same in both.
 
     Returns:
         PackageResult with the output path and accurate card counts.
@@ -423,7 +434,7 @@ def build_package(
             logger.debug("Skipping duplicate note for '%s'.", result.lemma)
             continue
         added_lemmas.add(key)
-        deck.add_note(_build_note(result, model, video_id))
+        deck.add_note(_build_note(result, model, video_id, language))
         standard_count += 1
         logger.debug("Card built: '%s' (%s)", result.lemma, result.source)
 
@@ -441,7 +452,7 @@ def build_package(
             skipped_count += 1
             continue
         added_lemmas.add(key)
-        deck.add_note(_build_fallback_note(lemma, transcript_example, model, video_id))
+        deck.add_note(_build_fallback_note(lemma, transcript_example, model, video_id, language))
         fallback_count += 1
         logger.debug("Fallback card built: '%s'", lemma)
 

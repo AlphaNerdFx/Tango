@@ -393,15 +393,19 @@ The CSS uses Anki's own variables — `var(--fg)`, `var(--canvas)`,
 `var(--border)`, `var(--slightly-grey-text)` — with hardcoded fallbacks. This
 makes cards adapt automatically to the user's light or dark theme.
 
-`_build_note(result, model, video_id)` constructs one note. The GUID comes from
-`genanki.guid_for(result.lemma, video_id)`, which is deterministic — re-running
-the pipeline on the same video produces identical GUIDs and Anki silently skips
-duplicates on import.
+`_build_note(result, model, video_id, language)` constructs one note. The GUID
+comes from `genanki.guid_for(result.lemma, video_id, language)`, which is
+deterministic: re-running the pipeline on the same video in the same language
+produces identical GUIDs and Anki silently skips duplicates on import.
+`language` is part of the hash so that reprocessing the same video in a
+different language does not collide on a lemma spelled the same in both. See
+section 8.12.
 
-`_build_fallback_note(lemma, example_transcript, model, video_id)` builds a
-minimal note for words with no definition. The `Definition` field contains
-the literal string "No definition found" and only the transcript example is
-populated. Tagged `no-definition` for filtering in Anki.
+`_build_fallback_note(lemma, example_transcript, model, video_id, language)`
+builds a minimal note for words with no definition. The `Definition` field
+contains the literal string "No definition found" and only the transcript
+example is populated. Tagged `no-definition` for filtering in Anki. Same
+language-aware GUID as `_build_note`.
 
 `_truncate(text, max_chars=256)` cuts at the last `". "` before the limit if
 that point is past the halfway mark, otherwise hard-cuts and appends an
@@ -847,6 +851,29 @@ mount namespace.
 untouched on native Linux or macOS. Verified live: an actual AnkiConnect
 import through this translation succeeded where the untranslated path
 failed. Closes #5.
+
+### 8.12 Language folded into the card GUID
+
+`_build_note` and `_build_fallback_note` used to compute each note's GUID as
+`genanki.guid_for(lemma, video_id)`. That is stable across repeat runs of
+the same video, which is the intended behavior, but it has no way to tell
+apart two runs of the same video in different languages. French and English
+share a number of cognates with identical spelling: `train`, `solution`,
+`simple`, `machine`, `sandwich`, `page`, `change`. Reprocessing a video in a
+second language produced the exact same GUID for any of those lemmas as the
+first language's run, and Anki's own duplicate-note detection then treated
+the second run's card as already existing and dropped it, silently, with no
+error or warning anywhere in the pipeline.
+
+Found while live-verifying the `--force` flag: an English rerun of a video
+previously processed in French came up 8 cards short of its 130-word
+vocabulary list. Both decks looked correct in isolation; the missing cards
+only showed up by comparing note timestamps and word lists between the two
+decks directly. Fixed by adding the resolved language to the hash input,
+`genanki.guid_for(lemma, video_id, language)`. This does not change the
+GUID of any note already in a user's collection, since within a single
+language nothing about the hash changed; it only prevents new collisions
+between different languages of the same video going forward. Closes #14.
 
 ---
 

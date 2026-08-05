@@ -243,6 +243,22 @@ class TestBuildNote:
         assert _build_note(sample_result, model, "VIDEO_A").guid != \
                _build_note(sample_result, model, "VIDEO_B").guid
 
+    def test_guid_differs_by_language(self, sample_result):
+        # Issue #14: the same video reprocessed in a second language must
+        # not collide on a lemma spelled the same in both (e.g. "train" is
+        # valid in both English and French), or the second run's card is
+        # silently dropped by Anki as an already-existing duplicate.
+        model = _build_model()
+        assert _build_note(sample_result, model, VIDEO_ID, language="en").guid != \
+               _build_note(sample_result, model, VIDEO_ID, language="fr").guid
+
+    def test_guid_stable_for_same_language(self, sample_result):
+        # Companion to the above: pinning the language must not make an
+        # otherwise-identical note produce a different GUID on every call.
+        model = _build_model()
+        assert _build_note(sample_result, model, VIDEO_ID, language="fr").guid == \
+               _build_note(sample_result, model, VIDEO_ID, language="fr").guid
+
     def test_video_id_in_tags(self, sample_result):
         assert VIDEO_ID in _build_note(sample_result, _build_model(), VIDEO_ID).tags
 
@@ -281,6 +297,11 @@ class TestBuildFallbackNote:
     def test_no_definition_tag(self):
         note = _build_fallback_note("obscure", "sentence", _build_model(), VIDEO_ID)
         assert "no-definition" in note.tags
+
+    def test_guid_differs_by_language(self):
+        model = _build_model()
+        assert _build_fallback_note("train", "sentence", model, VIDEO_ID, language="en").guid != \
+               _build_fallback_note("train", "sentence", model, VIDEO_ID, language="fr").guid
 
     def test_source_field_is_not_found(self):
         note = _build_fallback_note("obscure", "sentence", _build_model(), VIDEO_ID)
@@ -386,6 +407,22 @@ class TestBuildPackage:
         assert result.fallback_count == 1
         assert result.skipped_count == 1
         assert result.total_cards == 2  # NOT 3 — skipped words produce no card
+
+    # -- Language threaded into GUIDs (issue #14) --------------------------
+
+    def test_language_passed_to_build_note(self, sample_result):
+        # Verifies build_package() actually forwards its language argument
+        # rather than always defaulting to "en" at the call site.
+        with patch.object(cards_module, "_build_note", wraps=cards_module._build_note) as spy:
+            build_package(VIDEO_ID, DECK_NAME, [sample_result], [], language="fr")
+            spy.assert_called_once_with(sample_result, spy.call_args[0][1], VIDEO_ID, "fr")
+
+    def test_language_passed_to_build_fallback_note(self, sample_snippets):
+        with patch.object(
+            cards_module, "_build_fallback_note", wraps=cards_module._build_fallback_note
+        ) as spy:
+            build_package(VIDEO_ID, DECK_NAME, [], ["develop"], sample_snippets, language="fr")
+            assert spy.call_args[0][-1] == "fr"
 
     # -- Deduplication guard (issue #2) -------------------------------------
     # definition.fetch_definitions() already dedupes its input lemma list

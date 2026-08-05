@@ -172,6 +172,21 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       target deck are still skipped; `--force` only bypasses the video-level
       "already ran this one" guard.
 
+- [x] **Card GUIDs collide across languages for cognate lemmas.** Closes #14.
+      `cards.py` built every note's stable GUID from `(lemma, video_id)` only.
+      Reprocessing the same video in a second language silently dropped a
+      card whenever a lemma happened to be spelled the same in both
+      languages (French and English share several: `train`, `solution`,
+      `simple`, `machine`, `sandwich`, `page`, `change`), because Anki
+      matched the new note's GUID to an existing note from the earlier
+      language's run and treated it as already present. Found while
+      verifying the `--force` fix live: an 08-05 English rerun of a video
+      previously processed in French on 07-19 came up 8 cards short of its
+      130-word vocabulary list, with no error or warning. Fixed by folding
+      the resolved language into the GUID: `guid_for(lemma, video_id,
+      language)`. Existing cards keep their current GUIDs; this only
+      prevents new collisions going forward.
+
 - [ ] **Migrate CLI from argparse to Typer.**
       Better help output, automatic type validation, clean subcommands:
       `tango run`, `tango review`, `tango backlog`, `tango languages`. Do this
