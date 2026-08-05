@@ -214,11 +214,32 @@ def _find_transcript_sentence(lemma: str, snippets: dict) -> Optional[str]:
 
 
 # ── SQLite cache ──────────────────────────────────────────────────────────────
+#
+# fetch_definitions() now runs several lemmas concurrently (see
+# DEFINITION_FETCH_WORKERS), and each one opens its own cache connection to
+# read and write the same file. Two things about that need to be handled
+# explicitly under real thread concurrency, neither of which mattered when
+# every call was sequential:
+#
+# 1. Schema setup (CREATE TABLE / ALTER TABLE) used to run on every single
+#    _get_db() call. DDL statements hold a stronger lock than a plain
+#    INSERT, so doing that on every one of several concurrent connections
+#    made lock contention worse than the actual cache traffic. Now runs
+#    once per DB_PATH (guarded by _schema_lock), not once per connection.
+# 2. A cache read or write can still lose a lock race under load even with
+#    that fixed (observed live: sqlite3.OperationalError: database is
+#    locked, during a concurrent English run). Caching is an optimisation,
+#    not a correctness requirement -- a lock timeout on the write must
+#    never cause an already-successfully-fetched definition to be
+#    discarded, and a lock timeout on the read must never cause a lemma to
+#    be treated as uncached when it might already be there. Both cache
+#    functions below log and fail soft instead of propagating.
 
-def _get_db() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+_schema_lock: threading.Lock = threading.Lock()
+_initialized_dbs: set = set()
+
+
+def _init_schema(conn: sqlite3.Connection) -> None:
     conn.execute("""
         CREATE TABLE IF NOT EXISTS definitions (
             lemma               TEXT PRIMARY KEY,
@@ -238,16 +259,34 @@ def _get_db() -> sqlite3.Connection:
     except Exception:
         pass  # Column already exists — safe to ignore
     conn.commit()
+
+
+def _get_db() -> sqlite3.Connection:
+    # timeout=30 (vs sqlite3's 5s default) gives a thread more room to wait
+    # its turn for the write lock under concurrent access before giving up.
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    db_key = str(DB_PATH)
+    if db_key not in _initialized_dbs:
+        with _schema_lock:
+            if db_key not in _initialized_dbs:
+                _init_schema(conn)
+                _initialized_dbs.add(db_key)
     return conn
 
 
 def _cache_get(lemma: str) -> Optional[dict]:
-    """Return cached definition row or None."""
-    with _get_db() as conn:
-        row = conn.execute(
-            "SELECT * FROM definitions WHERE lemma = ?", (lemma,)
-        ).fetchone()
-    return dict(row) if row else None
+    """Return cached definition row, or None on a cache miss or read failure."""
+    try:
+        with _get_db() as conn:
+            row = conn.execute(
+                "SELECT * FROM definitions WHERE lemma = ?", (lemma,)
+            ).fetchone()
+        return dict(row) if row else None
+    except sqlite3.Error as exc:
+        logger.warning("Cache read failed for '%s': %s", lemma, exc)
+        return None
 
 
 def _cache_set(result: DefinitionResult) -> None:
@@ -275,27 +314,38 @@ def _cache_set(result: DefinitionResult) -> None:
 
 
 def _cache_set_key(key: str, result: DefinitionResult) -> None:
-    """Persist a DefinitionResult to SQLite using a custom cache key."""
+    """
+    Persist a DefinitionResult to SQLite using a custom cache key.
+
+    Logs and swallows a write failure rather than raising. This is the
+    return path fetch_definition() reaches only after successfully getting
+    a real result -- if caching that result loses a lock race under
+    concurrent fetches, the correct behaviour is a cache miss next time,
+    not discarding a result that was already fetched successfully.
+    """
     import json
-    with _get_db() as conn:
-        conn.execute(
-            """
-            INSERT OR REPLACE INTO definitions
-                (lemma, definition, example_dict, example_dict2, synonyms, antonyms,
-                 part_of_speech, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                key,
-                result.definition,
-                result.example_dict,
-                getattr(result, "example_dict2", None),
-                json.dumps(result.synonyms),
-                json.dumps(result.antonyms),
-                result.part_of_speech,
-                result.source,
-            ),
-        )
+    try:
+        with _get_db() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO definitions
+                    (lemma, definition, example_dict, example_dict2, synonyms, antonyms,
+                     part_of_speech, source)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    key,
+                    result.definition,
+                    result.example_dict,
+                    getattr(result, "example_dict2", None),
+                    json.dumps(result.synonyms),
+                    json.dumps(result.antonyms),
+                    result.part_of_speech,
+                    result.source,
+                ),
+            )
+    except sqlite3.Error as exc:
+        logger.warning("Cache write failed for '%s': %s", key, exc)
 
 
 def _cache_row_to_result(

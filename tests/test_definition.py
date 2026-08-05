@@ -568,6 +568,56 @@ class TestCache:
         cached = _cache_get("contaminate")
         assert cached["definition"] == "updated definition"
 
+    # -- Cache resilience under concurrent access -----------------------------
+    # Regression coverage for a real bug found live: fetch_definitions() runs
+    # several lemmas concurrently, and a cache write/read losing a SQLite
+    # lock race (sqlite3.OperationalError: database is locked) must never
+    # turn an already-successful lookup into a lost one.
+
+    def test_cache_write_failure_does_not_raise(self, sample_definition_result, monkeypatch):
+        def _boom():
+            raise sqlite3.OperationalError("database is locked")
+        monkeypatch.setattr(def_module, "_get_db", _boom)
+        def_module._cache_set_key("contaminate::en", sample_definition_result)  # must not raise
+
+    def test_cache_read_failure_returns_none_not_raises(self, monkeypatch):
+        def _boom():
+            raise sqlite3.OperationalError("database is locked")
+        monkeypatch.setattr(def_module, "_get_db", _boom)
+        assert def_module._cache_get("contaminate::en") is None
+
+    @patch("pipeline.definition._fetch_from_mw")
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_fetch_definition_still_returns_result_when_cache_write_fails(
+        self, mock_dict, mock_mw, mw_response, sample_snippets, monkeypatch
+    ):
+        # The actual bug, live: fetch_definition() successfully builds a
+        # result, then calls _cache_set_key(cache_key, result) as its last
+        # step before `return result`. When that write lost a SQLite lock
+        # race, the exception used to propagate out of fetch_definition()
+        # entirely -- return result never executed -- and
+        # fetch_definitions()'s executor loop caught it and recorded the
+        # lemma as not-found, discarding a lookup that had already
+        # succeeded. _cache_set_key now fails soft internally, so this must
+        # still return the built result.
+        mock_mw.return_value = mw_response
+        mock_dict.return_value = None
+        monkeypatch.setattr(
+            def_module, "_get_db",
+            MagicMock(side_effect=sqlite3.OperationalError("database is locked")),
+        )
+        result = fetch_definition("contaminate", sample_snippets, use_cache=False)
+        assert result is not None
+        assert result.lemma == "contaminate"
+
+    def test_schema_initialized_once_per_db_path(self, monkeypatch):
+        monkeypatch.setattr(def_module, "_initialized_dbs", set())
+        with patch("pipeline.definition._init_schema") as mock_init:
+            def_module._get_db()
+            def_module._get_db()
+            def_module._get_db()
+        mock_init.assert_called_once()
+
 
 # ── Circuit breaker (issue #4) ───────────────────────────────────────────────
 
