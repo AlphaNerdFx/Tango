@@ -25,5 +25,7 @@ jobs:
         run: pip install -e ".[dev]"
       - name: Download spaCy model
         run: python -m spacy download en_core_web_sm
+      - name: Download NLTK WordNet data
+        run: python -m nltk.downloader wordnet omw-2.0
       - name: Run unit tests
         run: pytest tests/ -m "not integration"

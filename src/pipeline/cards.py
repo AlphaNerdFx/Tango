@@ -316,6 +316,8 @@ def _build_fallback_note(
     video_id: str,
     language: str = "en",
     dict_example: Optional[str] = None,
+    synonyms: Optional[list[str]] = None,
+    antonyms: Optional[list[str]] = None,
 ) -> genanki.Note:
     """
     Build a fallback card for a lemma with no definition from any source.
@@ -327,6 +329,13 @@ def _build_fallback_note(
     otherwise stays empty for fallback cards -- the only example a fallback
     card would have without it is whatever transcript sentence contained
     the word, if any.
+
+    synonyms/antonyms are optional native-language words sourced from
+    OMW/WordNet (see definition.DefinitionBatchResult.not_found_synonyms/
+    not_found_antonyms and ADR-008) for the same no-definition-anywhere
+    case dict_example covers -- fetch_definition() never reaches its own
+    OMW lookup when there's no definition, so this is the only place a
+    fallback card can pick them up.
     """
     return genanki.Note(
         model=model,
@@ -337,8 +346,8 @@ def _build_fallback_note(
             dict_example or "",                               # 1st Example Sentence
             "",                                              # 2nd Example Sentence
             example_transcript or "",                        # Example from Youtube Video
-            "",                                              # Synonyms
-            "",                                              # Antonyms
+            _format_pills(synonyms or [], "vocab-pill"),      # Synonyms
+            _format_pills(antonyms or [], "antonym-pill"),    # Antonyms
             video_id,                                        # VideoID
             "not_found",                                     # Source
         ],
@@ -396,6 +405,8 @@ def build_package(
     snippets: Optional[dict] = None,
     language: str = "en",
     not_found_examples: Optional[dict] = None,
+    not_found_synonyms: Optional[dict] = None,
+    not_found_antonyms: Optional[dict] = None,
 ) -> PackageResult:
     """
     Build an Anki .apkg package from definition results.
@@ -417,6 +428,12 @@ def build_package(
                     keyed by lemma (issue #1). A fallback card whose lemma
                     has an entry here gets a real dictionary example instead
                     of an empty "1st Example Sentence" field.
+        not_found_synonyms: definition.DefinitionBatchResult.not_found_synonyms
+                    -- OMW/WordNet synonyms for not_found lemmas, keyed by
+                    lemma (ADR-008). Same idea as not_found_examples, for
+                    the Synonyms field.
+        not_found_antonyms: definition.DefinitionBatchResult.not_found_antonyms
+                    -- same as not_found_synonyms, for the Antonyms field.
 
     Returns:
         PackageResult with the output path and accurate card counts.
@@ -464,6 +481,8 @@ def build_package(
             continue
         transcript_example = _find_in_snippets(lemma, snippets) if snippets else None
         dict_example = (not_found_examples or {}).get(lemma)
+        fallback_synonyms = (not_found_synonyms or {}).get(lemma)
+        fallback_antonyms = (not_found_antonyms or {}).get(lemma)
         if not transcript_example and not dict_example:
             logger.warning(
                 "Skipping '%s' — no definition, no dictionary example, and "
@@ -474,7 +493,8 @@ def build_package(
         added_lemmas.add(key)
         deck.add_note(
             _build_fallback_note(
-                lemma, transcript_example, model, video_id, language, dict_example
+                lemma, transcript_example, model, video_id, language, dict_example,
+                fallback_synonyms, fallback_antonyms,
             )
         )
         fallback_count += 1

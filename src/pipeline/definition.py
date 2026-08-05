@@ -53,23 +53,80 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def _wordnet_synonyms_antonyms(word: str) -> tuple:
+# BCP-47 -> Open Multilingual Wordnet ISO 639-3 code, for the languages
+# where the installed omw-2.0 package actually has data (see ADR-008).
+# Confirmed by inspecting the downloaded package directly, not assumed:
+# German, Russian, Ukrainian, Macedonian, and Korean have no entry here
+# because OMW has no data for them at all, not because of an oversight.
+_OMW_LANGUAGE_CODES: dict[str, str] = {
+    "fr": "fra", "es": "spa", "it": "ita", "pt": "por", "nl": "nld",
+    "pl": "pol", "ro": "ron", "el": "ell", "da": "dan", "sv": "swe",
+    "nb": "nob", "fi": "fin", "lt": "lit", "hr": "hrv", "sl": "slv",
+    "ca": "cat", "ja": "jpn", "zh": "cmn",
+}
+
+_omw_loaded = False
+_omw_load_lock = threading.Lock()
+
+
+def _ensure_omw_loaded() -> bool:
     """
-    Return (synonyms, antonyms) from WordNet for an English word.
+    Load Open Multilingual Wordnet's language index once per process.
+
+    Returns False (without raising) if omw-2.0 isn't installed, so callers
+    degrade to no synonyms rather than crashing -- this mirrors every other
+    optional-enhancement source in this module. Needs omw-2.0 specifically;
+    the older omw-1.4 package installs without error but this NLTK version
+    never uses it (see ADR-008).
+    """
+    global _omw_loaded
+    if _omw_loaded:
+        return True
+    with _omw_load_lock:
+        if _omw_loaded:
+            return True
+        try:
+            from nltk.corpus import wordnet as wn
+            wn.add_omw()
+            _omw_loaded = True
+        except Exception:
+            return False
+    return True
+
+
+def _wordnet_synonyms_antonyms(word: str, language: str = "en") -> tuple:
+    """
+    Return (synonyms, antonyms) from WordNet for a word in `language`.
     Used to supplement empty synonym/antonym lists from API sources.
-    Returns empty lists if WordNet is unavailable or word not found.
+    Returns empty lists if WordNet/OMW is unavailable, the language isn't
+    covered (see _OMW_LANGUAGE_CODES), or the word isn't found.
+
+    Antonyms are only ever attempted for English. Confirmed directly
+    against OMW: antonym relations are not carried over for non-English
+    lemmas (empty in every case checked, and the one non-empty result
+    found during that check pointed at an English antonym object, not a
+    real antonym pair in the requested language) -- not worth the risk of
+    writing an English antonym into a non-English field.
     """
+    omw_lang = _OMW_LANGUAGE_CODES.get(language)
+    if language != "en" and not omw_lang:
+        return [], []
+    if language != "en" and not _ensure_omw_loaded():
+        return [], []
+
     try:
         from nltk.corpus import wordnet as wn
         synonyms: set = set()
         antonyms: set = set()
-        for syn in wn.synsets(word)[:3]:
-            for lemma in syn.lemmas():
+        lang_arg = {} if language == "en" else {"lang": omw_lang}
+        for syn in wn.synsets(word, **lang_arg)[:3]:
+            for lemma in syn.lemmas(**lang_arg):
                 name = lemma.name().replace("_", " ")
                 if name.lower() != word.lower():
                     synonyms.add(name)
-                for ant in lemma.antonyms():
-                    antonyms.add(ant.name().replace("_", " "))
+                if language == "en":
+                    for ant in lemma.antonyms():
+                        antonyms.add(ant.name().replace("_", " "))
         return sorted(synonyms)[:5], sorted(antonyms)[:5]
     except Exception:
         return [], []
@@ -132,11 +189,23 @@ class DefinitionBatchResult:
                              usable example (issue #1) -- lets the resulting
                              fallback card show a real dictionary example
                              instead of just the transcript sentence.
+        not_found_synonyms: OMW/WordNet synonyms for a not_found lemma, keyed
+                             by lemma (see ADR-008). fetch_definition() only
+                             runs its own OMW lookup after finding a
+                             definition, so a lemma with no definition
+                             anywhere -- the common case for languages
+                             dictionaryapi.dev barely covers, like French --
+                             would otherwise never get a synonym at all.
+        not_found_antonyms: Same as not_found_synonyms, but antonyms. Rarely
+                             populated for non-English lemmas since OMW only
+                             carries antonym data for English synsets.
     """
     found:              list[DefinitionResult] = field(default_factory=list)
     not_found:          list[str]              = field(default_factory=list)
     from_cache:         list[str]              = field(default_factory=list)
     not_found_examples: dict[str, str]         = field(default_factory=dict)
+    not_found_synonyms: dict[str, list[str]]   = field(default_factory=dict)
+    not_found_antonyms: dict[str, list[str]]   = field(default_factory=dict)
 
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
@@ -902,15 +971,19 @@ def fetch_definition(
         dot = cut.rfind(". ")
         return (cut[:dot + 1] if dot > 128 else cut.rstrip() + "...")
 
-    # Supplement synonyms and antonyms from WordNet, but ONLY when the
-    # transcript language is English. WordNet is an English-only resource.
+    # Supplement synonyms (and, for English only, antonyms) from
+    # WordNet/OMW. English uses WordNet directly; 18 other languages use
+    # Open Multilingual Wordnet via _OMW_LANGUAGE_CODES (see ADR-008) --
+    # unlisted languages return empty immediately rather than attempting
+    # a lookup that can't succeed.
     #
     # Critical: use `lemma` (original word), never `query_lemma`. When
     # def_language differs from language, query_lemma holds the TRANSLATED
-    # word. Passing it here would write English synonyms into native_syns,
-    # which must always hold words in the original transcript language.
-    if language == "en" and (not native_syns or not native_ants):
-        wn_syns, wn_ants = _wordnet_synonyms_antonyms(lemma)
+    # word. Passing it here would write the wrong language's synonyms into
+    # native_syns, which must always hold words in the original transcript
+    # language.
+    if not native_syns or not native_ants:
+        wn_syns, wn_ants = _wordnet_synonyms_antonyms(lemma, language)
         if not native_syns:
             native_syns = wn_syns
         if not native_ants:
@@ -950,41 +1023,45 @@ def _fetch_definition_or_fallback_example(
     snippets: Optional[dict],
     language: str,
     def_language: Optional[str],
-) -> tuple[Optional[DefinitionResult], Optional[str]]:
+) -> tuple[Optional[DefinitionResult], Optional[str], list[str], list[str]]:
     """
     Fetch one lemma's definition, falling back to a bare Wiktionary example
-    when no definition exists anywhere. One thread pool task per lemma in
-    fetch_definitions() runs this instead of fetch_definition() directly.
+    and OMW/WordNet synonyms/antonyms when no definition exists anywhere.
+    One thread pool task per lemma in fetch_definitions() runs this instead
+    of fetch_definition() directly.
 
-    fetch_definition() already tries Wiktionary when dictionaryapi.dev finds
-    a definition but no example (a real but narrower case: some languages
-    have partial definition coverage with sparser examples). This function
+    fetch_definition() already tries Wiktionary for examples, and OMW for
+    synonyms/antonyms, when dictionaryapi.dev finds a definition but is
+    missing those fields (a real but narrower case: some languages have
+    partial definition coverage with sparser examples). This function
     covers the opposite, more common case for near-zero-coverage languages
-    like French (see issue #1): no definition anywhere, so
-    fetch_definition() returns None before ever using an example. Trying
-    Wiktionary again here, once fetch_definition() has already given up, is
-    what lets a French video's fallback cards carry a real dictionary
-    example instead of nothing but the transcript sentence.
+    like French (see issue #1 and ADR-008): no definition anywhere, so
+    fetch_definition() returns None before ever reaching its own Wiktionary
+    or OMW lookups. Redoing those lookups here, once fetch_definition() has
+    already given up, is what lets a French video's fallback cards carry a
+    real dictionary example and real synonyms instead of empty fields.
 
-    Returns (result, None) when a definition was found. Returns
-    (None, example) when nothing was found but Wiktionary supplied a
-    native-language example for the fallback card. Returns (None, None)
-    when there is nothing at all.
+    Returns (result, None, [], []) when a definition was found -- the
+    example/synonyms/antonyms are already inside `result` in that case.
+    Otherwise returns (None, example, synonyms, antonyms), where each of
+    the three may still be empty/None if no source had anything.
     """
     result = fetch_definition(
         lemma, snippets, use_cache=False, language=language, def_language=def_language,
     )
     if result:
-        return result, None
+        return result, None, [], []
 
+    example: Optional[str] = None
     if language != "en":
         wikt_data = _fetch_from_wiktionary(lemma, language)
         if wikt_data:
             examples = _parse_wiktionary_examples(wikt_data)
             if examples:
-                return None, examples[0]
+                example = examples[0]
 
-    return None, None
+    synonyms, antonyms = _wordnet_synonyms_antonyms(lemma, language)
+    return None, example, synonyms, antonyms
 
 
 def fetch_definitions(
@@ -1059,7 +1136,9 @@ def fetch_definitions(
     # task also tries a Wiktionary fallback example when the lemma has no
     # definition at all -- see _fetch_definition_or_fallback_example().
     if to_fetch:
-        results: dict[str, tuple[Optional[DefinitionResult], Optional[str]]] = {}
+        results: dict[
+            str, tuple[Optional[DefinitionResult], Optional[str], list[str], list[str]]
+        ] = {}
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_lemma = {
                 executor.submit(
@@ -1074,24 +1153,29 @@ def fetch_definitions(
                     results[lemma] = future.result()
                 except Exception:
                     logger.exception("Unexpected error fetching '%s'.", lemma)
-                    results[lemma] = (None, None)
+                    results[lemma] = (None, None, [], [])
 
         for lemma in to_fetch:
-            result, fallback_example = results[lemma]
+            result, fallback_example, fallback_synonyms, fallback_antonyms = results[lemma]
             if result:
                 batch.found.append(result)
             else:
                 batch.not_found.append(lemma)
                 if fallback_example:
                     batch.not_found_examples[lemma] = fallback_example
+                if fallback_synonyms:
+                    batch.not_found_synonyms[lemma] = fallback_synonyms
+                if fallback_antonyms:
+                    batch.not_found_antonyms[lemma] = fallback_antonyms
 
     logger.info(
         "Batch complete: %d found (%d cached) / %d not found (%d with a "
-        "Wiktionary fallback example)",
+        "Wiktionary fallback example, %d with fallback synonyms)",
         len(batch.found),
         len(batch.from_cache),
         len(batch.not_found),
         len(batch.not_found_examples),
+        len(batch.not_found_synonyms),
     )
 
     return batch

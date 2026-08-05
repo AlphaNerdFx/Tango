@@ -457,6 +457,31 @@ class TestBuildPackage:
         result = build_package(VIDEO_ID, DECK_NAME, [], ["develop"], sample_snippets)
         assert result.fallback_count == 1
 
+    # -- OMW/WordNet fallback synonyms and antonyms (ADR-008) ---------------
+
+    def test_fallback_synonyms_reach_the_real_exported_card(self, tmp_path):
+        result = build_package(
+            VIDEO_ID, DECK_NAME, [], ["philosophy"], {},
+            not_found_examples={"philosophy": "Une phrase en français."},
+            not_found_synonyms={"philosophy": ["pensee", "doctrine"]},
+            not_found_antonyms={"philosophy": ["ignorance"]},
+        )
+        extract_dir = tmp_path / "extracted"
+        with zipfile.ZipFile(result.path) as z:
+            z.extractall(extract_dir)
+        conn = sqlite3.connect(extract_dir / "collection.anki2")
+        flds = conn.execute("SELECT flds FROM notes").fetchone()[0]
+        fields = flds.split("\x1f")
+        assert "pensee" in fields[6]      # Synonyms
+        assert "doctrine" in fields[6]
+        assert "ignorance" in fields[7]   # Antonyms
+
+    def test_no_not_found_synonyms_arg_behaves_as_before(self, sample_snippets):
+        # not_found_synonyms/antonyms are optional -- omitting them must not
+        # break existing callers (review/backlog modes don't pass them).
+        result = build_package(VIDEO_ID, DECK_NAME, [], ["develop"], sample_snippets)
+        assert result.fallback_count == 1
+
     # -- Language threaded into GUIDs (issue #14) --------------------------
 
     def test_language_passed_to_build_note(self, sample_result):

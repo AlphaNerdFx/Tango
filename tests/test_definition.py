@@ -869,34 +869,40 @@ class TestFetchDefinitionOrFallbackExample:
     @patch("pipeline.definition.fetch_definition")
     def test_returns_result_when_definition_found(self, mock_fetch, sample_definition_result):
         mock_fetch.return_value = sample_definition_result
-        result, example = def_module._fetch_definition_or_fallback_example(
+        result, example, synonyms, antonyms = def_module._fetch_definition_or_fallback_example(
             "contaminate", None, "en", None
         )
         assert result is sample_definition_result
         assert example is None
+        assert synonyms == []
+        assert antonyms == []
 
     @pytest.mark.parametrize("language", ["fr", "de", "ja", "es"])
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
     def test_falls_back_to_wiktionary_example_for_non_english(
-        self, mock_fetch, mock_wikt, language
+        self, mock_fetch, mock_wikt, mock_wn, language
     ):
         mock_fetch.return_value = None
         mock_wikt.return_value = [{"partOfSpeech": "Noun", "definitions": [
             {"definition": "d", "examples": ["Some native sentence."]},
         ]}]
-        result, example = def_module._fetch_definition_or_fallback_example(
+        mock_wn.return_value = ([], [])
+        result, example, _, _ = def_module._fetch_definition_or_fallback_example(
             "word", None, language, None
         )
         assert result is None
         assert example == "Some native sentence."
         mock_wikt.assert_called_once_with("word", language)
 
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
-    def test_no_wiktionary_attempt_for_english(self, mock_fetch, mock_wikt):
+    def test_no_wiktionary_attempt_for_english(self, mock_fetch, mock_wikt, mock_wn):
         mock_fetch.return_value = None
-        result, example = def_module._fetch_definition_or_fallback_example(
+        mock_wn.return_value = ([], [])
+        result, example, _, _ = def_module._fetch_definition_or_fallback_example(
             "word", None, "en", None
         )
         assert result is None
@@ -904,18 +910,46 @@ class TestFetchDefinitionOrFallbackExample:
         mock_wikt.assert_not_called()
 
     @pytest.mark.parametrize("language", ["fr", "de", "ja"])
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
     def test_returns_none_none_when_wiktionary_also_has_nothing(
-        self, mock_fetch, mock_wikt, language
+        self, mock_fetch, mock_wikt, mock_wn, language
     ):
         mock_fetch.return_value = None
         mock_wikt.return_value = None
-        result, example = def_module._fetch_definition_or_fallback_example(
+        mock_wn.return_value = ([], [])
+        result, example, _, _ = def_module._fetch_definition_or_fallback_example(
             "xyzqwerty", None, language, None
         )
         assert result is None
         assert example is None
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_falls_back_to_omw_synonyms_when_no_definition_anywhere(
+        self, mock_fetch, mock_wikt, mock_wn
+    ):
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        mock_wn.return_value = (["bonheur", "joie"], [])
+        result, example, synonyms, antonyms = def_module._fetch_definition_or_fallback_example(
+            "content", None, "fr", None
+        )
+        assert result is None
+        assert synonyms == ["bonheur", "joie"]
+        assert antonyms == []
+        mock_wn.assert_called_once_with("content", "fr")
+
+    @patch("pipeline.definition.fetch_definition")
+    def test_no_omw_lookup_when_definition_found(self, mock_fetch, sample_definition_result):
+        # fetch_definition() already ran its own OMW lookup internally when
+        # it found a definition -- this wrapper must not redo it.
+        mock_fetch.return_value = sample_definition_result
+        with patch("pipeline.definition._wordnet_synonyms_antonyms") as mock_wn:
+            def_module._fetch_definition_or_fallback_example("content", None, "fr", None)
+            mock_wn.assert_not_called()
 
 
 # ── fetch_definitions (batch) ─────────────────────────────────────────────────
@@ -942,26 +976,65 @@ class TestFetchDefinitions:
         assert "xyzqwerty" in result.not_found
 
     @pytest.mark.parametrize("language", ["fr", "de", "ja"])
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
     def test_not_found_examples_populated_from_wiktionary(
-        self, mock_fetch, mock_wikt, language
+        self, mock_fetch, mock_wikt, mock_wn, language
     ):
         mock_fetch.return_value = None
         mock_wikt.return_value = [{"partOfSpeech": "Noun", "definitions": [
             {"definition": "d", "examples": ["A native example."]},
         ]}]
+        mock_wn.return_value = ([], [])
         result = fetch_definitions(["word"], language=language)
         assert result.not_found == ["word"]
         assert result.not_found_examples == {"word": "A native example."}
 
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
-    def test_not_found_examples_empty_for_english(self, mock_fetch, mock_wikt):
+    def test_not_found_examples_empty_for_english(self, mock_fetch, mock_wikt, mock_wn):
         mock_fetch.return_value = None
+        mock_wn.return_value = ([], [])
         result = fetch_definitions(["xyzqwerty"], language="en")
         assert result.not_found_examples == {}
         mock_wikt.assert_not_called()
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_not_found_synonyms_populated_from_omw(self, mock_fetch, mock_wikt, mock_wn):
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        mock_wn.return_value = (["contenu", "satisfait"], [])
+        result = fetch_definitions(["content"], language="fr")
+        assert result.not_found == ["content"]
+        assert result.not_found_synonyms == {"content": ["contenu", "satisfait"]}
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_not_found_antonyms_populated_from_wordnet_english(
+        self, mock_fetch, mock_wikt, mock_wn
+    ):
+        mock_fetch.return_value = None
+        mock_wn.return_value = ([], ["discontented"])
+        result = fetch_definitions(["content"], language="en")
+        assert result.not_found_antonyms == {"content": ["discontented"]}
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_not_found_synonyms_empty_when_omw_has_nothing(
+        self, mock_fetch, mock_wikt, mock_wn
+    ):
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        mock_wn.return_value = ([], [])
+        result = fetch_definitions(["xyzqwerty"], language="fr")
+        assert result.not_found_synonyms == {}
+        assert result.not_found_antonyms == {}
 
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
@@ -1117,14 +1190,85 @@ class TestIntegration:
         assert "eau" in result.not_found_examples
         assert len(result.not_found_examples["eau"]) > 0
 
+# ── Open Multilingual Wordnet (ADR-008, issue #1) ────────────────────────────
+#
+# Real, unmocked nltk calls against the actual downloaded omw-2.0 package,
+# not integration-marked -- consistent with how the spaCy model download is
+# a base CI/setup requirement rather than something gated behind
+# @pytest.mark.integration. Both CI and `make spacy-model` download this
+# data as a prerequisite, so it's always present when these run.
+
+class TestOmwSynonymsAntonyms:
+
+    def test_real_french_word_returns_french_synonyms(self):
+        syns, ants = def_module._wordnet_synonyms_antonyms("maison", "fr")
+        assert len(syns) > 0
+        # Every returned word should look like French vocabulary, not the
+        # English gloss text OMW also carries -- a loose but meaningful
+        # sanity check that this is actually native-language data.
+        assert "home" not in syns and "house" not in syns
+
+    def test_real_spanish_word_returns_spanish_synonyms(self):
+        syns, ants = def_module._wordnet_synonyms_antonyms("casa", "es")
+        assert len(syns) > 0
+
+    def test_non_english_never_returns_antonyms(self):
+        # Confirmed live during ADR-008's research: antonym relations are
+        # not meaningfully present for non-English OMW lemmas (empty in
+        # every real case checked, and the one non-empty result pointed at
+        # an English antonym object). Not worth the risk of surfacing that,
+        # so antonyms are only ever attempted for English -- this must hold
+        # even for a word overwhelmingly likely to have antonyms in
+        # English ("grand"/large has "small").
+        syns, ants = def_module._wordnet_synonyms_antonyms("grand", "fr")
+        assert ants == []
+
+    def test_uncovered_language_returns_empty_without_lookup_attempt(self):
+        # German has no omw-2.0 data at all (see _OMW_LANGUAGE_CODES).
+        syns, ants = def_module._wordnet_synonyms_antonyms("Haus", "de")
+        assert syns == []
+        assert ants == []
+
+    def test_unknown_word_in_covered_language_returns_empty(self):
+        syns, ants = def_module._wordnet_synonyms_antonyms("xyzqwertyfr", "fr")
+        assert syns == []
+        assert ants == []
+
+    def test_english_path_unaffected_by_omw_addition(self):
+        # Regression guard: adding language-aware OMW support must not
+        # change the pre-existing English behavior, which doesn't pass a
+        # lang= argument to wn.synsets()/lemmas() at all.
+        syns, ants = def_module._wordnet_synonyms_antonyms("happy", "en")
+        assert len(syns) > 0
+
+    def test_ensure_omw_loaded_is_idempotent(self):
+        # Calling this many times must not re-run the (comparatively
+        # expensive) provenance scan every time.
+        assert def_module._ensure_omw_loaded() is True
+        assert def_module._ensure_omw_loaded() is True
+
+    def test_omw_language_codes_exclude_languages_confirmed_uncovered(self):
+        # Direct regression guard for the specific finding ADR-008 records:
+        # these five have no omw-2.0 data at all. If nltk's data ever
+        # changes and starts covering one of them, this test failing is
+        # the signal to revisit the mapping, not silently keep excluding it.
+        for code in ("de", "ru", "uk", "mk", "ko"):
+            assert code not in def_module._OMW_LANGUAGE_CODES
+
+
 # Append these to tests/test_definition.py
 # They cover the WordNet language-leak bug that Claude Code identified.
 
 class TestWordNetLanguageGuard:
     """
-    WordNet is English-only. These tests ensure it can never inject English
-    synonyms or antonyms into a non-English card, and that it uses the
-    original lemma rather than the translated query word.
+    WordNet's own gloss/antonym data is English-only, and Open Multilingual
+    Wordnet (ADR-008) only covers 18 of the other 23 supported languages
+    for synonyms (see _OMW_LANGUAGE_CODES). These tests ensure the right
+    language's data reaches the right card -- covered languages actually
+    get looked up, uncovered languages get nothing rather than a lookup
+    that can't succeed, antonyms are never attempted for non-English, and
+    every lookup uses the original transcript lemma/language rather than a
+    translated query word or the translation-mode definition language.
 
     Every mock setup below must let fetch_definition() actually find a
     definition. The original versions of these tests mocked every source
@@ -1139,17 +1283,15 @@ class TestWordNetLanguageGuard:
     """
 
     @patch("pipeline.definition._fetch_from_dictapi")
-    @patch("pipeline.definition._wordnet_synonyms_antonyms")
-    def test_wordnet_not_called_for_non_english_language(
+    @patch("pipeline.definition._wordnet_synonyms_antonyms", return_value=([], []))
+    def test_wordnet_called_for_omw_covered_language(
         self, mock_wn, mock_dict
     ):
-        """WordNet must not run when the transcript language is not English."""
-        # language == target_language == "fr" here, so both the native fetch
-        # and the definition fetch go through dictionaryapi.dev. Synonyms and
-        # antonyms are deliberately empty in this payload — if they were
-        # non-empty (like the shared dictapi_response fixture), the gate's
-        # emptiness check alone would skip WordNet regardless of language,
-        # and this test would pass even with the language check deleted.
+        """
+        Issue #1 / ADR-008: French has real Open Multilingual Wordnet data,
+        so _wordnet_synonyms_antonyms must now run for it, unlike before
+        OMW support existed.
+        """
         mock_dict.return_value = [{
             "word": "bonjour",
             "meanings": [{
@@ -1160,7 +1302,30 @@ class TestWordNetLanguageGuard:
             }],
         }]
         fetch_definition("bonjour", use_cache=False, language="fr")
-        mock_wn.assert_not_called()
+        mock_wn.assert_called_once_with("bonjour", "fr")
+
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_uncovered_language_gets_no_synonyms_end_to_end(self, mock_dict):
+        """
+        German has no Open Multilingual Wordnet data at all (see
+        _OMW_LANGUAGE_CODES / ADR-008). fetch_definition() still calls
+        _wordnet_synonyms_antonyms() for it (the language check moved
+        inside that function, see the two tests below), but the result
+        must come back with no synonyms, not a German word list that
+        doesn't exist anywhere.
+        """
+        mock_dict.return_value = [{
+            "word": "hallo",
+            "meanings": [{
+                "partOfSpeech": "interjection",
+                "definitions": [{"definition": "hello"}],
+                "synonyms": [],
+                "antonyms": [],
+            }],
+        }]
+        result = fetch_definition("hallo", use_cache=False, language="de")
+        assert result.synonyms == []
+        assert result.antonyms == []
 
     @patch("pipeline.definition._fetch_from_dictapi", return_value=None)
     @patch("pipeline.definition._fetch_from_mw")
@@ -1228,14 +1393,22 @@ class TestWordNetLanguageGuard:
 
     @patch("pipeline.definition._fetch_from_dictapi", return_value=None)
     @patch("pipeline.definition._fetch_from_mw")
-    @patch("pipeline.definition._wordnet_synonyms_antonyms",
-           return_value=(["english_syn"], ["english_ant"]))
-    def test_english_synonyms_never_leak_into_french_card(
+    @patch("pipeline.definition._wordnet_synonyms_antonyms", return_value=([], []))
+    def test_omw_receives_native_language_not_def_language(
         self, mock_wn, mock_mw, mock_dict, mw_response
     ):
         """
-        End-to-end guard: a French word with DEF_LANG=en must never end up
-        with English synonyms in its Synonyms field.
+        End-to-end guard, updated for OMW support (ADR-008): a French word
+        with DEF_LANG=en must query OMW with the NATIVE transcript language
+        ("fr"), never the translated definition-target language ("en") --
+        otherwise a French card could end up with English-only WordNet
+        synonyms/antonyms instead of French OMW ones, or none at all
+        instead of the French data OMW actually has for "bonjour".
+
+        Before OMW existed this case never called WordNet at all (it's
+        English-only), so there was nothing to get backwards. Now that
+        French is a covered language, the call happens for a different
+        reason and this guards that it uses the right language for it.
         """
         mock_mw.return_value = mw_response
         with patch("pipeline.translation.translate_word", return_value="hello"):
@@ -1247,6 +1420,4 @@ class TestWordNetLanguageGuard:
             "be found for this test to meaningfully check the WordNet "
             "language guard rather than passing vacuously."
         )
-        mock_wn.assert_not_called()
-        assert "english_syn" not in result.synonyms
-        assert "english_ant" not in result.antonyms
+        mock_wn.assert_called_once_with("bonjour", "fr")
