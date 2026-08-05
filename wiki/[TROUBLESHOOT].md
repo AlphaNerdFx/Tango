@@ -36,7 +36,7 @@ Replace `YourUsername` with your actual Windows username. This pins the model di
 
 ## Cards have no example sentences
 
-This usually means dictionaryapi.dev returned no examples for those words in the target language. Coverage varies by language. For English vocabulary, Merriam-Webster provides better example coverage. For other languages, many words will only have the transcript example sentence.
+This usually means dictionaryapi.dev returned no examples for those words in the target language. Coverage varies by language. For English vocabulary, Merriam-Webster provides better example coverage. For other languages, Tango falls back to Wiktionary for a native-language example sentence when dictionaryapi.dev has nothing (since v0.4.5), so many words will have a real dictionary example even without dictionaryapi.dev coverage. Some words genuinely have no entry on either source, in which case only the transcript sentence (if any) will be present.
 
 ## Same word appears multiple times as different cards
 

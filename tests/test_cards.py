@@ -6,6 +6,7 @@ All file I/O uses tmp_path fixtures — no files written to the real filesystem.
 Run unit tests:  pytest tests/test_cards.py -m "not integration"
 """
 
+import sqlite3
 import zipfile
 import time
 from pathlib import Path
@@ -294,6 +295,22 @@ class TestBuildFallbackNote:
         note = _build_fallback_note("obscure", "the obscure word appeared", _build_model(), VIDEO_ID)
         assert "obscure" in note.fields[5]
 
+    @pytest.mark.parametrize("language", ["fr", "de", "ja"])
+    def test_dict_example_fills_first_example_field(self, language):
+        # Issue #1: a Wiktionary-sourced example for a lemma with no
+        # definition anywhere still belongs in "1st Example Sentence",
+        # not just the transcript field. Not tied to any one language.
+        note = _build_fallback_note(
+            "word", "transcript sentence", _build_model(), VIDEO_ID,
+            language=language, dict_example="A native dictionary example.",
+        )
+        assert note.fields[3] == "A native dictionary example."
+        assert note.fields[5] == "transcript sentence"  # transcript field untouched
+
+    def test_dict_example_defaults_to_empty_string(self):
+        note = _build_fallback_note("obscure", "sentence", _build_model(), VIDEO_ID)
+        assert note.fields[3] == ""
+
     def test_no_definition_tag(self):
         note = _build_fallback_note("obscure", "sentence", _build_model(), VIDEO_ID)
         assert "no-definition" in note.tags
@@ -408,6 +425,38 @@ class TestBuildPackage:
         assert result.skipped_count == 1
         assert result.total_cards == 2  # NOT 3 — skipped words produce no card
 
+    # -- Wiktionary fallback examples (issue #1) ----------------------------
+
+    def test_dict_example_prevents_skip_with_no_transcript_match(self):
+        # "philosophy" has no snippet match (empty snippets dict), which
+        # alone would skip it entirely -- but a Wiktionary example is
+        # enough on its own to make the card worth keeping.
+        result = build_package(
+            VIDEO_ID, DECK_NAME, [], ["philosophy"], {},
+            not_found_examples={"philosophy": "Une phrase en français."},
+        )
+        assert result.skipped_count == 0
+        assert result.fallback_count == 1
+
+    def test_dict_example_reaches_the_real_exported_card(self, tmp_path):
+        result = build_package(
+            VIDEO_ID, DECK_NAME, [], ["philosophy"], {},
+            not_found_examples={"philosophy": "Une phrase en français."},
+        )
+        extract_dir = tmp_path / "extracted"
+        with zipfile.ZipFile(result.path) as z:
+            z.extractall(extract_dir)
+        conn = sqlite3.connect(extract_dir / "collection.anki2")
+        flds = conn.execute("SELECT flds FROM notes").fetchone()[0]
+        fields = flds.split("\x1f")  # Anki's field separator
+        assert fields[3] == "Une phrase en français."  # 1st Example Sentence
+
+    def test_no_not_found_examples_arg_behaves_as_before(self, sample_snippets):
+        # not_found_examples is optional -- omitting it must not break
+        # existing callers (review/backlog modes don't pass it).
+        result = build_package(VIDEO_ID, DECK_NAME, [], ["develop"], sample_snippets)
+        assert result.fallback_count == 1
+
     # -- Language threaded into GUIDs (issue #14) --------------------------
 
     def test_language_passed_to_build_note(self, sample_result):
@@ -422,7 +471,9 @@ class TestBuildPackage:
             cards_module, "_build_fallback_note", wraps=cards_module._build_fallback_note
         ) as spy:
             build_package(VIDEO_ID, DECK_NAME, [], ["develop"], sample_snippets, language="fr")
-            assert spy.call_args[0][-1] == "fr"
+            # language is the 5th positional arg; dict_example (issue #1) is
+            # the 6th and trailing one, so this can no longer check [-1].
+            assert spy.call_args[0][4] == "fr"
 
     # -- Deduplication guard (issue #2) -------------------------------------
     # definition.fetch_definitions() already dedupes its input lemma list

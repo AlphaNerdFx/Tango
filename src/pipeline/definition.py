@@ -7,6 +7,8 @@ returning a normalised result for each word.
 Source priority:
     1. Merriam-Webster Collegiate API (requires MW_API_KEY in environment)
     2. dictionaryapi.dev                (no auth required, fallback)
+    3. English Wiktionary's REST API    (no auth required, non-English
+                                          example sentences only, see #1)
 
 For each word the module returns:
     - definition       (first clean definition)
@@ -76,6 +78,7 @@ def _wordnet_synonyms_antonyms(word: str) -> tuple:
 
 from pipeline.config import (
     MW_API_KEY, MW_API_BASE, DICT_API_BASE,
+    WIKTIONARY_API_BASE, WIKTIONARY_USER_AGENT,
     API_TIMEOUT, DB_PATH, CIRCUIT_BREAKER_THRESHOLD, DEFINITION_FETCH_WORKERS,
 )
 
@@ -119,13 +122,21 @@ class DefinitionBatchResult:
     Result of processing a full lemma list.
 
     Attributes:
-        found:     DefinitionResult for each word successfully fetched.
-        not_found: Lemmas that returned no result from either source.
-        from_cache: Lemmas served from SQLite cache (no API call made).
+        found:              DefinitionResult for each word successfully fetched.
+        not_found:          Lemmas that returned no result from either source.
+        from_cache:         Lemmas served from SQLite cache (no API call made).
+        not_found_examples: Native-language example sentence from Wiktionary
+                             for a not_found lemma, keyed by lemma. Populated
+                             only for non-English lemmas where no definition
+                             was found anywhere but Wiktionary still had a
+                             usable example (issue #1) -- lets the resulting
+                             fallback card show a real dictionary example
+                             instead of just the transcript sentence.
     """
-    found:      list[DefinitionResult] = field(default_factory=list)
-    not_found:  list[str]              = field(default_factory=list)
-    from_cache: list[str]              = field(default_factory=list)
+    found:              list[DefinitionResult] = field(default_factory=list)
+    not_found:          list[str]              = field(default_factory=list)
+    from_cache:         list[str]              = field(default_factory=list)
+    not_found_examples: dict[str, str]         = field(default_factory=dict)
 
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
@@ -488,11 +499,12 @@ def _parse_dictapi_response(
 # the breaker on any source with genuinely sparse coverage for a language
 # after only a few words, even though the source itself is working fine.
 #
-# Keyed by source name, or "source:language" for dictionaryapi.dev, since a
-# single run's native-language and target-language dictionaryapi.dev calls
-# can have very different reliability (e.g. a French-to-English run: the
-# French native lookups may be failing consistently per issue #1 while the
-# English target lookups work fine — one must not trip the other's breaker).
+# Keyed by source name, or "source:language" for dictionaryapi.dev and
+# wiktionary, since a single run's native-language and target-language
+# dictionaryapi.dev calls can have very different reliability (e.g. a
+# French-to-English run: the French native lookups may be failing
+# consistently per issue #1 while the English target lookups work fine —
+# one must not trip the other's breaker).
 _circuit_failures: dict[str, int] = {}
 _circuit_tripped: set[str] = set()
 
@@ -612,6 +624,84 @@ def _fetch_from_dictapi(lemma: str, language: str = "en") -> Optional[list]:
     return None
 
 
+def _fetch_from_wiktionary(lemma: str, language: str) -> Optional[list]:
+    """
+    Call English Wiktionary's REST definition endpoint for `lemma` and
+    return the entry list for `language`'s section, or None.
+
+    Always queries en.wiktionary.org regardless of `language` — see the
+    WIKTIONARY_API_BASE comment in config.py for why. English is excluded
+    by the caller; this source exists to supplement non-English examples.
+
+    Returns the raw JSON list, or None if not found, rate-limited, the
+    circuit breaker for this language is tripped, or the call fails.
+    """
+    source = f"wiktionary:{language}"
+    if _circuit_is_tripped(source):
+        logger.debug("Circuit breaker open for '%s' — skipping '%s'.", source, lemma)
+        return None
+
+    url = f"{WIKTIONARY_API_BASE}/{lemma}"
+    try:
+        response = requests.get(
+            url, timeout=API_TIMEOUT, headers={"User-Agent": WIKTIONARY_USER_AGENT}
+        )
+        if response.status_code == 404:
+            logger.debug("Wiktionary: '%s' not found.", lemma)
+            _circuit_record_success(source)
+            return None
+        if response.status_code == 429:
+            # Rate-limited, not "word not found" -- the source is telling
+            # us to back off, which is exactly what the breaker is for.
+            logger.warning("Wiktionary rate-limited us fetching '%s'.", lemma)
+            _circuit_record_failure(source)
+            return None
+        response.raise_for_status()
+        data = response.json()
+        _circuit_record_success(source)
+        return data.get(language)
+    except requests.exceptions.HTTPError as exc:
+        logger.warning("Wiktionary HTTP error for '%s': %s", lemma, exc)
+        _circuit_record_failure(source)
+    except requests.exceptions.RequestException as exc:
+        logger.warning("Wiktionary request failed for '%s': %s", lemma, exc)
+        _circuit_record_failure(source)
+    except ValueError:
+        logger.warning("Wiktionary returned invalid JSON for '%s'.", lemma)
+        _circuit_record_failure(source)
+    return None
+
+
+def _parse_wiktionary_examples(data: list) -> list[str]:
+    """
+    Extract up to 2 native-language example sentences from a Wiktionary
+    language-section entry list.
+
+    Ignores the "definition" text entirely -- on en.wiktionary.org that
+    text is an English gloss of the foreign word (e.g. "chat" -> "cat"),
+    not a native-language definition, and CLAUDE.md 3.3 requires examples
+    to stay in the transcript language while saying nothing that permits
+    writing an English gloss into a native-language Definition field. Only
+    the "examples" array is native-language text (confirmed by manual
+    inspection: French entries return French usage sentences even though
+    their definition text is English).
+
+    Strips Wiktionary's HTML entirely (the matched word arrives wrapped in
+    <b> tags, definitions carry template-generated <span>/<a> markup) since
+    none of it is worth preserving in a plain-text example sentence.
+    """
+    examples: list[str] = []
+    for entry in data or []:
+        for defn in entry.get("definitions", []):
+            for ex in defn.get("examples") or []:
+                clean = re.sub(r"<[^>]+>", "", ex).strip()
+                if clean and clean not in examples:
+                    examples.append(clean)
+                if len(examples) >= 2:
+                    return examples
+    return examples
+
+
 # ── Single word fetch ─────────────────────────────────────────────────────────
 
 def fetch_definition(
@@ -627,6 +717,10 @@ def fetch_definition(
     Native source (always):
         dictionaryapi.dev/{language}/ -> examples, synonyms, antonyms
         These fields are always in the original transcript language.
+        If dictionaryapi.dev has no example sentence and language != "en",
+        English Wiktionary's REST API supplements the example only (see
+        issue #1 and ARCHITECTURE.md 8.13) -- it does not supply synonyms,
+        antonyms, or a native-language definition.
 
     Target source (definition + class only):
         If def_language == language or def_language is None:
@@ -678,6 +772,22 @@ def fetch_definition(
                     native_syns = nr2.synonyms
                     native_ants = nr2.antonyms
                     logger.debug("Accent-stripped fallback used for '%s'.", lemma)
+
+    # Supplement native-language examples from Wiktionary when
+    # dictionaryapi.dev came back with none. Non-English only -- English
+    # already gets solid example coverage from MW/dictionaryapi.dev, and
+    # Wiktionary has nothing to add for it here. See issue #1 and
+    # ARCHITECTURE.md 8.13 for why this exists and what it does not fix
+    # (it supplements examples only, not definitions, synonyms, or
+    # antonyms -- those remain limited for non-English languages).
+    if language != "en" and not native_ex1:
+        wikt_data = _fetch_from_wiktionary(lemma, language)
+        if wikt_data:
+            wikt_examples = _parse_wiktionary_examples(wikt_data)
+            if wikt_examples:
+                native_ex1 = wikt_examples[0]
+                native_ex2 = wikt_examples[1] if len(wikt_examples) > 1 else None
+                logger.debug("Wiktionary supplied example(s) for '%s'.", lemma)
 
     # ── Step 2: Resolve query word for definition source ──────────────────────
     query_lemma = lemma
@@ -785,6 +895,47 @@ def fetch_definition(
     return result
 
 
+def _fetch_definition_or_fallback_example(
+    lemma: str,
+    snippets: Optional[dict],
+    language: str,
+    def_language: Optional[str],
+) -> tuple[Optional[DefinitionResult], Optional[str]]:
+    """
+    Fetch one lemma's definition, falling back to a bare Wiktionary example
+    when no definition exists anywhere. One thread pool task per lemma in
+    fetch_definitions() runs this instead of fetch_definition() directly.
+
+    fetch_definition() already tries Wiktionary when dictionaryapi.dev finds
+    a definition but no example (a real but narrower case: some languages
+    have partial definition coverage with sparser examples). This function
+    covers the opposite, more common case for near-zero-coverage languages
+    like French (see issue #1): no definition anywhere, so
+    fetch_definition() returns None before ever using an example. Trying
+    Wiktionary again here, once fetch_definition() has already given up, is
+    what lets a French video's fallback cards carry a real dictionary
+    example instead of nothing but the transcript sentence.
+
+    Returns (result, None) when a definition was found. Returns
+    (None, example) when nothing was found but Wiktionary supplied a
+    native-language example for the fallback card. Returns (None, None)
+    when there is nothing at all.
+    """
+    result = fetch_definition(
+        lemma, snippets, use_cache=False, language=language, def_language=def_language,
+    )
+    if result:
+        return result, None
+
+    if language != "en":
+        wikt_data = _fetch_from_wiktionary(lemma, language)
+        if wikt_data:
+            examples = _parse_wiktionary_examples(wikt_data)
+            if examples:
+                return None, examples[0]
+
+    return None, None
+
 
 def fetch_definitions(
     lemmas: list[str],
@@ -818,7 +969,9 @@ def fetch_definitions(
                      that need strictly sequential, deterministic ordering.
 
     Returns:
-        DefinitionBatchResult with found, not_found, and from_cache lists.
+        DefinitionBatchResult with found, not_found, from_cache, and
+        not_found_examples (Wiktionary fallback examples for not_found
+        lemmas, see DefinitionBatchResult's docstring).
     """
     batch = DefinitionBatchResult()
 
@@ -852,14 +1005,16 @@ def fetch_definitions(
             to_fetch.append(lemma)
 
     # Concurrent live fetch for whatever's left, preserving first-appearance
-    # order in the output even though threads complete out of order.
+    # order in the output even though threads complete out of order. Each
+    # task also tries a Wiktionary fallback example when the lemma has no
+    # definition at all -- see _fetch_definition_or_fallback_example().
     if to_fetch:
-        results: dict[str, Optional[DefinitionResult]] = {}
+        results: dict[str, tuple[Optional[DefinitionResult], Optional[str]]] = {}
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_lemma = {
                 executor.submit(
-                    fetch_definition, lemma, snippets,
-                    False, language, def_language,
+                    _fetch_definition_or_fallback_example, lemma, snippets,
+                    language, def_language,
                 ): lemma
                 for lemma in to_fetch
             }
@@ -869,20 +1024,24 @@ def fetch_definitions(
                     results[lemma] = future.result()
                 except Exception:
                     logger.exception("Unexpected error fetching '%s'.", lemma)
-                    results[lemma] = None
+                    results[lemma] = (None, None)
 
         for lemma in to_fetch:
-            result = results[lemma]
+            result, fallback_example = results[lemma]
             if result:
                 batch.found.append(result)
             else:
                 batch.not_found.append(lemma)
+                if fallback_example:
+                    batch.not_found_examples[lemma] = fallback_example
 
     logger.info(
-        "Batch complete: %d found (%d cached) / %d not found",
+        "Batch complete: %d found (%d cached) / %d not found (%d with a "
+        "Wiktionary fallback example)",
         len(batch.found),
         len(batch.from_cache),
         len(batch.not_found),
+        len(batch.not_found_examples),
     )
 
     return batch

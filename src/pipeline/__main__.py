@@ -356,6 +356,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
             not_found=batch.not_found,
             snippets=snippets,
             language=language_code,
+            not_found_examples=batch.not_found_examples,
         )
     except ValueError as exc:
         _err(str(exc))

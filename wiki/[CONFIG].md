@@ -32,4 +32,4 @@ All configuration is done through the `.env` file in the project root. Copy `.en
 
 `OUTPUT_DIR` — Directory for generated .apkg files. Default is `output/` in the project root.
 
-`API_DELAY` — Seconds to wait between live API calls. Default is 0.5. Increase if you hit rate limits on dictionaryapi.dev.
+`DEFINITION_FETCH_WORKERS` — Maximum number of definition lookups running at once. Default is 5. Lower it if you hit rate limits on dictionaryapi.dev or Wiktionary, raise it if your network can take more.

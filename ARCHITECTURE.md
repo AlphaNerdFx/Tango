@@ -875,6 +875,54 @@ GUID of any note already in a user's collection, since within a single
 language nothing about the hash changed; it only prevents new collisions
 between different languages of the same video going forward. Closes #14.
 
+### 8.13 Wiktionary as a non-English example-sentence source
+
+Issue #1 established that dictionaryapi.dev has essentially no non-English
+coverage: 0 successes across 18 common French words in direct testing.
+Wiktionary's REST definition endpoint looked like an obvious fix, but its
+own per-language editions turned out not to work: `fr.wiktionary.org`,
+`de.wiktionary.org`, and `es.wiktionary.org` all returned `501 Internal
+error` for the same endpoint that works fine on `en.wiktionary.org`.
+
+Querying the English edition for a foreign word works anyway. An English
+Wiktionary page carries every language that word appears in as its own
+section in the response, keyed by language code, so `en.wiktionary.org`'s
+entry for `chat` includes a real `fr` section with genuine French example
+sentences, even though the site itself is the English edition. The
+`definition` text in that section is an English gloss of the word (`chat`
+-> `cat`), not a French definition, so `_parse_wiktionary_examples` reads
+only the `examples` array and discards the rest; CLAUDE.md 3.3 does not
+allow an English gloss into a native-mode Definition field.
+
+This closes only the example-sentence half of issue #1. Definitions, part
+of speech, synonyms, and antonyms for non-English languages are unaffected
+since this endpoint provides none of them. A first implementation wired
+Wiktionary into `fetch_definition()`'s existing "definition found but no
+example" branch and looked correct in isolation and under mocked tests, but
+a live run against issue #1's original French video showed zero change: 0
+found / 209 not found before and after, because `fetch_definition()`
+returns `None` before that branch is ever reached when there is no
+definition at all, which is the common case for a near-zero-coverage
+language, not the rare one. `_fetch_definition_or_fallback_example()` is
+the actual fix: it wraps `fetch_definition()` per lemma in the thread pool,
+and when there is no definition anywhere, tries Wiktionary once more and
+stores any example in `DefinitionBatchResult.not_found_examples`, keyed by
+lemma, for the resulting fallback card to use.
+
+Wikimedia enforces anonymous rate limits on this endpoint -- a burst of
+about a dozen rapid manual requests during testing hit a `429` -- so a 429
+counts as a circuit-breaker failure, distinct from a 404 which means the
+word genuinely has no entry. In the live verification run, at 5 concurrent
+workers with MW and dictionaryapi.dev calls interleaved between Wiktionary
+ones, no 429 was ever hit; the pipeline's natural pacing turned out to stay
+under Wikimedia's limit without any extra throttling.
+
+Verified against the same French video used in issue #1's original report:
+words dropped for having no definition, no dictionary example, and no
+transcript match went from 30 to 9, and 111 of the resulting 200 fallback
+cards carry a real French example sentence that was previously blank.
+Closes the example-sentence portion of #1.
+
 ---
 
 ## 9. Known architectural gaps
@@ -882,21 +930,28 @@ between different languages of the same video going forward. Closes #14.
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
 
 Documented in GitHub issue #1 with curl evidence. The dual-source architecture
-in ADR-005 is correct as designed but produces empty example, synonym, and
-antonym fields for every non-English language.
+in ADR-005 is correct as designed but produces essentially no definitions for
+non-English languages, since dictionaryapi.dev's coverage for them is
+near-zero. Section 8.13 closes the example-sentence half of this via
+Wiktionary; definitions, part of speech, synonyms, and antonyms are
+unaffected by that fix and remain this gap's open remainder.
 
-A verification run against a French video produced 167 words with 0 definitions
-found, 142 fallback cards, 0 standard cards.
+A verification run against a French video produced 209 words with 0
+definitions found either before or after the Wiktionary fix (fetch_definition
+still requires a real definition to return a "found" result), but fallback
+cards improved from 0 to 111 (of 200) carrying a real dictionary example
+instead of an empty field, and dropped words (nothing to show at all) fell
+from 30 to 9.
 
-Fixing this requires per-language dictionary sources. Candidates considered:
-Wiktionary raw API, PONS (12 languages, 1000 requests per month, bilingual
-pairs only). Needs its own ADR.
+Fixing definitions, synonyms, and antonyms requires per-language dictionary
+sources (Larousse for French, DWDS for German, RAE for Spanish, or similar).
+Needs its own ADR given the per-language maintenance burden.
 
 ---
 
 ## 10. Test architecture
 
-480 unit tests across nine test files, 19 more marked integration and
+524 unit tests across nine test files, 22 more marked integration and
 deselected by default. All run without network, Anki, or installed models.
 Integration tests use `@pytest.mark.integration` and are excluded by the
 default `addopts` in `pyproject.toml`.

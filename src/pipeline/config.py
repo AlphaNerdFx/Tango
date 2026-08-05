@@ -77,6 +77,23 @@ MW_API_BASE: str = "https://www.dictionaryapi.com/api/v3/references/collegiate/j
 # dictionaryapi.dev — fallback, no key required
 DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
 
+# English Wiktionary's REST definition endpoint — supplements native-language
+# example sentences for non-English lemmas when dictionaryapi.dev has none
+# (see issue #1). Only the English-language edition's REST endpoint works
+# reliably; other language editions returned 501 in testing. Query it with
+# the foreign word anyway: an English Wiktionary page carries every language
+# a word appears in as its own section, keyed by language code, so a French
+# word's page still has an "fr" section with French example sentences even
+# though the site itself is the English edition. No key required, but
+# Wikimedia does enforce anonymous rate limits (a 429 during a burst of
+# ~12 requests was observed in testing) and requests an identifying
+# User-Agent — see https://meta.wikimedia.org/wiki/User-Agent_policy.
+WIKTIONARY_API_BASE: str = "https://en.wiktionary.org/api/rest_v1/page/definition"
+WIKTIONARY_USER_AGENT: str = os.getenv(
+    "WIKTIONARY_USER_AGENT",
+    "Tango-pipeline/0.4 (https://github.com/AlphaNerdFx/Tango)",
+)
+
 # Seconds to wait for a definition API response before timing out
 API_TIMEOUT: float = float(os.getenv("API_TIMEOUT", "8"))
 

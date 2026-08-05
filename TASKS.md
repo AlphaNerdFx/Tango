@@ -193,11 +193,50 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       after the functional fixes so the diff is not mixed with behaviour
       changes.
 
-- [ ] **Additional dictionary sources for non-English languages.**
-      Requires its own ADR. Candidates: Wiktionary raw MediaWiki API (not the
-      REST definition endpoint, which is English-only and experimental),
-      Larousse for French, DWDS for German, RAE for Spanish. Accept that some
-      languages will remain transcript-only.
+- [x] **Additional dictionary source for non-English example sentences.** Closes #1's
+      example-sentence gap (partially -- see below), also closed #14 along the way.
+      The earlier assumption that Wiktionary's REST definition endpoint was
+      "English-only and experimental" turned out to only be half right: the
+      endpoint itself only works reliably against the English Wiktionary
+      edition (French, German, and Spanish editions all returned 501 in
+      testing), but querying the ENGLISH edition for a foreign word still
+      works, because an English Wiktionary page carries every language that
+      word appears in as its own section. A French word's page has a real
+      "fr" section with genuine French example sentences, even though the
+      site itself is the English edition.
+
+      This only fixes example sentences, not definitions, part of speech,
+      synonyms, or antonyms. The endpoint's "definition" text is an English
+      gloss (`chat` -> `cat`), which CLAUDE.md 3.3 does not permit writing
+      into a native-mode Definition field, so that text is discarded; only
+      the `examples` array is used. dictionaryapi.dev's near-zero coverage
+      for non-English definitions (issue #1's core finding) is unchanged.
+
+      Wired into `fetch_definitions()` two ways: `fetch_definition()` tries
+      Wiktionary when a definition IS found but has no example (a real but
+      narrow case), and the new `_fetch_definition_or_fallback_example()`
+      wrapper tries it again when NO definition is found anywhere, storing
+      the result in `DefinitionBatchResult.not_found_examples` so the
+      resulting fallback card gets a real dictionary example instead of an
+      empty field. The second path is the one that matters in practice --
+      near-zero-coverage languages fail with "no definition" far more often
+      than "definition found, example missing."
+
+      Live-verified against the same French video from issue #1's original
+      report (`2yHn8uc5_-4`): dropped words (no definition, no dictionary
+      example, no transcript match) went from 30 to 9, and of the 200
+      resulting fallback cards, 111 now carry a real French example sentence
+      that previously would have been blank. No Wiktionary rate limiting was
+      observed during the real run despite earlier manual testing hitting a
+      429 after roughly a dozen rapid requests -- the pipeline's natural
+      pacing (MW and dictionaryapi.dev calls interleaved with Wiktionary
+      ones, 5 concurrent workers) turned out not to trigger it in practice.
+
+      A genuine per-language dictionary source (Larousse for French, DWDS
+      for German, RAE for Spanish) remains the only way to fix definitions,
+      part of speech, synonyms, and antonyms for non-English languages, and
+      would need its own ADR given the per-language maintenance burden.
+      Not attempted here.
 
 - [ ] **Separate synonym and antonym API source.**
       Antonyms are empty on roughly 99 percent of cards. WordNet helps for

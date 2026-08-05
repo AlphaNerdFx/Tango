@@ -315,14 +315,26 @@ def _build_fallback_note(
     model: genanki.Model,
     video_id: str,
     language: str = "en",
+    dict_example: Optional[str] = None,
 ) -> genanki.Note:
+    """
+    Build a fallback card for a lemma with no definition from any source.
+
+    dict_example is an optional native-language example sentence sourced
+    from Wiktionary (see definition.DefinitionBatchResult.not_found_examples
+    and issue #1) for languages where dictionaryapi.dev has essentially no
+    coverage. When present it fills the "1st Example Sentence" field, which
+    otherwise stays empty for fallback cards -- the only example a fallback
+    card would have without it is whatever transcript sentence contained
+    the word, if any.
+    """
     return genanki.Note(
         model=model,
         fields=[
             lemma.capitalize(),                               # Word
             "",                                              # Class
             "No definition found",                           # Definition
-            "",                                              # 1st Example Sentence
+            dict_example or "",                               # 1st Example Sentence
             "",                                              # 2nd Example Sentence
             example_transcript or "",                        # Example from Youtube Video
             "",                                              # Synonyms
@@ -383,6 +395,7 @@ def build_package(
     not_found: list[str],
     snippets: Optional[dict] = None,
     language: str = "en",
+    not_found_examples: Optional[dict] = None,
 ) -> PackageResult:
     """
     Build an Anki .apkg package from definition results.
@@ -399,6 +412,11 @@ def build_package(
                     note's GUID (issue #14) so the same video processed in
                     two languages doesn't collide on a lemma that happens
                     to be spelled the same in both.
+        not_found_examples: definition.DefinitionBatchResult.not_found_examples
+                    -- Wiktionary example sentences for not_found lemmas,
+                    keyed by lemma (issue #1). A fallback card whose lemma
+                    has an entry here gets a real dictionary example instead
+                    of an empty "1st Example Sentence" field.
 
     Returns:
         PackageResult with the output path and accurate card counts.
@@ -445,14 +463,20 @@ def build_package(
             logger.debug("Skipping duplicate fallback note for '%s'.", lemma)
             continue
         transcript_example = _find_in_snippets(lemma, snippets) if snippets else None
-        if not transcript_example:
+        dict_example = (not_found_examples or {}).get(lemma)
+        if not transcript_example and not dict_example:
             logger.warning(
-                "Skipping '%s' — no definition and no transcript example.", lemma
+                "Skipping '%s' — no definition, no dictionary example, and "
+                "no transcript example.", lemma
             )
             skipped_count += 1
             continue
         added_lemmas.add(key)
-        deck.add_note(_build_fallback_note(lemma, transcript_example, model, video_id, language))
+        deck.add_note(
+            _build_fallback_note(
+                lemma, transcript_example, model, video_id, language, dict_example
+            )
+        )
         fallback_count += 1
         logger.debug("Fallback card built: '%s'", lemma)
 

@@ -424,6 +424,122 @@ class TestParseDictapiResponse:
         assert len(result.synonyms) <= 5
 
 
+# ── Wiktionary (issue #1) ────────────────────────────────────────────────────
+
+class TestParseWiktionaryExamples:
+
+    def test_extracts_example_sentences(self):
+        data = [
+            {
+                "partOfSpeech": "Noun",
+                "definitions": [
+                    {"definition": "water", "examples": ["Il boit de l'<b>eau</b>."]},
+                ],
+            }
+        ]
+        assert def_module._parse_wiktionary_examples(data) == ["Il boit de l'eau."]
+
+    def test_strips_html_tags(self):
+        data = [{"partOfSpeech": "Noun", "definitions": [
+            {"definition": "d", "examples": ['<span class="x">Le</span> <b>chat</b> dort.']},
+        ]}]
+        assert def_module._parse_wiktionary_examples(data) == ["Le chat dort."]
+
+    def test_caps_at_two_examples_across_entries(self):
+        data = [
+            {"partOfSpeech": "Noun", "definitions": [
+                {"definition": "d1", "examples": ["Un.", "Deux.", "Trois."]},
+            ]},
+            {"partOfSpeech": "Verb", "definitions": [
+                {"definition": "d2", "examples": ["Quatre."]},
+            ]},
+        ]
+        assert def_module._parse_wiktionary_examples(data) == ["Un.", "Deux."]
+
+    def test_no_examples_returns_empty_list(self):
+        data = [{"partOfSpeech": "Noun", "definitions": [{"definition": "d"}]}]
+        assert def_module._parse_wiktionary_examples(data) == []
+
+    def test_empty_or_none_data_returns_empty_list(self):
+        assert def_module._parse_wiktionary_examples([]) == []
+        assert def_module._parse_wiktionary_examples(None) == []
+
+    def test_deduplicates_identical_examples_across_entries(self):
+        data = [
+            {"partOfSpeech": "Noun", "definitions": [{"definition": "d1", "examples": ["Le chat dort."]}]},
+            {"partOfSpeech": "Verb", "definitions": [{"definition": "d2", "examples": ["Le chat dort."]}]},
+        ]
+        assert def_module._parse_wiktionary_examples(data) == ["Le chat dort."]
+
+
+class TestFetchFromWiktionary:
+
+    def test_returns_language_section_on_success(self, monkeypatch):
+        # language is just a dict key into the response -- this function is
+        # not tied to any one language. Picking Japanese here deliberately,
+        # since this project supports far more than French/English.
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        ja_section = [{"partOfSpeech": "Noun", "definitions": []}]
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(200, json_data={"ja": ja_section, "en": []})
+            result = def_module._fetch_from_wiktionary("mizu", "ja")
+        assert result == ja_section
+
+    def test_missing_language_key_returns_none(self, monkeypatch):
+        # The word has a Wiktionary page but no section for this language.
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(200, json_data={"en": []})
+            result = def_module._fetch_from_wiktionary("word", "de")
+        assert result is None
+
+    def test_404_returns_none_and_does_not_trip_breaker(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(404)
+            for _ in range(10):
+                def_module._fetch_from_wiktionary("xyzqwerty", "fr")
+        assert not def_module._circuit_is_tripped("wiktionary:fr")
+
+    def test_429_counts_as_a_failure(self, monkeypatch):
+        # A 429 means the source is telling us to back off, unlike a 404
+        # which means the source is healthy and simply lacks the word.
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(429)
+            for _ in range(3):
+                def_module._fetch_from_wiktionary("word", "fr")
+        assert def_module._circuit_is_tripped("wiktionary:fr")
+
+    def test_tripped_breaker_skips_network_call(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(429)
+            for _ in range(3):
+                def_module._fetch_from_wiktionary("word", "fr")
+            assert mock_get.call_count == 3
+            def_module._fetch_from_wiktionary("another_word", "fr")
+            assert mock_get.call_count == 3
+
+    def test_breaker_independent_per_language(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(429)
+            for _ in range(3):
+                def_module._fetch_from_wiktionary("word", "fr")
+        assert def_module._circuit_is_tripped("wiktionary:fr")
+        assert not def_module._circuit_is_tripped("wiktionary:de")
+
+    def test_sends_identifying_user_agent(self, monkeypatch):
+        monkeypatch.setattr(def_module, "CIRCUIT_BREAKER_THRESHOLD", 3)
+        with patch("pipeline.definition.requests.get") as mock_get:
+            mock_get.return_value = _mock_response(200, json_data={"es": []})
+            def_module._fetch_from_wiktionary("word", "es")
+            _, kwargs = mock_get.call_args
+            assert "User-Agent" in kwargs["headers"]
+            assert kwargs["headers"]["User-Agent"]
+
+
 # ── SQLite cache ──────────────────────────────────────────────────────────────
 
 class TestCache:
@@ -628,6 +744,129 @@ class TestFetchDefinition:
         cached = _cache_get("contaminate::en")
         assert cached is not None
 
+    # -- Wiktionary supplementation (issue #1) -----------------------------
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition._fetch_from_mw")
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_wiktionary_supplements_missing_example_for_non_english(
+        self, mock_dict, mock_mw, mock_wikt, sample_snippets
+    ):
+        # German, not French -- this pipeline supports 24+ languages and
+        # the supplementation logic is not scoped to any one of them.
+        mock_mw.return_value = None
+        mock_dict.return_value = [{
+            "word": "wasser", "meanings": [{
+                "partOfSpeech": "noun",
+                "definitions": [{"definition": "water", "synonyms": [], "antonyms": []}],
+                "synonyms": [], "antonyms": [],
+            }],
+        }]
+        mock_wikt.return_value = [{"partOfSpeech": "Noun", "definitions": [
+            {"definition": "water", "examples": ["Wasser lassen"]},
+        ]}]
+        result = fetch_definition("wasser", sample_snippets, use_cache=False, language="de")
+        assert result.example_dict == "Wasser lassen"
+        mock_wikt.assert_called_once_with("wasser", "de")
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition._fetch_from_mw")
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_wiktionary_not_called_when_dictapi_already_has_an_example(
+        self, mock_dict, mock_mw, mock_wikt, sample_snippets
+    ):
+        mock_mw.return_value = None
+        mock_dict.return_value = [{
+            "word": "eau", "meanings": [{
+                "partOfSpeech": "noun",
+                "definitions": [{
+                    "definition": "water", "example": "L'eau est froide.",
+                    "synonyms": [], "antonyms": [],
+                }],
+                "synonyms": [], "antonyms": [],
+            }],
+        }]
+        fetch_definition("eau", sample_snippets, use_cache=False, language="fr")
+        mock_wikt.assert_not_called()
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition._fetch_from_mw")
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_wiktionary_not_called_for_english(
+        self, mock_dict, mock_mw, mock_wikt, mw_response, sample_snippets
+    ):
+        # English already has solid MW/dictionaryapi.dev coverage; Wiktionary
+        # exists to supplement non-English examples only.
+        mock_mw.return_value = mw_response
+        mock_dict.return_value = None
+        fetch_definition("contaminate", sample_snippets, use_cache=False, language="en")
+        mock_wikt.assert_not_called()
+
+
+# ── _fetch_definition_or_fallback_example ───────────────────────────────────
+#
+# Covers the actual failure mode issue #1 documented: a language where
+# dictionaryapi.dev has no definition at all, not just a missing example.
+# fetch_definition() bails out via "if not definition: return None" before
+# ever using a Wiktionary example in that case, so the Wiktionary
+# supplementation exercised in TestFetchDefinition above never fires for
+# it. This wrapper is what fetch_definitions() actually submits to the
+# thread pool per lemma, and is what makes a real French run's fallback
+# cards carry a dictionary example instead of nothing.
+
+class TestFetchDefinitionOrFallbackExample:
+
+    @patch("pipeline.definition.fetch_definition")
+    def test_returns_result_when_definition_found(self, mock_fetch, sample_definition_result):
+        mock_fetch.return_value = sample_definition_result
+        result, example = def_module._fetch_definition_or_fallback_example(
+            "contaminate", None, "en", None
+        )
+        assert result is sample_definition_result
+        assert example is None
+
+    @pytest.mark.parametrize("language", ["fr", "de", "ja", "es"])
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_falls_back_to_wiktionary_example_for_non_english(
+        self, mock_fetch, mock_wikt, language
+    ):
+        mock_fetch.return_value = None
+        mock_wikt.return_value = [{"partOfSpeech": "Noun", "definitions": [
+            {"definition": "d", "examples": ["Some native sentence."]},
+        ]}]
+        result, example = def_module._fetch_definition_or_fallback_example(
+            "word", None, language, None
+        )
+        assert result is None
+        assert example == "Some native sentence."
+        mock_wikt.assert_called_once_with("word", language)
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_no_wiktionary_attempt_for_english(self, mock_fetch, mock_wikt):
+        mock_fetch.return_value = None
+        result, example = def_module._fetch_definition_or_fallback_example(
+            "word", None, "en", None
+        )
+        assert result is None
+        assert example is None
+        mock_wikt.assert_not_called()
+
+    @pytest.mark.parametrize("language", ["fr", "de", "ja"])
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_returns_none_none_when_wiktionary_also_has_nothing(
+        self, mock_fetch, mock_wikt, language
+    ):
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        result, example = def_module._fetch_definition_or_fallback_example(
+            "xyzqwerty", None, language, None
+        )
+        assert result is None
+        assert example is None
+
 
 # ── fetch_definitions (batch) ─────────────────────────────────────────────────
 
@@ -651,6 +890,39 @@ class TestFetchDefinitions:
         mock_fetch.return_value = None
         result = fetch_definitions(["xyzqwerty"])
         assert "xyzqwerty" in result.not_found
+
+    @pytest.mark.parametrize("language", ["fr", "de", "ja"])
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_not_found_examples_populated_from_wiktionary(
+        self, mock_fetch, mock_wikt, language
+    ):
+        mock_fetch.return_value = None
+        mock_wikt.return_value = [{"partOfSpeech": "Noun", "definitions": [
+            {"definition": "d", "examples": ["A native example."]},
+        ]}]
+        result = fetch_definitions(["word"], language=language)
+        assert result.not_found == ["word"]
+        assert result.not_found_examples == {"word": "A native example."}
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_not_found_examples_empty_for_english(self, mock_fetch, mock_wikt):
+        mock_fetch.return_value = None
+        result = fetch_definitions(["xyzqwerty"], language="en")
+        assert result.not_found_examples == {}
+        mock_wikt.assert_not_called()
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_not_found_examples_omits_lemmas_wiktionary_could_not_help(
+        self, mock_fetch, mock_wikt
+    ):
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        result = fetch_definitions(["xyzqwerty"], language="fr")
+        assert result.not_found == ["xyzqwerty"]
+        assert result.not_found_examples == {}
 
     @patch("pipeline.definition.fetch_definition")
     def test_processes_all_lemmas(self, mock_fetch, sample_definition_result):
@@ -765,6 +1037,35 @@ class TestIntegration:
     def test_batch_real_words(self, sample_snippets):
         result = fetch_definitions(["water", "develop"], sample_snippets)
         assert len(result.found) > 0
+
+    def test_wiktionary_real_french_word_has_example(self):
+        # "eau" was confirmed by hand to have a French example section on
+        # en.wiktionary.org during the issue #1 research pass.
+        data = def_module._fetch_from_wiktionary("eau", "fr")
+        assert data is not None
+        examples = def_module._parse_wiktionary_examples(data)
+        assert len(examples) > 0
+        assert "eau" in examples[0].lower()
+
+    def test_wiktionary_real_german_word_has_example(self):
+        # This source is not French-specific -- it works for any language
+        # with a Wiktionary presence. "Wasser" confirmed by hand to have a
+        # German example section on en.wiktionary.org.
+        data = def_module._fetch_from_wiktionary("Wasser", "de")
+        assert data is not None
+        examples = def_module._parse_wiktionary_examples(data)
+        assert len(examples) > 0
+
+    def test_real_french_word_with_no_dictapi_coverage_gets_fallback_example(self):
+        # This is the actual bug fixed for issue #1: dictionaryapi.dev has
+        # no French coverage for "eau" (confirmed 404/502 in issue #1's own
+        # investigation), so fetch_definitions() must put it in not_found,
+        # but a real Wiktionary example should still show up in
+        # not_found_examples for the resulting fallback card.
+        result = fetch_definitions(["eau"], language="fr")
+        assert "eau" in result.not_found
+        assert "eau" in result.not_found_examples
+        assert len(result.not_found_examples["eau"]) > 0
 
 # Append these to tests/test_definition.py
 # They cover the WordNet language-leak bug that Claude Code identified.
