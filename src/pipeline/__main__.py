@@ -492,6 +492,73 @@ def _run_backlog(args: argparse.Namespace, session: Session) -> None:
     _prompt_import(result.path)
 
 
+# ── Mode: setup wizard ────────────────────────────────────────────────────────
+
+_ENV_PATH = Path(".env")
+_ENV_EXAMPLE_PATH = Path(".env.example")
+
+
+def _run_setup_wizard() -> None:
+    """
+    Guided .env setup for non-technical users (issue #9).
+
+    Nothing this wizard touches is required to run the pipeline --
+    dictionaryapi.dev works with zero configuration. This exists to make
+    the one genuinely useful optional step, a free Merriam-Webster API key
+    for better English definitions and examples, discoverable without
+    hand-editing a file, and to correct the misconception (an older README
+    table listed it as "Required") that it's needed at all.
+    """
+    from dotenv import get_key, set_key
+
+    _rule()
+    print(f"  {BOLD}Tango setup{RESET}")
+    _rule()
+
+    if not _ENV_PATH.exists():
+        if _ENV_EXAMPLE_PATH.exists():
+            _ENV_PATH.write_text(_ENV_EXAMPLE_PATH.read_text())
+            _ok(".env created from .env.example.")
+        else:
+            _ENV_PATH.touch()
+            _ok(".env created (empty).")
+    else:
+        _info(".env already exists. This only adds a Merriam-Webster key; "
+              "everything else you've set stays untouched.")
+
+    current_key = get_key(str(_ENV_PATH), "MW_API_KEY")
+    if current_key:
+        masked = f"...{current_key[-4:]}" if len(current_key) > 4 else "****"
+        _ok(f"MW_API_KEY is already set ({masked}).")
+        _info("Delete that line in .env and rerun this to change it.")
+        return
+
+    print()
+    print("  Merriam-Webster gives better English definitions and example")
+    print("  sentences than the free fallback. It's entirely optional --")
+    print("  dictionaryapi.dev is used automatically with no key at all.")
+    print()
+    answer = input("  Add a free Merriam-Webster API key now? [y/N]: ").strip().lower()
+
+    if answer != "y":
+        _info("Skipping. dictionaryapi.dev will be used for definitions.")
+        return
+
+    print()
+    print("  Register for a free key (1000 requests/day) at:")
+    print(f"  {CYAN}https://dictionaryapi.com/register/index.htm{RESET}")
+    print()
+    key = input("  Paste your Merriam-Webster API key: ").strip()
+
+    if not key or any(ch.isspace() for ch in key):
+        _err("That doesn't look like a valid key (empty, or contains whitespace).")
+        _info("Run 'make setup' again once you have it, or edit .env directly.")
+        sys.exit(1)
+
+    set_key(str(_ENV_PATH), "MW_API_KEY", key)
+    _ok("MW_API_KEY saved to .env.")
+
+
 # ── Argument parser ───────────────────────────────────────────────────────────
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -506,6 +573,7 @@ examples:
   python -m pipeline --process-backlog --deck "Language::English"
   python -m pipeline --video-id LV_NoD2M54w --deck "Language::English" --verbose
   python -m pipeline --video-id LV_NoD2M54w --deck "Language::English" --force
+  python -m pipeline --setup
         """,
     )
 
@@ -559,6 +627,12 @@ examples:
         help="Print all supported language names and their BCP-47 codes, then exit.",
     )
     parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Guided .env setup for an optional Merriam-Webster API key, then exit. "
+             "Nothing it configures is required to run the pipeline.",
+    )
+    parser.add_argument(
         "--deck",
         metavar="DECK_NAME",
         help='Target Anki deck. Supports sub-decks: "Language::English::Vocabulary". '
@@ -589,14 +663,12 @@ def main() -> None:
     _setup_logging(args.verbose)
     session = Session()
 
-    # Validate: default mode requires --video-id
-    if not args.review and not args.process_backlog:
-        if not args.video_id:
-            _err("--video-id is required for the default pipeline mode.")
-            _info("Run 'python -m pipeline --help' for usage.")
-            sys.exit(1)
+    # Standalone informational/setup modes exit before the --video-id
+    # requirement below -- neither one processes a video.
+    if args.setup:
+        _run_setup_wizard()
+        sys.exit(0)
 
-    # Handle --list-languages before anything else
     if args.list_languages:
         langs = list_supported_languages()
         print()
@@ -606,6 +678,13 @@ def main() -> None:
             print(f"    {code:<10} {name}")
         print()
         sys.exit(0)
+
+    # Validate: default mode requires --video-id
+    if not args.review and not args.process_backlog:
+        if not args.video_id:
+            _err("--video-id is required for the default pipeline mode.")
+            _info("Run 'python -m pipeline --help' for usage.")
+            sys.exit(1)
 
     # Dispatch
     if args.review:

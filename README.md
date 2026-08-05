@@ -50,16 +50,21 @@ Then import the generated .apkg from `output/` into Anki.
 
 ## Configuration
 
-All configuration lives in `.env`. Copy `.env.example` and fill in:
+All configuration lives in `.env`. Copy `.env.example` (or run `make setup` for
+a guided walkthrough) and fill in what you need. Nothing here is required to
+run the pipeline:
 
 | Variable | Required | Description |
 |---|---|---|
-| MW_API_KEY | Yes | [Merriam-Webster API key](https://dictionaryapi.com/register/index.htm) (free, 1000 requests/day) |
+| MW_API_KEY | No | [Merriam-Webster API key](https://dictionaryapi.com/register/index.htm) (free, 1000 requests/day). Improves English definitions; dictionaryapi.dev is used automatically without one |
 | WEBSHARE_USERNAME | No | Webshare proxy username, needed if YouTube rate-limits your IP |
 | WEBSHARE_PASSWORD | No | Webshare proxy password |
 | ANKI_HOST | No | AnkiConnect URL. WSL users: set to your Windows host IP |
-| DEF_LANG | No | Target language for definitions (e.g. en). Defaults to transcript language |
 | LIBRETRANSLATE_URL | No | Local LibreTranslate server URL for translation mode |
+
+`LANGUAGE` and `DEF_LANG` are not `.env` variables. They're `make run` command
+arguments (`make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr DEF_LANG=en`), see
+below. Setting them in `.env` has no effect.
 
 WSL users: AnkiConnect must bind to 0.0.0.0 instead of 127.0.0.1. Change this in Anki -> Tools -> Add-ons -> AnkiConnect -> Config. Set ANKI_HOST to your WSL gateway IP (find it with: ip route | grep default).
 

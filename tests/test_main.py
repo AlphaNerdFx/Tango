@@ -13,10 +13,12 @@ from unittest.mock import MagicMock, patch, call
 
 import pytest
 
+import pipeline.__main__ as main_module
 from pipeline.__main__ import (
     _build_parser,
     _prompt_import,
     _print_summary,
+    _run_setup_wizard,
     _select_deck,
     main,
 )
@@ -89,6 +91,22 @@ class TestArgumentParser:
         args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME])
         assert args.force is False
 
+    def test_setup_flag(self, parser):
+        args = parser.parse_args(["--setup"])
+        assert args.setup is True
+
+    def test_setup_default_false(self, parser):
+        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME])
+        assert args.setup is False
+
+    def test_setup_does_not_require_video_id(self, parser):
+        # --setup and --list-languages are standalone modes -- neither
+        # processes a video, so argparse itself must not require --video-id
+        # for them (a --video-id is required error is a main() concern for
+        # the default mode, not something argparse enforces here).
+        args = parser.parse_args(["--setup"])
+        assert args.video_id is None
+
 class TestMainDispatch:
 
     def test_missing_video_id_exits(self):
@@ -114,6 +132,27 @@ class TestMainDispatch:
         with patch("sys.argv", ["pipeline", "--process-backlog", "--deck", DECK_NAME]):
             main()
         mock_run.assert_called_once()
+
+    @patch("pipeline.__main__._run_setup_wizard")
+    def test_setup_dispatches_and_exits_cleanly(self, mock_wizard):
+        # Regression guard: --setup used to be unreachable because the
+        # --video-id requirement check ran before it and exited with
+        # code 1 first, for every standalone mode, not just --setup.
+        with patch("sys.argv", ["pipeline", "--setup"]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        mock_wizard.assert_called_once()
+        assert exc.value.code == 0
+
+    def test_list_languages_works_without_video_id(self, capsys):
+        # Same bug, same regression guard, for the flag that was already
+        # there before --setup existed: --list-languages must not require
+        # --video-id either, since it never processes a video.
+        with patch("sys.argv", ["pipeline", "--list-languages"]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 0
+        assert "fr" in capsys.readouterr().out
 
 class TestSelectDeck:
 
@@ -143,6 +182,92 @@ class TestSelectDeck:
         with pytest.raises(SystemExit) as exc:
             _select_deck(None, session)
         assert exc.value.code == 1
+
+
+class TestRunSetupWizard:
+    """
+    Issue #9: guided .env setup for the one genuinely optional credential
+    (MW_API_KEY) worth walking a non-technical user through. Every test
+    isolates _ENV_PATH/_ENV_EXAMPLE_PATH to tmp_path so nothing touches the
+    real project .env.
+    """
+
+    @pytest.fixture(autouse=True)
+    def isolated_env_paths(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(main_module, "_ENV_PATH", tmp_path / ".env")
+        monkeypatch.setattr(main_module, "_ENV_EXAMPLE_PATH", tmp_path / ".env.example")
+        return tmp_path
+
+    def test_creates_env_from_example_when_missing(self, isolated_env_paths):
+        (isolated_env_paths / ".env.example").write_text("DB_PATH=pipeline.db\nMW_API_KEY=\n")
+        with patch("builtins.input", return_value="n"):
+            _run_setup_wizard()
+        env_path = isolated_env_paths / ".env"
+        assert env_path.exists()
+        assert "DB_PATH=pipeline.db" in env_path.read_text()
+
+    def test_creates_empty_env_when_no_example_exists(self, isolated_env_paths):
+        with patch("builtins.input", return_value="n"):
+            _run_setup_wizard()
+        assert (isolated_env_paths / ".env").exists()
+
+    def test_leaves_existing_env_other_values_untouched(self, isolated_env_paths):
+        env_path = isolated_env_paths / ".env"
+        env_path.write_text("DB_PATH=custom.db\n")
+        with patch("builtins.input", return_value="n"):
+            _run_setup_wizard()
+        assert "DB_PATH=custom.db" in env_path.read_text()
+
+    def test_already_set_key_skips_prompt_entirely(self, isolated_env_paths):
+        env_path = isolated_env_paths / ".env"
+        env_path.write_text("MW_API_KEY=existingkey123\n")
+        with patch("builtins.input") as mock_input:
+            _run_setup_wizard()
+        mock_input.assert_not_called()
+
+    def test_declining_the_prompt_leaves_key_unset(self, isolated_env_paths):
+        env_path = isolated_env_paths / ".env"
+        env_path.write_text("")
+        with patch("builtins.input", return_value="n"):
+            _run_setup_wizard()
+        from dotenv import get_key
+        assert get_key(str(env_path), "MW_API_KEY") is None
+
+    def test_accepting_and_pasting_a_key_writes_it(self, isolated_env_paths):
+        env_path = isolated_env_paths / ".env"
+        env_path.write_text("")
+        with patch("builtins.input", side_effect=["y", "abc123realkey"]):
+            _run_setup_wizard()
+        from dotenv import get_key
+        assert get_key(str(env_path), "MW_API_KEY") == "abc123realkey"
+
+    def test_empty_key_input_exits_with_error(self, isolated_env_paths):
+        env_path = isolated_env_paths / ".env"
+        env_path.write_text("")
+        with patch("builtins.input", side_effect=["y", ""]):
+            with pytest.raises(SystemExit) as exc:
+                _run_setup_wizard()
+        assert exc.value.code == 1
+
+    def test_key_with_whitespace_exits_with_error(self, isolated_env_paths):
+        # A pasted key with an embedded newline/space is almost always a
+        # copy-paste mistake (e.g. grabbing the whole "Your key is: X" line).
+        env_path = isolated_env_paths / ".env"
+        env_path.write_text("")
+        with patch("builtins.input", side_effect=["y", "abc 123"]):
+            with pytest.raises(SystemExit) as exc:
+                _run_setup_wizard()
+        assert exc.value.code == 1
+
+    def test_rejected_key_is_not_written(self, isolated_env_paths):
+        env_path = isolated_env_paths / ".env"
+        env_path.write_text("")
+        with patch("builtins.input", side_effect=["y", ""]):
+            with pytest.raises(SystemExit):
+                _run_setup_wizard()
+        from dotenv import get_key
+        assert get_key(str(env_path), "MW_API_KEY") is None
+
 
 class TestPromptImport:
 

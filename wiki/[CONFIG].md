@@ -1,14 +1,22 @@
 # Configuration
 
-All configuration is done through the `.env` file in the project root. Copy `.env.example` to `.env` and fill in the values you need.
+All configuration is done through the `.env` file in the project root. Copy `.env.example` to `.env`, or run `make setup` for a guided walkthrough of the one setting most people actually want to change. Nothing described here is required to run the pipeline.
 
-## Required
+## Definitions
 
-`MW_API_KEY` — Your Merriam-Webster Collegiate API key. Get one free at https://dictionaryapi.com/register/index.htm. The free tier allows 1000 requests per day. The SQLite cache means you rarely approach this limit in practice because words already fetched are never re-requested.
+`MW_API_KEY` — Optional. Your Merriam-Webster Collegiate API key. Get one free at https://dictionaryapi.com/register/index.htm. Improves English definition and example quality; dictionaryapi.dev is used automatically without one, so the pipeline works fully with this left blank. The free tier allows 1000 requests per day. The SQLite cache means you rarely approach this limit in practice because words already fetched are never re-requested.
+
+`DEFINITION_FETCH_WORKERS` — Maximum number of definition lookups running at once. Default is 5. Lower it if you hit rate limits on dictionaryapi.dev or Wiktionary, raise it if your network can take more.
+
+`API_TIMEOUT` — Seconds to wait for a definition API response before timing out. Default is 8.
+
+`CIRCUIT_BREAKER_THRESHOLD` — Consecutive failures against one definition source before the pipeline stops calling it for the rest of the run and falls back automatically. Default is 5.
 
 ## Proxy (optional)
 
 `WEBSHARE_USERNAME` and `WEBSHARE_PASSWORD` — Webshare proxy credentials. Only needed if YouTube blocks your IP address, which shows up as a 429 error or connection timeout during transcript extraction. Get a free account at https://webshare.io with 10 proxies and 1GB per month.
+
+`PROXY_HTTP_URL` and `PROXY_HTTPS_URL` — Generic proxy URLs, an alternative to Webshare if you already have your own.
 
 ## Anki connection
 
@@ -18,13 +26,17 @@ All configuration is done through the `.env` file in the project root. Copy `.en
 
 ## Language
 
-`SPACY_MODEL` — The spaCy model to use. Default is `en_core_web_sm`. Options are `en_core_web_sm` (fast), `en_core_web_md`, and `en_core_web_lg` (most accurate). After changing this, run `make spacy-model` to download the new model.
+Model selection per language lives in code (`language.SPACY_MODELS`), not in `.env` — `--language fr` (or a deck name spaCy can infer a language from) picks the right model automatically, with no configuration needed.
 
-`DEF_LANG` — The language for definitions. Leave blank to get definitions in the same language as the video. Set to `en` to get English definitions of non-English words.
+`SPACY_MODEL_SIZE_OVERRIDE` — Optional. Overrides every language's model size uniformly, e.g. set to `md` to request the medium model for whichever language is in use instead of each language's own default. Most languages default to the small model; French defaults to medium already, since the small French model was confirmed to mislemmatize some common conjugated verbs. Useful if you hit a similar accuracy problem in another language and want to test whether a bigger model helps, without editing code.
+
+`LANGUAGE` and `DEF_LANG` are not `.env` variables. They're `make run` command arguments, not configuration you set once: `make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr DEF_LANG=en`. Setting them in `.env` has no effect, since `.env` is read by the Python process, and by the time that happens the command line has already been parsed.
 
 ## Translation
 
 `LIBRETRANSLATE_URL` — URL of a local LibreTranslate server. Leave blank to use community mirrors automatically. Set to `http://localhost:5000` if you have run `make translate-setup`.
+
+`ARGOS_PACKAGES_DIR` — Stable path for argostranslate's downloaded models. Recommended on WSL, where the default path can move between sessions. See the WSL Setup page.
 
 ## Output
 
@@ -32,4 +44,16 @@ All configuration is done through the `.env` file in the project root. Copy `.en
 
 `OUTPUT_DIR` — Directory for generated .apkg files. Default is `output/` in the project root.
 
-`DEFINITION_FETCH_WORKERS` — Maximum number of definition lookups running at once. Default is 5. Lower it if you hit rate limits on dictionaryapi.dev or Wiktionary, raise it if your network can take more.
+`REVIEW_FILE` — Path to the deferred-word review file. Default is `review.json` in the project root.
+
+## Deck duplicate matching
+
+`CONFIDENCE_HIGH` — Fuzzy match score above which a word counts as already in the deck. Default is 90.
+
+`CONFIDENCE_LOW` — Fuzzy match score below which a word counts as brand new. Default is 60.
+
+`SHORT_WORD_THRESHOLD` — Words shorter than this use exact match only, since fuzzy matching is unreliable on short tokens. Default is 4.
+
+## Never change these
+
+`ANKI_MODEL_ID` and `ANKI_DECK_ID` — genanki identifiers baked into every card. Changing either after your first import makes Anki treat all existing cards as belonging to a different template or deck, permanently breaking review history. Leave these at their defaults unless you know exactly why you're changing them.

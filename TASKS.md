@@ -316,6 +316,45 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       "3.12"]`, README/CONTRIBUTING/wiki corrected to match. Confirmed via
       the real CI run: all three remaining versions pass.
 
+- [x] **Guided API key setup for non-technical users.** Closes #9. Onboarding
+      told users to run `cp .env.example .env`, but `.env.example` had never
+      existed in this repo despite `.gitignore` explicitly un-ignoring it
+      (`!.env.example`) -- that command has been broken since the project's
+      first commit. Created a real, accurate `.env.example` covering every
+      environment variable actually read by `config.py`/`language.py`/
+      `translation.py` (several current ones, like `DEFINITION_FETCH_WORKERS`
+      and `SPACY_MODEL_SIZE_OVERRIDE`, were never documented anywhere; a
+      couple of documented ones, like the wiki's `SPACY_MODEL`, described a
+      config value that no longer exists since the #3 language-aware fix).
+
+      The design question the issue flagged, whether MW_API_KEY is actually
+      required, resolves from the code directly: `_fetch_from_mw` returns
+      `None` immediately when the key is unset, dictionaryapi.dev is the
+      always-on fallback, and nothing in the pipeline requires any API key to
+      run. README's table said "Required: Yes" for MW_API_KEY; corrected to
+      "No" there and in the wiki, along with fixing a separate, real
+      misconception in both places that `LANGUAGE`/`DEF_LANG` belong in
+      `.env` -- they're `make run` command arguments, read before `.env` is
+      ever loaded, so setting them in `.env` silently does nothing.
+
+      Added `--setup` (`make setup`) as a real guided wizard: creates `.env`
+      from the template if missing, detects an already-set key and skips
+      straight past the prompt, otherwise explains the key is optional,
+      links registration, and validates the pasted value (rejects empty or
+      whitespace-containing input, a common paste mistake) before writing it
+      with `python-dotenv`'s `set_key` rather than hand-rolled text editing.
+
+      Found two more real, unrelated bugs while placing the new flag
+      correctly: `--list-languages` (and now `--setup`) were unreachable,
+      since the `--video-id` requirement check ran before them and exited
+      first for every standalone mode; and `make help` crashed with a shell
+      syntax error partway through (`Makefile:300: Unterminated quoted
+      string`) from two `@printf` lines missing a newline between them,
+      never noticed because nobody looks past the point their own command
+      appears in the list. Both fixed. Live-verified all three wizard paths
+      (decline, accept-and-write, already-set-detection) with real `.env`
+      files, not just mocked tests.
+
 - [ ] Hyphenated compound handling in the deck fuzzy match — `semi-relevé` is
       now admitted by the NLP filter but the fuzzy matcher has not been tested
       against hyphenated fronts.

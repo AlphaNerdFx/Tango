@@ -499,23 +499,31 @@ Flags:
 --review                process review.json decisions
 --process-backlog       process SQLite backlog
 --list-languages        print supported languages and exit
+--setup                 guided .env setup for an optional MW API key, then exit
+--force                 reprocess a video even if already marked processed
 --verbose               DEBUG logging
 ```
 
-`--review` and `--process-backlog` are mutually exclusive.
+`--review` and `--process-backlog` are mutually exclusive. `--list-languages`
+and `--setup` are standalone informational/setup modes: both exit before the
+`--video-id` requirement check, since neither processes a video (see 8.15 for
+a real ordering bug this used to have).
 
 Three dispatch modes: `_run_pipeline`, `_run_review`, `_run_backlog`.
 
 `_run_pipeline` sequence: resolve language, resolve definition language, reset
-translation warning state, check video not already processed, fetch transcript,
-run NLP, save vocabulary to SQLite, check deck, prompt for queued words, fetch
+translation warning state, check video not already processed (skipped
+entirely when `--force` is set, see TASKS.md's `--force` entry for why that's
+safe -- `mark_video_processed` upserts on `video_id`), fetch transcript, run
+NLP, save vocabulary to SQLite, check deck, prompt for queued words, fetch
 definitions, build package, log package, mark video processed, print summary,
 offer Anki import.
 
-`_prompt_import(apkg_path)` sends an `importPackage` request to AnkiConnect with
-the absolute path. This fails on WSL because a Linux `/mnt/c/...` path is not
-resolvable by Windows AnkiConnect. Known limitation, manual import is the
-workaround.
+`_prompt_import(apkg_path)` sends an `importPackage` request to AnkiConnect
+with the absolute path. Under WSL this path is translated from `/mnt/c/...`
+to `C:\...` first, since Windows-side AnkiConnect cannot resolve a Linux
+path directly -- see 8.11 for the fix and live verification. Native Linux
+and macOS paths pass through untouched.
 
 Colour output helpers `_info`, `_ok`, `_warn`, `_err`, `_rule` use raw ANSI
 codes.
@@ -970,6 +978,53 @@ model-size problem. Spanish shows the same category of bug independently
 bigger model nor more of our own code fixes this; it is the underlying
 spaCy language pipeline's own lemmatizer data. Issue #13 stays open for
 this half.
+
+### 8.15 Guided setup instead of a hand-edited .env
+
+Issue #9 asked for a non-technical onboarding path for the one genuinely
+optional credential, MW_API_KEY. Investigating it surfaced that the
+onboarding step it was worried about was already broken for an unrelated
+reason: README's `cp .env.example .env` had nothing to copy.
+`.env.example` never existed in this repository, despite `.gitignore`
+carrying an explicit `!.env.example` rule to keep it trackable. This had
+been broken since the very first commit.
+
+Created a real `.env.example`, built from grepping every actual
+`os.getenv()` call across `config.py`, `language.py`, and `translation.py`
+rather than copying an existing (and, it turned out, partly stale) local
+`.env`. The wiki's own config page still described `SPACY_MODEL` as a
+single global setting with `en_core_web_sm`/`_md`/`_lg` options, a value
+that stopped existing the moment #3 replaced it with the per-language
+`SPACY_MODELS` mapping in `language.py`; nobody had gone back to update
+the doc once the underlying config shape changed.
+
+The question of whether MW_API_KEY is actually required doesn't need a
+judgment call: `_fetch_from_mw` returns `None` immediately when the key is
+unset, and dictionaryapi.dev is the always-on fallback, so nothing in the
+pipeline has ever required any API key to run. README's own table said
+"Required: Yes" for it. A separate, real error in the same table: it
+listed `LANGUAGE` and `DEF_LANG` as `.env` variables, but they are
+`make run` command arguments consumed before `.env` is ever loaded by the
+Python process, so setting either in `.env` silently does nothing.
+
+`--setup` (`make setup`) is the actual guided wizard: creates `.env` from
+the template if missing, detects an already-set key and skips the prompt
+entirely, otherwise explains the key is optional, links registration, and
+validates the pasted value before writing it with `python-dotenv`'s
+`set_key` (already a dependency, so no new one added) rather than
+hand-rolled text parsing.
+
+Placing the new flag correctly surfaced two more, unrelated real bugs in
+`main()`'s dispatch: `--list-languages` (and now `--setup`) were
+unreachable, because the `--video-id` requirement check ran before either
+of them and exited first for every standalone mode, not just the default
+one; and `make help` crashed partway through with a shell syntax error
+(two `@printf` lines concatenated onto one Makefile line with a raw tab
+instead of a newline, plus a stray trailing quote on the next line) that
+nobody had noticed because it only crashes once printing reaches that
+specific line. Both fixed. All three wizard paths (decline, accept and
+write, already-set detection) verified live against real `.env` files
+before being called done, not just via mocked tests.
 
 ---
 
