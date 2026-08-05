@@ -9,6 +9,7 @@ Run all (needs keys):   pytest tests/test_definition.py
 """
 
 import json
+import logging
 import sqlite3
 import threading
 import time
@@ -953,6 +954,70 @@ class TestFetchDefinitionOrFallbackExample:
 
 
 # ── fetch_definitions (batch) ─────────────────────────────────────────────────
+
+# ── Log volume for missing definitions (issue #17) ───────────────────────────
+#
+# A per-word WARNING for a condition that holds for an entire language is
+# noise, not signal: one real French video emitted 1047 identical lines and
+# buried the SQLite lock errors that actually mattered. These pin the split
+# so neither half can regress silently -- English keeps its per-word
+# warning, non-English gets one batch-level line instead.
+
+class TestMissingDefinitionLogVolume:
+
+    @patch("pipeline.definition._fetch_from_dictapi")
+    @patch("pipeline.definition._fetch_from_mw")
+    def test_english_miss_still_warns_per_word(self, mock_mw, mock_dict, caplog):
+        mock_mw.return_value = None
+        mock_dict.return_value = None
+        with caplog.at_level(logging.WARNING, logger="pipeline.definition"):
+            fetch_definition("xyzqwerty", None, use_cache=False, language="en")
+        assert any("xyzqwerty" in r.message for r in caplog.records)
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition._fetch_from_dictapi")
+    @patch("pipeline.definition._fetch_from_mw")
+    def test_non_english_miss_does_not_warn_per_word(
+        self, mock_mw, mock_dict, mock_wikt, caplog
+    ):
+        mock_mw.return_value = None
+        mock_dict.return_value = None
+        mock_wikt.return_value = None
+        with caplog.at_level(logging.WARNING, logger="pipeline.definition"):
+            fetch_definition("xyzqwerty", None, use_cache=False, language="fr")
+        assert not [r for r in caplog.records if "xyzqwerty" in r.message]
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_batch_warns_once_not_per_word_for_non_english(
+        self, mock_fetch, mock_wikt, mock_wn, caplog
+    ):
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        mock_wn.return_value = ([], [])
+        words = [f"w{i}" for i in range(40)]
+        with caplog.at_level(logging.WARNING, logger="pipeline.definition"):
+            fetch_definitions(words, language="fr", max_workers=1)
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert len(warnings) == 1, f"expected 1 summary warning, got {len(warnings)}"
+        assert "40" in warnings[0].message
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_no_batch_warning_when_some_definitions_were_found(
+        self, mock_fetch, mock_wikt, mock_wn, caplog, sample_definition_result
+    ):
+        # The summary is for "this language yields nothing", not for the
+        # ordinary case of a few words missing.
+        mock_fetch.side_effect = [sample_definition_result, None]
+        mock_wikt.return_value = None
+        mock_wn.return_value = ([], [])
+        with caplog.at_level(logging.WARNING, logger="pipeline.definition"):
+            fetch_definitions(["found", "missing"], language="fr", max_workers=1)
+        assert not [r for r in caplog.records if r.levelno == logging.WARNING]
+
 
 class TestFetchDefinitions:
 

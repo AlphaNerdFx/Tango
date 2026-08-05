@@ -1031,7 +1031,18 @@ def fetch_definition(
                     native_ants = dr.antonyms
 
     if not definition:
-        logger.warning("No definition found for '%s' from either source.", lemma)
+        # WARNING only where a miss is actually news. dictionaryapi.dev has
+        # no usable non-English data at all (issue #1), so for those
+        # languages every single word misses and a per-word warning is pure
+        # noise -- one real French video emitted 1047 consecutive identical
+        # lines, which buried the SQLite lock errors that mattered (issue
+        # #17). fetch_definitions() reports the non-English case once per
+        # batch instead. English keeps the per-word warning: there a miss
+        # is unusual and worth seeing on its own line.
+        if target_language == "en":
+            logger.warning("No definition found for '%s' from either source.", lemma)
+        else:
+            logger.debug("No definition found for '%s' from either source.", lemma)
         return None
 
     # ── Step 4: Build result with 256-char caps ───────────────────────────────
@@ -1250,5 +1261,19 @@ def fetch_definitions(
         len(batch.not_found_examples),
         len(batch.not_found_synonyms),
     )
+
+    # The one warning that replaces the per-word flood (issue #17). Only
+    # fires when the whole batch missed, which for a non-English language
+    # is the norm rather than an anomaly -- see issue #1. Stated once, with
+    # the cause, instead of once per word with no cause at all.
+    target = def_language or language
+    if lemmas and target != "en" and len(batch.not_found) == len(lemmas):
+        logger.warning(
+            "No definitions found for any of %d words (%s). dictionaryapi.dev "
+            "has no usable coverage for this language, so cards fall back to "
+            "example sentences and synonyms only. See issue #1.",
+            len(lemmas),
+            target,
+        )
 
     return batch
