@@ -167,6 +167,53 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       templates break single-pass regex stripping. Filed as issue #16
       rather than folded into this pass.
 
+- [x] **Three follow-up defects in the shipped OMW synonyms.** All found by
+      reading a real run's card output rather than by any test, and all
+      silent -- the pipeline reported success in every case.
+
+      **Synonyms were ranked alphabetically.** The pooled list was sorted
+      before the five-item cap, so spelling decided which survived instead
+      of relevance. WordNet returns senses most-common-first, so the cut
+      systematically discarded the useful words: 207 of 972 cards affected,
+      "aujourd'hui" losing "maintenant" while keeping "de notre temps", and
+      "faire" losing "mettre"/"organiser" while keeping the vulgar
+      "caguer"/"déféquer". Now preserves synset order through the cap.
+
+      **nltk's WordNet reader is not thread-safe.** It seeks and reads a
+      shared file handle and loads each language lazily on first use.
+      Under `DEFINITION_FETCH_WORKERS` threads, concurrent lookups raised
+      `AssertionError`, which the function's own `except` swallowed into
+      "no synonyms" -- so the only symptom was a different subset of cards
+      missing synonyms on every run of the same video (767/764/730 across
+      three). Warm-up now happens under the lock per language, and the
+      reads are serialized too; warming alone fixed 9 of 10 words but not
+      the 10th. Serializing measured ~6x faster than the contended version
+      (11ms vs 68ms per 80 lookups), since these are local lookups and the
+      thread pool exists for network I/O.
+
+      **Senses were mixed.** Pooling three synsets merged unrelated
+      meanings and crossed parts of speech ("prêt" -> "emprunt", a loan
+      noun, beside "rapide", quick adjective). Non-English now reads the
+      top two senses: a provisional setting, measured at 64% / 75% / 79%
+      card coverage for 1 / 2 / 3 senses. English deliberately stays at
+      three -- narrowing it was a straight regression (14/15 -> 9/15 words
+      with any synonym), since many English words have a top synset
+      containing only the word itself. Expected to be revisited when a
+      real per-language source lands (issue #16); a test pins the setting
+      from both sides so changing it fails loudly.
+
+- [x] **Per-word "No definition found" flooded the log.** Closes #17.
+      dictionaryapi.dev has no usable non-English data, so every word
+      missed and every miss logged its own WARNING -- 1047 consecutive
+      identical lines for one French video, burying the errors that
+      mattered (the SQLite lock bug above was exactly that shape).
+      Non-English misses now log at DEBUG and the batch emits one WARNING
+      naming the language and cause; English keeps its per-word warning,
+      where a miss is genuinely unusual. Verified on 60 real French words:
+      60 per-word warnings became 0 plus 1 summary, leaving the
+      dictionaryapi 429s and the circuit-breaker trip visible rather than
+      buried.
+
 - [x] **Language-aware spaCy model selection.** Closes #3, shipped in v0.4.3
       across three commits (b5b0247, cf2dd90, d794211). Verified live: `--language
       fr` alone now selects `fr_core_news_sm` automatically, no manual
