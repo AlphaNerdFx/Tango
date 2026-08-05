@@ -26,7 +26,7 @@ Tango creates a fallback card with just the word and the sentence from the video
 
 ## Can I reprocess a video I already ran?
 
-Not yet without manual intervention. The pipeline checks `pipeline.db` and warns you that the video was already processed, then exits without creating cards. Delete the video's entry from `processed_videos` in the SQLite database to allow reprocessing. A `--force` flag is planned for v1.0.0.
+Yes, pass `--force`. Without it, the pipeline checks `pipeline.db` and warns you that the video was already processed, then exits without creating cards. `--force` skips that check and reprocesses the video, though words already in the target deck are still skipped by the normal deck duplicate check, so you will only get new cards for genuinely new vocabulary. You can still delete the video's entry from `processed_videos` in the SQLite database directly if you prefer that route.
 
 ## Why are proper nouns excluded?
 

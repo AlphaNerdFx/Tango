@@ -81,6 +81,14 @@ class TestArgumentParser:
         args = parser.parse_args(["--review", "--deck", DECK_NAME])
         assert args.video_id is None
 
+    def test_force_flag(self, parser):
+        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME, "--force"])
+        assert args.force is True
+
+    def test_force_default_false(self, parser):
+        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME])
+        assert args.force is False
+
 class TestMainDispatch:
 
     def test_missing_video_id_exits(self):

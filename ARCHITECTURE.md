@@ -463,7 +463,10 @@ others. See ADR-002.
 
 `check_video_not_processed(video_id)` raises `VideoAlreadyProcessedError` if
 the video is already in `processed_videos`. The CLI catches this, warns, and
-exits without creating cards. There is no `--force` flag yet.
+exits without creating cards, unless `--force` is passed, in which case the
+check is skipped entirely and the video is reprocessed. `mark_video_processed`
+already upserts on `video_id`, so a forced rerun updates the existing record
+rather than failing on a primary key conflict.
 
 The `Session` class is an in-memory container for the selected deck name. It is
 not persisted. When the process exits, the session ends.

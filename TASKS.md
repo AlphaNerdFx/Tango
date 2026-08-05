@@ -161,10 +161,16 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       change in which words were found. See ARCHITECTURE.md's design
       patterns section for the full writeup.
 
-- [ ] **`--force` flag to reprocess a video.**
-      Currently `check_video_not_processed` warns and exits with no override.
-      The CLI already tells the user `--force` exists. Either implement it or
-      remove the message.
+- [x] **`--force` flag to reprocess a video.** Closes #6.
+      `check_video_not_processed` used to warn and exit with no override, even
+      though the CLI's own warning message told the user `--force` existed.
+      Added the flag: when set, `_run_pipeline` skips the
+      `check_video_not_processed` call entirely and logs that it is
+      reprocessing. `mark_video_processed` already upserts on `video_id`, so
+      the second run's record replaces the first rather than conflicting.
+      Deck-level duplicate detection is unaffected, so words already in the
+      target deck are still skipped; `--force` only bypasses the video-level
+      "already ran this one" guard.
 
 - [ ] **Migrate CLI from argparse to Typer.**
       Better help output, automatic type validation, clean subcommands:

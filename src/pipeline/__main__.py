@@ -268,12 +268,15 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
     reset_circuit_breaker()
 
     # ── 1. Check not already processed ───────────────────────────────────────
-    try:
-        check_video_not_processed(video_id)
-    except VideoAlreadyProcessedError as exc:
-        _warn(str(exc))
-        _warn("No new cards will be created. Use --force to reprocess (not yet implemented).")
-        sys.exit(0)
+    if args.force:
+        _info(f"--force set: reprocessing '{video_id}' regardless of prior runs.")
+    else:
+        try:
+            check_video_not_processed(video_id)
+        except VideoAlreadyProcessedError as exc:
+            _warn(str(exc))
+            _warn("No new cards will be created. Use --force to reprocess.")
+            sys.exit(0)
 
     # ── 2. Fetch transcript ───────────────────────────────────────────────────
     _info(f"Fetching transcript for: {video_id}")
@@ -500,6 +503,7 @@ examples:
   python -m pipeline --review --deck "Language::English"
   python -m pipeline --process-backlog --deck "Language::English"
   python -m pipeline --video-id LV_NoD2M54w --deck "Language::English" --verbose
+  python -m pipeline --video-id LV_NoD2M54w --deck "Language::English" --force
         """,
     )
 
@@ -562,6 +566,13 @@ examples:
         "--verbose",
         action="store_true",
         help="Enable DEBUG logging output.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Reprocess a video even if pipeline.db has it marked as already "
+             "processed. Words already in the target deck are still skipped "
+             "by the normal deck duplicate check.",
     )
 
     return parser
