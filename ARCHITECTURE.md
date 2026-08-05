@@ -1159,6 +1159,40 @@ per 80 lookups), and the thread pool exists for network I/O, which this
 is not. Synonym coverage is now 89% (107/120) and stable run to run,
 against a varying ~78% before.
 
+**Sense mixing, and why English is treated differently.** Each synset is
+a distinct sense, so consulting three of them merged unrelated meanings
+onto a single card and even crossed parts of speech: "prêt" returned
+"emprunt" (a loan, noun) beside "rapide" (quick, adjective). Non-English
+now reads only the top synset. The cost is real and was measured across
+933 French cards before choosing:
+
+| synsets consulted | cards with any synonym | avg synonyms per card |
+|---|---|---|
+| 1 | 595/933 (64%) | 2.51 |
+| 2 | 701/933 (75%) | 3.31 |
+| 3 | 733/933 (79%) | 3.69 |
+
+Narrowing to one is a deliberate trade of quantity for coherence, not a
+free win: "prêt" now returns nothing rather than something misleading.
+Widening the slice is a one-line change if coverage matters more than
+precision for a given language.
+
+English keeps three. The sense mixing was diagnosed on OMW's non-English
+data; English reads Princeton WordNet directly and was never the
+complaint. Narrowing it too measured a straight regression, 14/15 to
+9/15 words with any synonym at all, because many common English words
+("happy", "large", "quick", "house", "think") have a top synset
+containing only the word itself.
+
+**What this does not fix.** OMW carries genuinely wrong entries that no
+amount of synset selection repairs, because they sit in the top synset:
+"fat" -> "file allocation table", "second" -> "2d", "mec" -> "Guy". OMW
+also tags some plainly English words as French ("aller" -> "go", with
+`lang=fra` in OMW's own data), which is a standing risk to the
+transcript-language constraint in CLAUDE.md 3.3. Left as-is for now; the
+fallback if it becomes intolerable is to stop treating OMW as a
+native-language source for the affected languages.
+
 ---
 
 ## 9. Known architectural gaps
