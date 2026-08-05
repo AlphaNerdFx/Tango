@@ -51,7 +51,7 @@ CYAN   := \033[36m
 
 # -- Phony targets ------------------------------------------------------------
 
-.PHONY: all venv install spacy-model translate-setup translate-stop \
+.PHONY: all venv install setup spacy-model translate-setup translate-stop \
         test test-all format lint typecheck \
         run review backlog clean check-os help
 
@@ -109,6 +109,14 @@ install: venv
 	@$(VENV_PIP) install --quiet --upgrade pip
 	@$(VENV_PIP) install --quiet -e ".[dev]"
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Dependencies installed.\n"
+
+# -- setup ----------------------------------------------------------------
+# Guided .env setup for the one optional credential worth walking a
+# non-technical user through (issue #9). Nothing this configures is
+# required -- dictionaryapi.dev works with zero setup.
+
+setup: venv
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --setup
 
 # -- spacy-model --------------------------------------------------------------
 # Model name is resolved from SPACY_LANG via language.get_spacy_model() --
@@ -277,6 +285,7 @@ help:
 	@printf "\n"
 	@printf "$(BOLD)First-time setup:$(RESET)\n"
 	@printf "  $(CYAN)make all$(RESET)                              Create venv, install deps, download spaCy model\n"
+	@printf "  $(CYAN)make setup$(RESET)                            Guided .env setup for an optional MW API key\n"
 	@printf "\n"
 	@printf "$(BOLD)Run the pipeline:$(RESET)\n"
 	@printf "  $(CYAN)make run$(RESET) VIDEO_ID=<id> DECK=\"<name>\"   Process a YouTube video\n"
@@ -289,8 +298,9 @@ help:
 	@printf "  $(CYAN)make format$(RESET)                           Auto-format with black\n"
 	@printf "  $(CYAN)make lint$(RESET)                             Lint with ruff\n"
 	@printf "  $(CYAN)make typecheck$(RESET)                        Type check with mypy\n"
-	@printf "  $(CYAN)make spacy-model$(RESET)                      Re-download spaCy model separately\n	@printf "  $(CYAN)make translate-setup$(RESET)                 Install LibreTranslate for translation mode\n"
-	@printf "  $(CYAN)make translate-stop$(RESET)                  Stop local LibreTranslate server\n""
+	@printf "  $(CYAN)make spacy-model$(RESET)                      Re-download spaCy model separately\n"
+	@printf "  $(CYAN)make translate-setup$(RESET)                 Install LibreTranslate for translation mode\n"
+	@printf "  $(CYAN)make translate-stop$(RESET)                  Stop local LibreTranslate server\n"
 	@printf "\n"
 	@printf "$(BOLD)Maintenance:$(RESET)\n"
 	@printf "  $(CYAN)make clean$(RESET)                            Remove venv, output, and cache files\n"
