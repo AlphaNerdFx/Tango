@@ -1279,6 +1279,37 @@ French elisions with a typographic apostrophe, so `aujourd'hui` typed
 with an ASCII quote silently missed an entry that was definitely present
 -- on one of the most common words in the language.
 
+### 8.20 Transcript examples are found by surface form, not lemma
+
+The "Example from Youtube Video" field searched the transcript for the
+lemma. Transcripts contain inflected forms, so for any language with real
+morphology the search frequently looked for a string that is not in the
+text: a French video says "sais", the lemma is "savoir", and "savoir"
+appears nowhere. The word was extracted *from* the transcript and then
+failed to find the sentence it came from -- 137 of 1036 cards on a real
+run, all of them infinitives.
+
+8.19's lemma fix made this marginally worse, since correcting "joue" to
+"jouer" removed a coincidental match the uncorrected form had.
+
+`process_transcript()` now optionally records, per lemma, the forms it
+actually took. It is an out-parameter rather than a second return value
+so existing callers and their tests are unaffected.
+`_find_in_snippets()` tries the lemma first -- where it does appear it is
+the canonical form and gives the cleanest sentence -- then those forms.
+Standard cards are backfilled too, not only fallback ones, since
+`fetch_definitions()` performs its own lemma-only search earlier.
+
+Live-verified: coverage 87% -> 100% (1040 of 1041), words dropped for
+having nothing to show 5 -> 0.
+
+This also answers a question worth recording, since the shape of the bug
+invited it: cards without a transcript example were not fabricated. Every
+field is sourced -- vocabulary from the transcript via spaCy, definitions
+and examples from the Wiktionary index, synonyms from OMW. The empty
+field was a matching failure, and "savoir" now carries "déjà me faites
+pas croire que vous savez" straight from the video.
+
 ---
 
 ## 9. Known architectural gaps
