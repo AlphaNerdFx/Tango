@@ -211,6 +211,7 @@ from pipeline.config import (
     WIKTIONARY_API_BASE, WIKTIONARY_USER_AGENT,
     API_TIMEOUT, DB_PATH, CIRCUIT_BREAKER_THRESHOLD, DEFINITION_FETCH_WORKERS,
 )
+from pipeline import wiktdata
 
 
 
@@ -1037,6 +1038,31 @@ def fetch_definition(
                 if not native_ants:
                     native_ants = dr.antonyms
 
+    # Offline Wiktionary index -- the only source that actually has
+    # non-English definitions (see wiktdata.py and issue #16). Consulted
+    # after dictionaryapi.dev purely so English behaviour is untouched;
+    # for every non-English language the branch above found nothing, so in
+    # practice this is the primary source there.
+    #
+    # Layered, not a replacement. Measured against a real 958-lemma French
+    # deck: definitions 95%, examples 92%/80%, antonyms 20% -- but synonyms
+    # only 49%, against OMW's 76%. So OMW keeps first claim on synonyms and
+    # this fills in behind it, rather than trading away better data for a
+    # single-source design.
+    if not definition and wiktdata.is_available(target_language):
+        entry = wiktdata.lookup(query_lemma, target_language)
+        if entry:
+            definition     = entry.definition
+            part_of_speech = part_of_speech or entry.part_of_speech
+            _actual_source = "wiktionary"
+            if not native_ex1:
+                native_ex1 = entry.example1
+                native_ex2 = entry.example2
+            if not native_syns:
+                native_syns = entry.synonyms
+            if not native_ants:
+                native_ants = entry.antonyms
+
     if not definition:
         # WARNING only where a miss is actually news. dictionaryapi.dev has
         # no usable non-English data at all (issue #1), so for those
@@ -1159,6 +1185,24 @@ def _fetch_definition_or_fallback_example(
                 example2 = examples[1] if len(examples) > 1 else None
 
     synonyms, antonyms = _wordnet_synonyms_antonyms(lemma, language)
+
+    # Offline index, same reasoning as the call in fetch_definition(): it
+    # only reaches here when no definition was found anywhere, which is the
+    # normal case for a non-English language. Supplements the fallback
+    # card's examples and antonyms, which nothing else fills -- OMW carries
+    # no antonyms outside English at all, so without this the antonym field
+    # is structurally empty rather than merely sparse.
+    if not example or not antonyms:
+        entry = wiktdata.lookup(lemma, language) if wiktdata.is_available(language) else None
+        if entry:
+            if not example:
+                example = entry.example1
+                example2 = example2 or entry.example2
+            if not synonyms:
+                synonyms = entry.synonyms
+            if not antonyms:
+                antonyms = entry.antonyms
+
     return None, example, example2, synonyms, antonyms
 
 

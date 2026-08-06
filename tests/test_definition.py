@@ -44,6 +44,22 @@ def tmp_db(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_offline_dictionary(monkeypatch):
+    """
+    Pretend no offline Wiktionary index exists, unless a test says otherwise.
+
+    Without this, results depend on whether the developer happens to have
+    run --build-dictionary: the real index lives on disk and
+    fetch_definition() consults it, so the same test passes in CI (no
+    index) and fails locally (index present). Tests that exercise the
+    index build their own via the wiktdata fixtures instead.
+    """
+    monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _lang: False)
+    monkeypatch.setattr(def_module.wiktdata, "lookup", lambda _w, _lang: None)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def reset_circuit_breaker_state():
     """
     Reset circuit breaker state before and after each test so a source
@@ -951,6 +967,123 @@ class TestFetchDefinitionOrFallbackExample:
         with patch("pipeline.definition._wordnet_synonyms_antonyms") as mock_wn:
             def_module._fetch_definition_or_fallback_example("content", None, "fr", None)
             mock_wn.assert_not_called()
+
+
+# ── Offline Wiktionary index integration (issue #16) ─────────────────────────
+#
+# The index is the only source with non-English definitions. These tests
+# enable it explicitly (the autouse fixture disables it everywhere else) so
+# they behave identically whether or not a real index exists on disk.
+
+class TestOfflineDictionaryIntegration:
+
+    def _entry(self, **kw):
+        from pipeline.wiktdata import DictionaryEntry
+        defaults = dict(
+            word="maison", part_of_speech="noun",
+            definition="Batiment servant de logis.",
+            example1="Une belle maison.", example2="La maison est grande.",
+            synonyms=["demeure"], antonyms=["dehors"],
+        )
+        defaults.update(kw)
+        return DictionaryEntry(**defaults)
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition._fetch_from_dictapi")
+    @patch("pipeline.definition._fetch_from_mw")
+    def test_index_supplies_a_definition_no_online_source_has(
+        self, mock_mw, mock_dict, mock_wikt, monkeypatch
+    ):
+        # The whole point of issue #16: dictionaryapi.dev returns nothing for
+        # French, so before this the card said "No definition found".
+        mock_mw.return_value = None
+        mock_dict.return_value = None
+        mock_wikt.return_value = None
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(def_module.wiktdata, "lookup", lambda _w, _l: self._entry())
+
+        result = fetch_definition("maison", None, use_cache=False, language="fr")
+        assert result is not None
+        assert result.definition == "Batiment servant de logis."
+        assert result.source == "wiktionary"
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition._fetch_from_dictapi")
+    @patch("pipeline.definition._fetch_from_mw")
+    def test_index_is_not_consulted_when_a_definition_already_exists(
+        self, mock_mw, mock_dict, mock_wikt, monkeypatch, mw_response
+    ):
+        # English keeps its existing behaviour untouched: the index is a
+        # fallback for the languages that have nothing, not a new primary.
+        mock_mw.return_value = mw_response
+        mock_dict.return_value = None
+        mock_wikt.return_value = None
+        called = []
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(
+            def_module.wiktdata, "lookup",
+            lambda w, l: called.append(w) or self._entry(),
+        )
+        fetch_definition("contaminate", None, use_cache=False, language="en")
+        assert called == []
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_omw_synonyms_win_over_index_synonyms(
+        self, mock_fetch, mock_wikt, mock_wn, monkeypatch
+    ):
+        # Measured on a real French deck: OMW covers 76% of cards, the index
+        # only 49%. Layering them the wrong way round would trade better data
+        # for worse, so OMW keeps first claim.
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        mock_wn.return_value = (["omw-synonym"], [])
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(
+            def_module.wiktdata, "lookup",
+            lambda _w, _l: self._entry(synonyms=["index-synonym"]),
+        )
+        _r, _e, _e2, synonyms, _a = def_module._fetch_definition_or_fallback_example(
+            "maison", None, "fr", None
+        )
+        assert synonyms == ["omw-synonym"]
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_index_supplies_antonyms_omw_cannot(
+        self, mock_fetch, mock_wikt, mock_wn, monkeypatch
+    ):
+        # OMW carries no antonyms outside English at all, so this field was
+        # structurally empty rather than merely sparse.
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        mock_wn.return_value = ([], [])
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(def_module.wiktdata, "lookup", lambda _w, _l: self._entry())
+        _r, _e, _e2, _s, antonyms = def_module._fetch_definition_or_fallback_example(
+            "maison", None, "fr", None
+        )
+        assert antonyms == ["dehors"]
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_missing_index_changes_nothing(
+        self, mock_fetch, mock_wikt, mock_wn
+    ):
+        # Anyone who never runs --build-dictionary must get exactly the old
+        # behaviour. The autouse fixture already reports it unavailable.
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        mock_wn.return_value = (["bonheur"], [])
+        _r, example, _e2, synonyms, antonyms = (
+            def_module._fetch_definition_or_fallback_example("maison", None, "fr", None)
+        )
+        assert example is None
+        assert synonyms == ["bonheur"]
+        assert antonyms == []
 
 
 # ── fetch_definitions (batch) ─────────────────────────────────────────────────

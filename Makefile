@@ -51,7 +51,7 @@ CYAN   := \033[36m
 
 # -- Phony targets ------------------------------------------------------------
 
-.PHONY: all venv install setup spacy-model translate-setup translate-stop \
+.PHONY: all venv install setup spacy-model dictionary translate-setup translate-stop \
         test test-all format lint typecheck \
         run review backlog clean check-os help
 
@@ -117,6 +117,20 @@ install: venv
 
 setup: venv
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --setup
+
+# -- dictionary ---------------------------------------------------------------
+# Builds the offline Wiktionary index for one language. Large one-time
+# download; the result is gitignored and rebuildable at any time. This is
+# what gives non-English runs real native-language definitions -- no online
+# source has them (issue #1).
+
+dictionary: venv
+	@if [ -z "$(LANGUAGE)" ]; then \
+		printf "$(RED)$(BOLD)[err ]$(RESET)  LANGUAGE is required.\n"; \
+		printf "  Usage: $(CYAN)make dictionary LANGUAGE=fr$(RESET)\n"; \
+		exit 1; \
+	fi
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --build-dictionary "$(LANGUAGE)"
 
 # -- spacy-model --------------------------------------------------------------
 # Model name is resolved from SPACY_LANG via language.get_spacy_model() --
@@ -286,6 +300,7 @@ help:
 	@printf "$(BOLD)First-time setup:$(RESET)\n"
 	@printf "  $(CYAN)make all$(RESET)                              Create venv, install deps, download spaCy model\n"
 	@printf "  $(CYAN)make setup$(RESET)                            Guided .env setup for an optional MW API key\n"
+	@printf "  $(CYAN)make dictionary$(RESET) LANGUAGE=<code>        Offline Wiktionary definitions (large one-time download)\n"
 	@printf "\n"
 	@printf "$(BOLD)Run the pipeline:$(RESET)\n"
 	@printf "  $(CYAN)make run$(RESET) VIDEO_ID=<id> DECK=\"<name>\"   Process a YouTube video\n"

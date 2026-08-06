@@ -30,6 +30,10 @@ output/
 pipeline.db
 review.json
 
+# Offline Wiktionary indexes — hundreds of MB each, rebuildable at any time
+# with `make dictionary LANGUAGE=<code>`. Never commit these.
+dictionaries/
+
 # Logs
 logs/
 *.log

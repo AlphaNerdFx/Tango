@@ -636,6 +636,15 @@ examples:
              "Nothing it configures is required to run the pipeline.",
     )
     parser.add_argument(
+        "--build-dictionary",
+        metavar="LANG",
+        dest="build_dictionary",
+        help="Download and index the offline Wiktionary dictionary for a "
+             "language, then exit. Large one-time download (hundreds of MB) "
+             "that gives non-English runs real native-language definitions, "
+             "which no online source provides. e.g. --build-dictionary fr",
+    )
+    parser.add_argument(
         "--deck",
         metavar="DECK_NAME",
         help='Target Anki deck. Supports sub-decks: "Language::English::Vocabulary". '
@@ -657,6 +666,35 @@ examples:
     return parser
 
 
+# ── Mode: build dictionary ────────────────────────────────────────────────────
+
+def _run_build_dictionary(language: str) -> None:
+    """
+    Build one language's offline Wiktionary index.
+
+    Separated from the pipeline entirely: this is a one-time setup step
+    measured in minutes, not something a normal run should ever trigger.
+    """
+    from pipeline import wiktdata
+
+    language = language.strip().lower()
+    if wiktdata.is_available(language):
+        _warn(f"A dictionary index for '{language}' already exists.")
+        _info(f"Rebuilding it. Delete {wiktdata.index_path(language)} to skip.")
+
+    _info(f"Building offline dictionary for '{language}'.")
+    _info("This downloads several hundred MB once, then works offline.")
+    try:
+        count = wiktdata.build_index(language, progress=_info)
+    except wiktdata.DictionaryError as exc:
+        _err(str(exc))
+        sys.exit(1)
+
+    _ok(f"Indexed {count:,} entries for '{language}'.")
+    _info(f"Stored at {wiktdata.index_path(language)}")
+    _info("Runs in this language will now include real native-language definitions.")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -670,6 +708,10 @@ def main() -> None:
     # requirement below -- neither one processes a video.
     if args.setup:
         _run_setup_wizard()
+        sys.exit(0)
+
+    if args.build_dictionary:
+        _run_build_dictionary(args.build_dictionary)
         sys.exit(0)
 
     if args.list_languages:

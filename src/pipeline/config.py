@@ -34,6 +34,13 @@ OUTPUT_DIR: Path = Path(os.getenv("OUTPUT_DIR", "output"))
 # Review file — deferred queue words written here for manual resolution
 REVIEW_FILE: Path = Path(os.getenv("REVIEW_FILE", "review.json"))
 
+# Directory for per-language Wiktionary indexes built by wiktdata.py.
+# One SQLite file per language, each built once from a bulk download and
+# then read offline. Kept out of DB_PATH's database deliberately: these are
+# large (hundreds of MB), rebuildable from scratch, and must never be
+# confused with the definition cache, which is expensive to rebuild.
+DICT_DIR: Path = Path(os.getenv("DICT_DIR", "dictionaries"))
+
 # Anki
 
 # AnkiConnect host — change if running Anki on a non-default port
