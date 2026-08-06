@@ -45,6 +45,7 @@ Tango/
 │       ├── definition.py
 │       ├── translation.py
 │       ├── cards.py
+│       ├── wiktdata.py
 │       └── state.py
 ├── tests/
 │   ├── test_transcript.py
@@ -54,9 +55,11 @@ Tango/
 │   ├── test_definition.py
 │   ├── test_translation.py
 │   ├── test_cards.py
+│   ├── test_wiktdata.py
 │   ├── test_state.py
 │   └── test_main.py
 ├── output/                         generated .apkg files, gitignored
+├── dictionaries/                   offline Wiktionary indexes, gitignored
 ├── .tangovenv/                     virtual environment, gitignored
 ├── .env                            secrets and config, gitignored
 ├── .gitignore
@@ -105,6 +108,7 @@ Constants defined here:
 DB_PATH                   SQLite database path, default "pipeline.db"
 OUTPUT_DIR                .apkg output directory, default "output"
 REVIEW_FILE               deferred queue file, default "review.json"
+DICT_DIR                  offline Wiktionary indexes, default "dictionaries"
 ANKI_HOST                 AnkiConnect URL, default "http://localhost:8765"
 ANKI_VERSION              AnkiConnect API version, fixed at 6
 ANKI_TIMEOUT              seconds before AnkiConnect timeout, default 5
@@ -1209,6 +1213,72 @@ transcript-language constraint in CLAUDE.md 3.3. Left as-is for now; the
 fallback if it becomes intolerable is to stop treating OMW as a
 native-language source for the affected languages.
 
+### 8.19 Offline Wiktionary index as the non-English definition source
+
+The gap in 9.1 -- no non-English definitions from any online source --
+is closed by a local index built from bulk Wiktionary data, in
+`wiktdata.py`.
+
+Source is wiktextract output published per language by kaikki.org, built
+from *that language's own* Wiktionary edition. That distinction is the
+whole point: the Wiktionary REST endpoint already used for example
+sentences (8.13) returns an English gloss of the foreign word, which is
+why it never fixed definitions. The per-language extracts carry real
+native-language glosses.
+
+**Why bulk data rather than the live API.** ADR-008 evaluated querying
+Wiktionary's raw wikitext API per word. It works, but Wikimedia
+rate-limits anonymous requests to roughly 8-10 before a 429 regardless of
+pacing, and one video needs 100-1000+ lookups. Downloading once sidesteps
+the limit rather than circumventing it, needs no proxies, and makes
+lookups offline and instant. It also skips the two hardest parts of
+parsing raw wikitext -- recursive template stripping, and detecting
+extractions that silently returned template syntax like `{{семантика|`
+as though they had succeeded -- because wiktextract resolved those
+upstream.
+
+**Layered with OMW, not replacing it.** Measured against a real 958-lemma
+French deck, the index covers synonyms at 49% against OMW's 76%. Reading
+that number the other way round would have traded better data for worse,
+so OMW keeps first claim on synonyms and the index fills in behind it.
+The index does supply antonyms, which OMW cannot for any non-English
+language at all (8.18).
+
+Live-verified on the French test video:
+
+| field | before | after |
+|---|---|---|
+| definition | 0% | 95% |
+| class / part of speech | 0% | 95% |
+| 1st example | 41% | 93% |
+| 2nd example | 27% | 71% |
+| synonyms | 76% | 83% |
+| antonyms | 0% | 20% |
+
+Cards rose 958 -> 1036 and words dropped for having nothing to show fell
+83 -> 5. The ~5% that still miss are transcription noise and proper nouns
+(`bermiduamedo`, `ashkabat`), so this is near the practical ceiling for
+the transcript rather than a number with easy headroom.
+
+**Operational notes.** One SQLite file per language under `DICT_DIR`,
+gitignored, built by `make dictionary LANGUAGE=<code>`. French is 676 MB
+compressed to download and 323 MB indexed, from 7.4M source lines of
+which 2.1M are French -- the per-language extract documents *other*
+languages in that language, so the `lang_code` filter discards roughly
+70% of the file. Reads use one connection per thread, since the pool in
+`fetch_definitions()` would otherwise share a single sqlite3 connection
+across threads.
+
+Entirely optional. With no index built, behaviour is exactly what it was
+before. That property is load-bearing enough to be pinned by a test
+fixture: the index lives on disk, so without one tests would pass in CI
+and fail on any machine where a developer had run the build.
+
+Lookup normalises apostrophes in both directions. Wiktionary stores
+French elisions with a typographic apostrophe, so `aujourd'hui` typed
+with an ASCII quote silently missed an entry that was definitely present
+-- on one of the most common words in the language.
+
 ---
 
 ## 9. Known architectural gaps
@@ -1236,6 +1306,10 @@ either before or after those fixes (`fetch_definition` still requires a
 real definition to return a "found" result), but fallback cards now carry
 a real dictionary example or real synonyms far more often than an empty
 field.
+
+**Status: closed for any language with a built index (see 8.19).** The
+offline Wiktionary index takes French definitions from 0% to 95%. What
+follows is the evaluation that led there.
 
 ADR-008 (`docs/ADR-008-per-language-dictionary-sources.md`) evaluated real
 alternatives for the remaining gap. Wiktionary's raw wikitext API

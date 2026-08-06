@@ -29,7 +29,7 @@ a video plays. Only the CLI exists today.
 
 ## 2. Architecture summary
 
-Nine modules in a linear pipeline. One video per invocation. One `.apkg` per
+Ten modules in a linear pipeline. One video per invocation. One `.apkg` per
 run. All state in local SQLite. No server component. No async.
 
 ```
@@ -39,6 +39,7 @@ YouTube video ID
   -> nlp.py            spaCy tokenize, lemmatize, POS filter
   -> deck.py           AnkiConnect duplicate check, fuzzy match
   -> definition.py     dual-source definition and example fetch
+  -> wiktdata.py       offline Wiktionary index, non-English definitions
   -> translation.py    (optional) translate lemma for cross-language definitions
   -> cards.py          genanki .apkg generation
   -> state.py          SQLite run tracking
@@ -214,6 +215,16 @@ python -m spacy download en_core_web_sm
 python -m spacy download fr_core_news_md     # French is pinned to "md", see issue #13
 python -m spacy download es_core_news_sm     # or any other code in language.SPACY_MODELS
 python -m nltk.downloader wordnet omw-2.0     # not omw-1.4 -- this NLTK version silently ignores it
+make dictionary LANGUAGE=fr                  # offline Wiktionary definitions, see below
+```
+
+Non-English definitions require the offline Wiktionary index. Without it,
+every non-English card shows "No definition found" -- no online source has
+this data (issue #1). Large one-time download per language, then offline:
+
+```bash
+make dictionary LANGUAGE=fr           # or any code in language.SPACY_MODELS
+python -m pipeline --build-dictionary fr
 ```
 
 ### Run

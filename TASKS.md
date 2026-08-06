@@ -214,6 +214,67 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       dictionaryapi 429s and the circuit-breaker trip visible rather than
       buried.
 
+- [x] **Offline Wiktionary dictionary: non-English definitions, finally.**
+      Closes the core of #1 and supersedes #16's API-plus-proxy plan.
+      dictionaryapi.dev has no usable non-English data, so every
+      non-English card shipped with "No definition found" -- 0 of 1047
+      French words, 0 for all 9 non-English languages tested.
+
+      Built from wiktextract output published per language by kaikki.org,
+      from *that language's own* Wiktionary edition, so the glosses are
+      native rather than the English glosses the REST endpoint returns
+      (which is why 8.13 never fixed definitions).
+
+      **Bulk data, not the live API, and not proxies.** ADR-008 scoped
+      querying the raw wikitext API per word. Wikimedia 429s after roughly
+      8-10 anonymous requests regardless of pacing, and a video needs
+      100-1000+ lookups. The proposal to route around that with rotating
+      proxies was rejected: it circumvents a rate limit rather than
+      complying with it, against Wikimedia's bot policy, and reverses the
+      reasoning already recorded in #8 and ADR-008 for rejecting scraping
+      sources. Downloading once makes the question moot, and additionally
+      skips recursive template stripping and garbage-extraction detection
+      because wiktextract resolved those upstream.
+
+      **Layered with OMW rather than replacing it.** Measured on a real
+      958-lemma French deck, the index covers synonyms at 49% against
+      OMW's 76%, so OMW keeps first claim and the index fills in behind.
+      Reading that number the other way would have traded better data for
+      worse. The index does supply antonyms, which OMW cannot for any
+      non-English language.
+
+      Live-verified on the French test video: definitions 0% -> 95%,
+      class/POS 0% -> 95%, 1st example 41% -> 93%, 2nd example 27% -> 71%,
+      synonyms 76% -> 83%, antonyms 0% -> 20%. Cards 958 -> 1036, words
+      dropped for having nothing to show 83 -> 5. The residual ~5% are
+      transcription noise and proper nouns, near the practical ceiling.
+
+      Optional by design: with no index, behaviour is exactly as before,
+      pinned by a test fixture because the index lives on disk and would
+      otherwise make tests pass in CI and fail locally. Indexes are
+      gitignored (323 MB for French) and rebuilt with
+      `make dictionary LANGUAGE=<code>`.
+
+- [x] **Second Wiktionary example was fetched then discarded.** The card
+      model has two example fields but the fallback path kept only
+      examples[0], so the second was always blank while the data had
+      already been parsed -- same class of bug as the original Wiktionary
+      miss on #1. Wiktionary had a second example for 25 of 45 real French
+      words. Now populated on 27% of cards, up from 0%.
+
+- [x] **Verb lemmas spaCy's POS-blind lookup got wrong.** Closes #13.
+      spaCy's lemma lookup is keyed on the surface form and is not
+      POS-aware, so verb forms that are also nouns took the noun's lemma
+      despite being tagged VERB: "joue" (plays / cheek) stayed "joue", and
+      the OMW lookup keyed on it returned synonyms for *cheek*. Measured
+      at 5 of 14 common regular -er verbs. Not fixable with a bigger model
+      (md fails identically), spaCy's own rules (no "e" -> "er" entry) or
+      a different lemmatizer (simplemma scores identically) -- all three
+      tested rather than assumed. Fixed with a per-language fallback table
+      that fires only when the model returned the surface form for a VERB
+      and validates the candidate against the model's own vocabulary, so
+      "être" cannot become "êtrer". French is the only verified entry.
+
 - [x] **Language-aware spaCy model selection.** Closes #3, shipped in v0.4.3
       across three commits (b5b0247, cf2dd90, d794211). Verified live: `--language
       fr` alone now selects `fr_core_news_sm` automatically, no manual
