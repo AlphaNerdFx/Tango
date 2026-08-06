@@ -1260,10 +1260,40 @@ Cards rose 958 -> 1036 and words dropped for having nothing to show fell
 (`bermiduamedo`, `ashkabat`), so this is near the practical ceiling for
 the transcript rather than a number with easy headroom.
 
+**Verified beyond French.** Measured against real deck vocabulary from
+previously generated videos, not sampled words:
+
+| language | lemmas | definitions | examples | synonyms | antonyms |
+|---|---|---|---|---|---|
+| French | 958 | 95% | 92% | 49% (OMW 76% wins) | 20% |
+| German | 384 | 91% | 84% | **60%** | **51%** |
+| Russian | 420 | 420 -> 91% | 72% | **72%** | **46%** |
+| English | 274 | 100% | 91% | 43% | 31% |
+
+German and Russian matter most here: OMW covers neither (8.18), so before
+this they had no synonyms at all. Both also carry far richer antonym data
+than French -- 51% and 46% against French's 20%. Any claim that antonym
+coverage is "at the data ceiling" is French-specific and does not
+generalise.
+
+**English is the exception and should not be built.** A live English run
+produced 273 of 274 definitions from Merriam-Webster and consulted the
+index zero times. The single MW miss was "Momentic", a brand name the
+index does not have either, so the index contributed nothing on real
+vocabulary while costing a 475 MB download and 194 MB on disk. Its
+first-sense definitions are also frequently archaic, because English
+Wiktionary orders senses historically rather than by frequency: "may" ->
+"To be strong; to have power (over)", "bill" -> "A written list or
+inventory. (Now obsolete...)", "water" -> "A hamlet in Manaton parish,
+Devon". The existing ordering already prevents harm -- the index is only
+consulted when no definition was found -- but there is no reason to build
+it.
+
 **Operational notes.** One SQLite file per language under `DICT_DIR`,
 gitignored, built by `make dictionary LANGUAGE=<code>`. French is 676 MB
-compressed to download and 323 MB indexed, from 7.4M source lines of
-which 2.1M are French -- the per-language extract documents *other*
+compressed to download and 309 MB indexed, from 7.4M source lines of
+which 2.1M are French; German 287 MB -> 152 MB, Russian 276 MB -> 111 MB,
+English 475 MB -> 194 MB -- the per-language extract documents *other*
 languages in that language, so the `lang_code` filter discards roughly
 70% of the file. Reads use one connection per thread, since the pool in
 `fetch_definitions()` would otherwise share a single sqlite3 connection
