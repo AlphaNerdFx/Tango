@@ -63,6 +63,18 @@ class DictionaryBuildError(DictionaryError):
 
 _DOWNLOAD_URL = "https://kaikki.org/dictionary/downloads/{lang}/{lang}-extract.jsonl.gz"
 
+# kaikki publishes most languages under that uniform per-language path, but
+# English is its primary extraction and lives elsewhere under a different
+# filename -- the uniform path 404s for "en". Confirmed by probing both.
+_DOWNLOAD_URL_OVERRIDES: dict[str, str] = {
+    "en": "https://kaikki.org/dictionary/English/kaikki.org-dictionary-English.jsonl.gz",
+}
+
+
+def download_url(language: str) -> str:
+    """Return the bulk-extract URL for a language."""
+    return _DOWNLOAD_URL_OVERRIDES.get(language, _DOWNLOAD_URL.format(lang=language))
+
 # Schema version, bumped when the table layout changes so a stale index is
 # rebuilt rather than silently queried with the wrong columns.
 _SCHEMA_VERSION = 1
@@ -274,7 +286,7 @@ def build_index(
     downloaded = False
     if archive is None:
         archive = DICT_DIR / f"{language}-extract.jsonl.gz"
-        url = _DOWNLOAD_URL.format(lang=language)
+        url = download_url(language)
         _say(f"Downloading {url} (this is a large one-time download)...")
         try:
             urllib.request.urlretrieve(url, archive)

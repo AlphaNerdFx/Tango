@@ -220,3 +220,19 @@ class TestSchemaVersion:
         conn.commit()
         conn.close()
         assert is_available("fr") is False
+
+
+# -- Download URL resolution --------------------------------------------------
+
+class TestDownloadUrl:
+
+    def test_most_languages_use_the_uniform_per_language_path(self):
+        assert wiktdata.download_url("fr").endswith("/fr/fr-extract.jsonl.gz")
+        assert wiktdata.download_url("de").endswith("/de/de-extract.jsonl.gz")
+
+    def test_english_uses_its_own_path(self):
+        # kaikki's primary extraction is English and lives elsewhere; the
+        # uniform path 404s for "en". Confirmed by probing both.
+        url = wiktdata.download_url("en")
+        assert "en-extract" not in url
+        assert url.endswith("kaikki.org-dictionary-English.jsonl.gz")
