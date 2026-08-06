@@ -511,3 +511,101 @@ class TestTokenFilterExtended:
         t = _make_token("water", "water", "NOUN", is_alpha=True)
         t.ent_type_ = ""
         assert _is_valid_token(t)
+
+# ── Verb-lemma fallback for model lookup gaps (issue #13) ────────────────────
+#
+# spaCy's lemma lookup is keyed on the surface form and is not POS-aware, so
+# a verb form that is also a noun gets the noun's lemma even when correctly
+# tagged VERB: French "joue" (plays / cheek) stayed "joue" instead of
+# becoming "jouer". These run on mock tokens so the default suite needs no
+# French model; TestVerbLemmaFallbackIntegration below repeats the key cases
+# against the real one.
+#
+# Every token here is built with text != lemma or text == lemma on purpose --
+# that distinction IS the bug, so a fixture that always passed identical
+# values would make it inexpressible (CLAUDE.md section 5).
+
+class TestVerbLemmaFallback:
+
+    # A stand-in for the model's lemma_lookup vocabulary.
+    KNOWN = frozenset({"jouer", "porter", "monter", "joue", "porte", "être", "parler"})
+
+    def test_identity_lemma_on_verb_is_repaired(self):
+        # The bug: lookup returned the surface form for a tagged VERB.
+        t = _make_token("joue", "joue", "VERB")
+        assert nlp_module._corrected_lemma(t, "fr", self.KNOWN) == "jouer"
+
+    def test_candidate_absent_from_vocabulary_is_rejected(self):
+        # Pairs with the test above. "être" is a VERB whose lemma equals its
+        # surface form, so the rule fires -- and must then be stopped by the
+        # vocabulary guard, since "êtrer" is not a word. Without the guard
+        # this returns "êtrer" and the pair fails in opposite directions.
+        t = _make_token("être", "être", "VERB")
+        assert nlp_module._corrected_lemma(t, "fr", self.KNOWN) == "être"
+
+    def test_already_correct_lemma_is_left_alone(self):
+        # text != lemma means the model did its job; nothing to repair.
+        t = _make_token("joues", "jouer", "VERB")
+        assert nlp_module._corrected_lemma(t, "fr", self.KNOWN) == "jouer"
+
+    def test_non_verb_is_left_alone(self):
+        # "porte" as a noun (a door) is already correct as itself. Repairing
+        # it to "porter" would be actively wrong.
+        t = _make_token("porte", "porte", "NOUN")
+        assert nlp_module._corrected_lemma(t, "fr", self.KNOWN) == "porte"
+
+    def test_language_without_a_fallback_entry_is_untouched(self):
+        # Only languages verified against their own model get an entry.
+        t = _make_token("juego", "juego", "VERB")
+        assert nlp_module._corrected_lemma(t, "es", self.KNOWN) == "juego"
+
+    def test_empty_vocabulary_disables_the_fallback(self):
+        # _known_lemmas returns an empty set when the pipeline has no lookup
+        # table. That must disable the rule, not let it run unvalidated.
+        t = _make_token("joue", "joue", "VERB")
+        assert nlp_module._corrected_lemma(t, "fr", frozenset()) == "joue"
+
+    def test_empty_lemma_still_falls_back_to_surface_form(self):
+        # Interaction with the Chinese fix (_effective_lemma): a token with
+        # no lemma at all must not crash or produce "".
+        t = _make_token("好", "", "VERB")
+        assert nlp_module._corrected_lemma(t, "zh", frozenset()) == "好"
+
+    def test_only_french_is_registered(self):
+        # Regression guard: entries belong here only once verified against
+        # that language's model. If someone adds one, this failing is the
+        # prompt to show the measurements.
+        assert set(nlp_module._VERB_LEMMA_FALLBACKS) == {"fr"}
+
+
+@pytest.mark.integration
+class TestVerbLemmaFallbackIntegration:
+    """Same cases against the real fr_core_news_md model."""
+
+    def test_real_french_verbs_are_repaired(self):
+        import spacy
+        nlp = spacy.load("fr_core_news_md")
+        known = nlp_module._known_lemmas(nlp)
+        assert known, "model exposes no lemma_lookup table"
+        cases = [
+            ("Il joue au foot.", "joue", "jouer"),
+            ("Il porte un chapeau.", "porte", "porter"),
+            ("Je monte les escaliers.", "monte", "monter"),
+        ]
+        for sentence, surface, expected in cases:
+            for token in nlp(sentence):
+                if token.text.lower() == surface:
+                    assert nlp_module._corrected_lemma(token, "fr", known) == expected
+
+    def test_real_irregular_verbs_are_not_mangled(self):
+        import spacy
+        nlp = spacy.load("fr_core_news_md")
+        known = nlp_module._known_lemmas(nlp)
+        for sentence, surface, expected in [
+            ("Il est là.", "est", "être"),
+            ("Elle a une pomme.", "a", "avoir"),
+            ("Il fait beau.", "fait", "faire"),
+        ]:
+            for token in nlp(sentence):
+                if token.text.lower() == surface:
+                    assert nlp_module._corrected_lemma(token, "fr", known) == expected

@@ -159,6 +159,83 @@ def _effective_lemma(token) -> str:
     return token.lemma_ or token.text
 
 
+# ── Verb-lemma fallback for model lookup gaps (issue #13) ────────────────────
+#
+# spaCy's lemma lookup tables are keyed on the surface form and are NOT
+# POS-aware, so a verb form that is also a noun gets the noun's lemma even
+# when the token is correctly tagged VERB with full morphology. French
+# "joue" (plays / cheek) lemmatizes to "joue" rather than "jouer"; same for
+# "porte" (carries / door), "monte", "donne", "cherche". Measured at 5 of 14
+# common regular -er verbs in present tense, the highest-frequency forms in
+# spoken transcripts.
+#
+# This is not fixable with a bigger model (fr_core_news_md fails identically),
+# with spaCy's own rules (its French verb rules contain no "e" -> "er" entry,
+# so rule_lemmatize returns the surface form too), or by swapping lemmatizer
+# (simplemma scores identically, 9/14, failing the same five words).
+#
+# Keyed by language, listing (suffix, replacement) pairs tried only when
+# spaCy returned the surface form unchanged for a VERB. A language absent
+# here gets no fallback at all, which is the deliberate default: the same
+# transformation produces nonsense in a language with different morphology,
+# so an entry belongs here only once verified against that language's own
+# model. Verified for French; every other language intentionally unlisted.
+_VERB_LEMMA_FALLBACKS: dict[str, tuple[tuple[str, str], ...]] = {
+    "fr": (("e", "er"),),
+}
+
+
+def _known_lemmas(nlp) -> frozenset:
+    """
+    Collect every form the model's lemma lookup table knows about.
+
+    Used to validate a rule-derived candidate before accepting it. Returns
+    an empty set when the pipeline has no lookup table, which disables the
+    fallback rather than letting it run unchecked.
+    """
+    try:
+        lookup = nlp.get_pipe("lemmatizer").lookups.get_table("lemma_lookup")
+    except Exception:
+        return frozenset()
+    known = set(lookup.keys())
+    for value in lookup.values():
+        if isinstance(value, str):
+            known.add(value)
+        else:
+            known.update(value)
+    return frozenset(known)
+
+
+def _corrected_lemma(token, language: str, known: frozenset) -> str:
+    """
+    Return the token's lemma, repairing the POS-blind lookup gap above.
+
+    Only fires when the model plainly gave up: the token is a VERB and its
+    lemma came back identical to its surface form. Irregular verbs are
+    untouched because the model already lemmatizes them correctly, so the
+    condition is never met for them ("est" -> "être" stays "être").
+
+    The candidate is accepted only if the model's own vocabulary contains
+    it. That guard is what keeps the rule from inventing words: "être" is
+    a VERB whose lemma equals its surface form, and the naive rule would
+    produce "êtrer", which the lookup table has never heard of and so is
+    rejected. Validating against the model rather than a hand-written
+    exception list means this cannot drift out of sync with the model.
+    """
+    lemma = _effective_lemma(token)
+    if token.pos_ != "VERB" or not known:
+        return lemma
+    surface = token.text.lower()
+    if lemma.lower() != surface:
+        return lemma
+    for suffix, replacement in _VERB_LEMMA_FALLBACKS.get(language, ()):
+        if surface.endswith(suffix):
+            candidate = surface[: len(surface) - len(suffix)] + replacement
+            if candidate in known:
+                return candidate
+    return lemma
+
+
 def _is_valid_token(token) -> bool:
     """
     Return True if a token should be included in the vocabulary output.
@@ -244,11 +321,15 @@ def process_transcript(text: str, language: str = "en") -> dict[str, int]:
 
     doc = nlp(text)
 
+    # Resolved once per run, not per token: the lookup table is large and
+    # flattening it is the expensive part of the fallback (issue #13).
+    known = _known_lemmas(nlp) if language in _VERB_LEMMA_FALLBACKS else frozenset()
+
     vocabulary: dict[str, int] = {}
     for token in doc:
         if not _is_valid_token(token):
             continue
-        lemma = _effective_lemma(token).lower()
+        lemma = _corrected_lemma(token, language, known).lower()
         if lemma in vocabulary:
             vocabulary[lemma] += 1
         else:
