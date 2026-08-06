@@ -291,8 +291,12 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
     # ── 3. NLP ────────────────────────────────────────────────────────────────
     _info("Running spaCy NLP...")
     try:
+        # surface_forms records how each lemma actually appeared, so the
+        # transcript-example search can match "sais" for the lemma "savoir".
+        surface_forms: dict = {}
         vocabulary = nlp_module.process_transcript(
-            snippets["_full_text"], language=language_code
+            snippets["_full_text"], language=language_code,
+            surface_forms=surface_forms,
         )
     except Exception as exc:
         _err(f"NLP failed: {exc}")
@@ -358,6 +362,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
             language=language_code,
             not_found_examples=batch.not_found_examples,
             not_found_examples2=batch.not_found_examples2,
+            surface_forms=surface_forms,
             not_found_synonyms=batch.not_found_synonyms,
             not_found_antonyms=batch.not_found_antonyms,
         )

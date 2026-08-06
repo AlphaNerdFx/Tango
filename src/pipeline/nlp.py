@@ -24,6 +24,8 @@ ARCHITECTURE.md 9.1). Importing this module does not load any model.
 
 from __future__ import annotations
 
+from typing import Optional
+
 import logging
 import re
 
@@ -184,6 +186,11 @@ _VERB_LEMMA_FALLBACKS: dict[str, tuple[tuple[str, str], ...]] = {
     "fr": (("e", "er"),),
 }
 
+# Cap on surface forms recorded per lemma by process_transcript(). Only one
+# matching transcript sentence is ever needed, so a handful is plenty, and
+# this bounds memory on a long transcript in a heavily inflected language.
+_MAX_SURFACE_FORMS = 8
+
 
 def _known_lemmas(nlp) -> frozenset:
     """
@@ -275,7 +282,11 @@ def _is_valid_token(token) -> bool:
 
 # ── Main processing function ──────────────────────────────────────────────────
 
-def process_transcript(text: str, language: str = "en") -> dict[str, int]:
+def process_transcript(
+    text: str,
+    language: str = "en",
+    surface_forms: Optional[dict] = None,
+) -> dict[str, int]:
     """
     Process a clean transcript string and return a vocabulary frequency dict.
 
@@ -292,6 +303,16 @@ def process_transcript(text: str, language: str = "en") -> dict[str, int]:
               the wrong language here reproduces the original bug this
               parameter exists to fix — always pass the transcript's
               resolved language, not a hardcoded default, in real use.
+        surface_forms: Optional dict, populated in place with
+              lemma -> list of the forms that word actually took in the
+              transcript. Pass one when the caller needs to search the
+              transcript text for a word, since the lemma frequently does
+              not appear there literally: a French transcript says "sais",
+              the lemma is "savoir", and searching for "savoir" finds
+              nothing. cards.build_package() uses this to fill the
+              "Example from Youtube Video" field. Left as an out-parameter
+              rather than a second return value so existing callers and
+              their tests are unaffected.
 
     Returns:
         Ordered dict mapping lemma (lowercase) → frequency count.
@@ -335,6 +356,15 @@ def process_transcript(text: str, language: str = "en") -> dict[str, int]:
         else:
             # First appearance — insert now to preserve ordering
             vocabulary[lemma] = 1
+
+        # Record how the word actually appeared, which is rarely how it is
+        # stored. A transcript says "sais", the lemma is "savoir", and a
+        # search for the lemma finds nothing -- see cards._find_in_snippets.
+        if surface_forms is not None:
+            surface = token.text.lower()
+            seen = surface_forms.setdefault(lemma, [])
+            if surface not in seen and len(seen) < _MAX_SURFACE_FORMS:
+                seen.append(surface)
 
     logger.info(
         "Vocabulary extracted: %d unique lemmas from %d tokens",

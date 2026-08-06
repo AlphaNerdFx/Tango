@@ -609,3 +609,53 @@ class TestVerbLemmaFallbackIntegration:
             for token in nlp(sentence):
                 if token.text.lower() == surface:
                     assert nlp_module._corrected_lemma(token, "fr", known) == expected
+
+
+# ── Surface-form capture ─────────────────────────────────────────────────────
+#
+# The lemma often does not appear in the transcript literally, so
+# cards.py needs the forms the word actually took to find its example
+# sentence. Out-parameter rather than a second return value, so existing
+# callers are untouched.
+
+class TestSurfaceFormCapture:
+
+    def test_surface_forms_populated_when_requested(self):
+        tokens = [
+            _make_token("running", "run", "VERB"),
+            _make_token("ran",     "run", "VERB"),
+            _make_token("water",   "water", "NOUN"),
+        ]
+        forms: dict = {}
+        with patch.object(nlp_module, "_get_model") as mock_model:
+            mock_model.return_value = lambda _t: _make_doc(tokens)
+            nlp_module.process_transcript("text", surface_forms=forms)
+        assert forms["run"] == ["running", "ran"]
+        assert forms["water"] == ["water"]
+
+    def test_omitting_the_argument_changes_nothing(self):
+        # Every existing caller passes nothing; that path must not break.
+        tokens = [_make_token("running", "run", "VERB")]
+        with patch.object(nlp_module, "_get_model") as mock_model:
+            mock_model.return_value = lambda _t: _make_doc(tokens)
+            result = nlp_module.process_transcript("text")
+        assert result == {"run": 1}
+
+    def test_duplicate_surface_forms_recorded_once(self):
+        tokens = [_make_token("ran", "run", "VERB") for _ in range(4)]
+        forms: dict = {}
+        with patch.object(nlp_module, "_get_model") as mock_model:
+            mock_model.return_value = lambda _t: _make_doc(tokens)
+            nlp_module.process_transcript("text", surface_forms=forms)
+        assert forms["run"] == ["ran"]
+
+    def test_surface_form_list_is_capped(self):
+        tokens = [
+            _make_token(f"form{i}", "run", "VERB")
+            for i in range(nlp_module._MAX_SURFACE_FORMS + 5)
+        ]
+        forms: dict = {}
+        with patch.object(nlp_module, "_get_model") as mock_model:
+            mock_model.return_value = lambda _t: _make_doc(tokens)
+            nlp_module.process_transcript("text", surface_forms=forms)
+        assert len(forms["run"]) == nlp_module._MAX_SURFACE_FORMS

@@ -365,14 +365,38 @@ def _build_output_path(video_id: str) -> Path:
 
 # -- Snippet sentence finder --------------------------------------------------
 
-def _find_in_snippets(lemma: str, snippets: dict) -> Optional[str]:
-    pattern = re.compile(r"\b" + re.escape(lemma) + r"\w*", re.IGNORECASE)
-    for key, val in snippets.items():
-        if not isinstance(key, float):
-            continue
-        text = val.get("text", "")
-        if pattern.search(text):
-            return text.strip()
+def _find_in_snippets(
+    lemma: str,
+    snippets: dict,
+    surface_forms: Optional[list] = None,
+) -> Optional[str]:
+    """
+    Return the first transcript line containing this word, or None.
+
+    Searches the lemma first, then the forms the word actually took in the
+    transcript. That second pass is what makes this work for inflected
+    languages: a French transcript says "sais", the lemma is "savoir", and
+    "savoir" never appears in the text at all. Before surface forms were
+    threaded through, 137 of 1036 cards on a real French video had an empty
+    "Example from Youtube Video" field despite the word being right there
+    in the transcript in a conjugated form.
+
+    Matching the lemma first is deliberate: it is the canonical form and,
+    where it does appear, gives the cleanest sentence.
+    """
+    candidates = [lemma]
+    for form in surface_forms or []:
+        if form and form.lower() != lemma.lower():
+            candidates.append(form)
+
+    for candidate in candidates:
+        pattern = re.compile(r"\b" + re.escape(candidate) + r"\w*", re.IGNORECASE)
+        for key, val in snippets.items():
+            if not isinstance(key, float):
+                continue
+            text = val.get("text", "")
+            if pattern.search(text):
+                return text.strip()
     return None
 
 # -- Main entry point ---------------------------------------------------------
@@ -407,6 +431,7 @@ def build_package(
     language: str = "en",
     not_found_examples: Optional[dict] = None,
     not_found_examples2: Optional[dict] = None,
+    surface_forms: Optional[dict] = None,
     not_found_synonyms: Optional[dict] = None,
     not_found_antonyms: Optional[dict] = None,
 ) -> PackageResult:
@@ -430,6 +455,11 @@ def build_package(
                     keyed by lemma (issue #1). A fallback card whose lemma
                     has an entry here gets a real dictionary example instead
                     of an empty "1st Example Sentence" field.
+        surface_forms: nlp.process_transcript()'s surface_forms output --
+                    lemma -> the forms it actually took in the transcript.
+                    Without it, the transcript search looks for a lemma that
+                    frequently never appears literally, and the resulting
+                    card has no "Example from Youtube Video" at all.
         not_found_examples2: definition.DefinitionBatchResult.not_found_examples2
                     -- the second Wiktionary example, filling the card's
                     dedicated second example field. Previously always blank
@@ -475,6 +505,12 @@ def build_package(
             logger.debug("Skipping duplicate note for '%s'.", result.lemma)
             continue
         added_lemmas.add(key)
+        if not result.example_transcript and snippets:
+            # fetch_definitions() searched the lemma alone; retry with the
+            # forms the word actually took before giving up on the field.
+            result.example_transcript = _find_in_snippets(
+                result.lemma, snippets, (surface_forms or {}).get(key)
+            )
         deck.add_note(_build_note(result, model, video_id, language))
         standard_count += 1
         logger.debug("Card built: '%s' (%s)", result.lemma, result.source)
@@ -485,7 +521,10 @@ def build_package(
         if key in added_lemmas:
             logger.debug("Skipping duplicate fallback note for '%s'.", lemma)
             continue
-        transcript_example = _find_in_snippets(lemma, snippets) if snippets else None
+        transcript_example = (
+            _find_in_snippets(lemma, snippets, (surface_forms or {}).get(key))
+            if snippets else None
+        )
         dict_example = (not_found_examples or {}).get(lemma)
         dict_example2 = (not_found_examples2 or {}).get(lemma)
         fallback_synonyms = (not_found_synonyms or {}).get(lemma)

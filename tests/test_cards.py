@@ -564,3 +564,82 @@ class TestIntegration:
         with zipfile.ZipFile(path) as z:
             names = z.namelist()
         assert "collection.anki21" in names or "collection.anki2" in names
+
+# -- Surface-form transcript matching -----------------------------------------
+#
+# The lemma frequently does not appear in the transcript at all: a French
+# video says "sais", the lemma is "savoir". Searching the lemma alone left
+# 137 of 1036 cards on a real run with an empty "Example from Youtube
+# Video" despite the word being right there in a conjugated form.
+
+class TestSurfaceFormMatching:
+
+    @pytest.fixture
+    def french_snippets(self) -> dict:
+        return {
+            0.0: {"end": 3.0, "text": "je sais pas ce qu'il faut faire"},
+            3.0: {"end": 6.0, "text": "on écoutez bien la suite"},
+            "_full_text": "full", "_language_code": "fr", "_snippet_count": 2,
+        }
+
+    def test_lemma_absent_from_transcript_is_found_via_surface_form(
+        self, french_snippets
+    ):
+        # "savoir" never appears; "sais" does.
+        assert _find_in_snippets("savoir", french_snippets) is None
+        found = _find_in_snippets("savoir", french_snippets, ["sais"])
+        assert found == "je sais pas ce qu'il faut faire"
+
+    def test_lemma_is_preferred_over_surface_forms_when_both_match(self):
+        # The lemma is the canonical form, so where it does appear it gives
+        # the cleaner sentence. Ordering must not be left to chance.
+        snippets = {
+            0.0: {"end": 1.0, "text": "les formes conjuguées viennent après"},
+            1.0: {"end": 2.0, "text": "le verbe savoir apparait ici"},
+            "_full_text": "f", "_language_code": "fr", "_snippet_count": 2,
+        }
+        found = _find_in_snippets("savoir", snippets, ["conjuguées"])
+        assert found == "le verbe savoir apparait ici"
+
+    def test_no_surface_forms_behaves_exactly_as_before(self, sample_snippets):
+        # Callers that pass nothing (review and backlog modes) are unaffected.
+        assert _find_in_snippets("develop", sample_snippets) is not None
+        assert _find_in_snippets("develop", sample_snippets, None) is not None
+
+    def test_surface_form_identical_to_lemma_is_not_searched_twice(
+        self, french_snippets
+    ):
+        assert _find_in_snippets("sais", french_snippets, ["sais"]) is not None
+
+    def test_build_package_uses_surface_forms_for_fallback_cards(
+        self, french_snippets, tmp_path
+    ):
+        result = build_package(
+            VIDEO_ID, DECK_NAME, [], ["savoir"], french_snippets,
+            language="fr", surface_forms={"savoir": ["sais"]},
+        )
+        assert result.fallback_count == 1
+        assert result.skipped_count == 0
+        extract_dir = tmp_path / "sf"
+        with zipfile.ZipFile(result.path) as z:
+            z.extractall(extract_dir)
+        conn = sqlite3.connect(extract_dir / "collection.anki2")
+        fields = conn.execute("SELECT flds FROM notes").fetchone()[0].split("\x1f")
+        assert fields[5] == "je sais pas ce qu'il faut faire"  # Example from Youtube
+
+    def test_build_package_backfills_standard_cards_missing_an_example(
+        self, french_snippets, tmp_path
+    ):
+        # fetch_definitions() searched the lemma alone, so a found word can
+        # arrive here with an empty transcript example that surface forms
+        # can still fill.
+        result = DefinitionResult(
+            lemma="savoir", definition="Connaitre.",
+            example_dict=None, example_dict2=None, example_transcript=None,
+            synonyms=[], antonyms=[], part_of_speech="verb", source="wiktionary",
+        )
+        build_package(
+            VIDEO_ID, DECK_NAME, [result], [], french_snippets,
+            language="fr", surface_forms={"savoir": ["sais"]},
+        )
+        assert result.example_transcript == "je sais pas ce qu'il faut faire"
