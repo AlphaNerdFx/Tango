@@ -870,7 +870,7 @@ class TestFetchDefinitionOrFallbackExample:
     @patch("pipeline.definition.fetch_definition")
     def test_returns_result_when_definition_found(self, mock_fetch, sample_definition_result):
         mock_fetch.return_value = sample_definition_result
-        result, example, synonyms, antonyms = def_module._fetch_definition_or_fallback_example(
+        result, example, _e2, synonyms, antonyms = def_module._fetch_definition_or_fallback_example(
             "contaminate", None, "en", None
         )
         assert result is sample_definition_result
@@ -890,7 +890,7 @@ class TestFetchDefinitionOrFallbackExample:
             {"definition": "d", "examples": ["Some native sentence."]},
         ]}]
         mock_wn.return_value = ([], [])
-        result, example, _, _ = def_module._fetch_definition_or_fallback_example(
+        result, example, _e2, _, _ = def_module._fetch_definition_or_fallback_example(
             "word", None, language, None
         )
         assert result is None
@@ -903,7 +903,7 @@ class TestFetchDefinitionOrFallbackExample:
     def test_no_wiktionary_attempt_for_english(self, mock_fetch, mock_wikt, mock_wn):
         mock_fetch.return_value = None
         mock_wn.return_value = ([], [])
-        result, example, _, _ = def_module._fetch_definition_or_fallback_example(
+        result, example, _e2, _, _ = def_module._fetch_definition_or_fallback_example(
             "word", None, "en", None
         )
         assert result is None
@@ -920,7 +920,7 @@ class TestFetchDefinitionOrFallbackExample:
         mock_fetch.return_value = None
         mock_wikt.return_value = None
         mock_wn.return_value = ([], [])
-        result, example, _, _ = def_module._fetch_definition_or_fallback_example(
+        result, example, _e2, _, _ = def_module._fetch_definition_or_fallback_example(
             "xyzqwerty", None, language, None
         )
         assert result is None
@@ -935,7 +935,7 @@ class TestFetchDefinitionOrFallbackExample:
         mock_fetch.return_value = None
         mock_wikt.return_value = None
         mock_wn.return_value = (["bonheur", "joie"], [])
-        result, example, synonyms, antonyms = def_module._fetch_definition_or_fallback_example(
+        result, example, _e2, synonyms, antonyms = def_module._fetch_definition_or_fallback_example(
             "content", None, "fr", None
         )
         assert result is None
@@ -1065,6 +1065,42 @@ class TestFetchDefinitions:
         result = fetch_definitions(["xyzqwerty"], language="en")
         assert result.not_found_examples == {}
         mock_wikt.assert_not_called()
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_second_wiktionary_example_is_kept_not_discarded(
+        self, mock_fetch, mock_wikt, mock_wn
+    ):
+        # The card model has two example fields. Wiktionary commonly supplies
+        # two (25 of 45 real French words), but only examples[0] was kept, so
+        # the second field was blank on every fallback card while the data
+        # had already been fetched.
+        mock_fetch.return_value = None
+        mock_wn.return_value = ([], [])
+        mock_wikt.return_value = [{"partOfSpeech": "Noun", "definitions": [
+            {"definition": "d", "examples": ["Premiere phrase.", "Deuxieme phrase."]},
+        ]}]
+        result = fetch_definitions(["mot"], language="fr")
+        assert result.not_found_examples == {"mot": "Premiere phrase."}
+        assert result.not_found_examples2 == {"mot": "Deuxieme phrase."}
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_single_example_leaves_second_slot_empty(
+        self, mock_fetch, mock_wikt, mock_wn
+    ):
+        # Pairs with the test above: one example must not be duplicated into
+        # both fields.
+        mock_fetch.return_value = None
+        mock_wn.return_value = ([], [])
+        mock_wikt.return_value = [{"partOfSpeech": "Noun", "definitions": [
+            {"definition": "d", "examples": ["Seule phrase."]},
+        ]}]
+        result = fetch_definitions(["mot"], language="fr")
+        assert result.not_found_examples == {"mot": "Seule phrase."}
+        assert result.not_found_examples2 == {}
 
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")

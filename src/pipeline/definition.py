@@ -262,6 +262,12 @@ class DefinitionBatchResult:
                              usable example (issue #1) -- lets the resulting
                              fallback card show a real dictionary example
                              instead of just the transcript sentence.
+        not_found_examples2: Second native-language example for a not_found
+                             lemma, keyed by lemma. Wiktionary frequently
+                             carries more than one usage example (measured at
+                             25 of 45 real French words) and the fallback
+                             card has a dedicated second example field, so
+                             discarding it left that field permanently blank.
         not_found_synonyms: OMW/WordNet synonyms for a not_found lemma, keyed
                              by lemma (see ADR-008). fetch_definition() only
                              runs its own OMW lookup after finding a
@@ -277,6 +283,7 @@ class DefinitionBatchResult:
     not_found:          list[str]              = field(default_factory=list)
     from_cache:         list[str]              = field(default_factory=list)
     not_found_examples: dict[str, str]         = field(default_factory=dict)
+    not_found_examples2: dict[str, str]        = field(default_factory=dict)
     not_found_synonyms: dict[str, list[str]]   = field(default_factory=dict)
     not_found_antonyms: dict[str, list[str]]   = field(default_factory=dict)
 
@@ -1107,7 +1114,7 @@ def _fetch_definition_or_fallback_example(
     snippets: Optional[dict],
     language: str,
     def_language: Optional[str],
-) -> tuple[Optional[DefinitionResult], Optional[str], list[str], list[str]]:
+) -> tuple[Optional[DefinitionResult], Optional[str], Optional[str], list[str], list[str]]:
     """
     Fetch one lemma's definition, falling back to a bare Wiktionary example
     and OMW/WordNet synonyms/antonyms when no definition exists anywhere.
@@ -1125,27 +1132,34 @@ def _fetch_definition_or_fallback_example(
     already given up, is what lets a French video's fallback cards carry a
     real dictionary example and real synonyms instead of empty fields.
 
-    Returns (result, None, [], []) when a definition was found -- the
-    example/synonyms/antonyms are already inside `result` in that case.
-    Otherwise returns (None, example, synonyms, antonyms), where each of
-    the three may still be empty/None if no source had anything.
+    Returns (result, None, None, [], []) when a definition was found -- the
+    examples/synonyms/antonyms are already inside `result` in that case.
+    Otherwise returns (None, example, example2, synonyms, antonyms), where
+    each may still be empty/None if no source had anything.
+
+    Both examples are returned, not just the first. The card model has two
+    dedicated example fields and Wiktionary commonly supplies two (25 of 45
+    real French words), so taking only examples[0] left the second field
+    blank on every fallback card while the data sat fetched and discarded.
     """
     result = fetch_definition(
         lemma, snippets, use_cache=False, language=language, def_language=def_language,
     )
     if result:
-        return result, None, [], []
+        return result, None, None, [], []
 
     example: Optional[str] = None
+    example2: Optional[str] = None
     if language != "en":
         wikt_data = _fetch_from_wiktionary(lemma, language)
         if wikt_data:
             examples = _parse_wiktionary_examples(wikt_data)
             if examples:
                 example = examples[0]
+                example2 = examples[1] if len(examples) > 1 else None
 
     synonyms, antonyms = _wordnet_synonyms_antonyms(lemma, language)
-    return None, example, synonyms, antonyms
+    return None, example, example2, synonyms, antonyms
 
 
 def fetch_definitions(
@@ -1221,7 +1235,11 @@ def fetch_definitions(
     # definition at all -- see _fetch_definition_or_fallback_example().
     if to_fetch:
         results: dict[
-            str, tuple[Optional[DefinitionResult], Optional[str], list[str], list[str]]
+            str,
+            tuple[
+                Optional[DefinitionResult], Optional[str], Optional[str],
+                list[str], list[str],
+            ],
         ] = {}
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_lemma = {
@@ -1237,16 +1255,21 @@ def fetch_definitions(
                     results[lemma] = future.result()
                 except Exception:
                     logger.exception("Unexpected error fetching '%s'.", lemma)
-                    results[lemma] = (None, None, [], [])
+                    results[lemma] = (None, None, None, [], [])
 
         for lemma in to_fetch:
-            result, fallback_example, fallback_synonyms, fallback_antonyms = results[lemma]
+            (
+                result, fallback_example, fallback_example2,
+                fallback_synonyms, fallback_antonyms,
+            ) = results[lemma]
             if result:
                 batch.found.append(result)
             else:
                 batch.not_found.append(lemma)
                 if fallback_example:
                     batch.not_found_examples[lemma] = fallback_example
+                if fallback_example2:
+                    batch.not_found_examples2[lemma] = fallback_example2
                 if fallback_synonyms:
                     batch.not_found_synonyms[lemma] = fallback_synonyms
                 if fallback_antonyms:

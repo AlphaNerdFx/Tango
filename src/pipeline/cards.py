@@ -316,6 +316,7 @@ def _build_fallback_note(
     video_id: str,
     language: str = "en",
     dict_example: Optional[str] = None,
+    dict_example2: Optional[str] = None,
     synonyms: Optional[list[str]] = None,
     antonyms: Optional[list[str]] = None,
 ) -> genanki.Note:
@@ -344,7 +345,7 @@ def _build_fallback_note(
             "",                                              # Class
             "No definition found",                           # Definition
             dict_example or "",                               # 1st Example Sentence
-            "",                                              # 2nd Example Sentence
+            dict_example2 or "",                              # 2nd Example Sentence
             example_transcript or "",                        # Example from Youtube Video
             _format_pills(synonyms or [], "vocab-pill"),      # Synonyms
             _format_pills(antonyms or [], "antonym-pill"),    # Antonyms
@@ -405,6 +406,7 @@ def build_package(
     snippets: Optional[dict] = None,
     language: str = "en",
     not_found_examples: Optional[dict] = None,
+    not_found_examples2: Optional[dict] = None,
     not_found_synonyms: Optional[dict] = None,
     not_found_antonyms: Optional[dict] = None,
 ) -> PackageResult:
@@ -428,6 +430,10 @@ def build_package(
                     keyed by lemma (issue #1). A fallback card whose lemma
                     has an entry here gets a real dictionary example instead
                     of an empty "1st Example Sentence" field.
+        not_found_examples2: definition.DefinitionBatchResult.not_found_examples2
+                    -- the second Wiktionary example, filling the card's
+                    dedicated second example field. Previously always blank
+                    on fallback cards because only examples[0] was kept.
         not_found_synonyms: definition.DefinitionBatchResult.not_found_synonyms
                     -- OMW/WordNet synonyms for not_found lemmas, keyed by
                     lemma (ADR-008). Same idea as not_found_examples, for
@@ -481,6 +487,7 @@ def build_package(
             continue
         transcript_example = _find_in_snippets(lemma, snippets) if snippets else None
         dict_example = (not_found_examples or {}).get(lemma)
+        dict_example2 = (not_found_examples2 or {}).get(lemma)
         fallback_synonyms = (not_found_synonyms or {}).get(lemma)
         fallback_antonyms = (not_found_antonyms or {}).get(lemma)
         if not transcript_example and not dict_example:
@@ -494,7 +501,7 @@ def build_package(
         deck.add_note(
             _build_fallback_note(
                 lemma, transcript_example, model, video_id, language, dict_example,
-                fallback_synonyms, fallback_antonyms,
+                dict_example2, fallback_synonyms, fallback_antonyms,
             )
         )
         fallback_count += 1

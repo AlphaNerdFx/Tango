@@ -451,6 +451,20 @@ class TestBuildPackage:
         fields = flds.split("\x1f")  # Anki's field separator
         assert fields[3] == "Une phrase en français."  # 1st Example Sentence
 
+    def test_second_example_reaches_the_real_exported_card(self, tmp_path):
+        result = build_package(
+            VIDEO_ID, DECK_NAME, [], ["philosophy"], {},
+            not_found_examples={"philosophy": "Premiere phrase."},
+            not_found_examples2={"philosophy": "Deuxieme phrase."},
+        )
+        extract_dir = tmp_path / "extracted2"
+        with zipfile.ZipFile(result.path) as z:
+            z.extractall(extract_dir)
+        conn = sqlite3.connect(extract_dir / "collection.anki2")
+        fields = conn.execute("SELECT flds FROM notes").fetchone()[0].split("\x1f")
+        assert fields[3] == "Premiere phrase."   # 1st Example Sentence
+        assert fields[4] == "Deuxieme phrase."   # 2nd Example Sentence
+
     def test_no_not_found_examples_arg_behaves_as_before(self, sample_snippets):
         # not_found_examples is optional -- omitting it must not break
         # existing callers (review/backlog modes don't pass it).
