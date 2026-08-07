@@ -814,8 +814,29 @@ current state.
       version fails 5 of the 14, and the narrower defaults-only version
       still fails the relative-override pair plus three module constants.
       See ARCHITECTURE.md 8.21.
-- [ ] Investigate whether `token.is_alpha` removal admits any junk in languages
-      other than French. Only one video was tested.
+- [x] **Investigate whether `token.is_alpha` removal admits junk in languages
+      other than French.** Measured across every language processed so far,
+      not one video: of 4128 distinct (deck, lemma) pairs in `pipeline.db`,
+      exactly **12** are lemmas `str.isalpha()` rejects — that is, the
+      complete set the removed filter used to block.
+
+      | deck | count | lemmas |
+      |---|---|---|
+      | `LangTest_de` | 5 | `gibt's`, `gibt'sn`, `kriegt'sn`, `u-bahnfahrer`, `war's` |
+      | `LangTest_fr2` | 4 | `au-dessus`, `aujourd'hui`, `bien-être`, `peut-être` |
+      | `LangTest_zh` | 2 | `bye-bye`, `i'm` |
+      | `Tango_Verify_20260807` | 1 | `semi-relevé` |
+
+      0.29% of all vocabulary, and most of it is real: every French entry is
+      a common word, `u-bahnfahrer` is an ordinary compound, and `gibt's` /
+      `war's` are standard spoken German contractions. Three are marginal —
+      `gibt'sn` and `kriegt'sn` are dialectal transcription artifacts, and
+      `i'm` is English code-switching inside a Chinese video.
+
+      The trade is decisively worth it in the other direction: restoring
+      `is_alpha` to block those three would also throw away `aujourd'hui`,
+      `peut-être`, `bien-être` and `au-dessus`, four of the most common words
+      in French. No action needed.
 - [ ] Audio on cards. Requires a TTS source and genanki media file handling.
 - [ ] User vocabulary profiles from Anki review history. Requires at least 30
       days of review data before the model has anything to learn from.
