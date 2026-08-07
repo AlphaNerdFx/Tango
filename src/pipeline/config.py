@@ -23,23 +23,101 @@ from dotenv import load_dotenv
 # Load .env file if present — does nothing if file doesn't exist
 load_dotenv()
 
-# Paths
+# ── Paths ─────────────────────────────────────────────────────────────────────
+#
+# Every path below is anchored to the project root, not to the process's
+# working directory. Anchoring to the working directory means running the
+# pipeline from anywhere but the repository root silently uses a *different*
+# set of files, and every one of those failures is silent:
+#
+#   DB_PATH      a second, empty database — the definition cache is gone and
+#                so is the record of which videos have already been processed
+#   DICT_DIR     an unbuilt index directory, so every non-English card loses
+#                its definition and the run still reports success
+#   REVIEW_FILE  words deferred to one review.json, `--process-review`
+#                reading another
+#   OUTPUT_DIR   the .apkg written somewhere other than where the docs and
+#                the Makefile say to look for it
+#
+# Valid-looking wrong output with nothing raised is this codebase's
+# characteristic failure mode; see SESSION.md 6.12.
+
+
+def _project_root(root: Path | None = None) -> Path:
+    """
+    Absolute path to the repository root, resolved from this file's location.
+
+    ``config.py`` lives at ``<root>/src/pipeline/config.py``, so the root is
+    three levels up. That holds for the documented install, ``pip install -e .``,
+    which leaves the package in the source tree.
+
+    A non-editable install puts the package under ``site-packages``, where
+    three levels up is not a project root and is the wrong place to write a
+    database. ``pyproject.toml`` is the marker that tells the two apart; when
+    it is missing, this falls back to the working directory, which is the
+    behaviour every path had before anchoring.
+
+    Args:
+        root: Override for the computed root. Exists so the marker-missing
+            branch is testable without a second install layout on disk.
+
+    Returns:
+        The project root if it looks like one, otherwise the current
+        working directory.
+    """
+    candidate = root if root is not None else Path(__file__).resolve().parents[2]
+    return candidate if (candidate / "pyproject.toml").is_file() else Path.cwd()
+
+
+PROJECT_ROOT: Path = _project_root()
+
+
+def _resolve_path(var: str, default: str, root: Path | None = None) -> Path:
+    """
+    Resolve a configurable path against the project root.
+
+    Anchoring the *default* alone would not have fixed anything: the shipped
+    ``.env.example`` sets ``DB_PATH=pipeline.db``, ``OUTPUT_DIR=output``, and
+    ``REVIEW_FILE=review.json``, so anyone who followed the documented setup
+    has a relative override in their ``.env`` and never reaches the default.
+    A relative value is therefore anchored too, whether it came from the
+    environment or from the default here.
+
+    An absolute path is honoured exactly as given, and ``~`` is expanded
+    first so ``~/tango.db`` counts as absolute rather than becoming a
+    directory named ``~`` inside the project.
+
+    Args:
+        var: Environment variable name to read.
+        default: Value to use when the variable is unset or empty.
+        root: Directory to anchor relative paths to. Defaults to PROJECT_ROOT.
+
+    Returns:
+        An absolute path, unless the project root itself is relative
+        (possible only in the working-directory fallback above).
+    """
+    value = os.getenv(var) or default
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path
+    return (root if root is not None else PROJECT_ROOT) / path
+
 
 # SQLite database — shared across state.py, definition.py, deck.py
-DB_PATH: Path = Path(os.getenv("DB_PATH", "pipeline.db"))
+DB_PATH: Path = _resolve_path("DB_PATH", "pipeline.db")
 
 # Output directory for generated .apkg files
-OUTPUT_DIR: Path = Path(os.getenv("OUTPUT_DIR", "output"))
+OUTPUT_DIR: Path = _resolve_path("OUTPUT_DIR", "output")
 
 # Review file — deferred queue words written here for manual resolution
-REVIEW_FILE: Path = Path(os.getenv("REVIEW_FILE", "review.json"))
+REVIEW_FILE: Path = _resolve_path("REVIEW_FILE", "review.json")
 
 # Directory for per-language Wiktionary indexes built by wiktdata.py.
 # One SQLite file per language, each built once from a bulk download and
 # then read offline. Kept out of DB_PATH's database deliberately: these are
 # large (hundreds of MB), rebuildable from scratch, and must never be
 # confused with the definition cache, which is expensive to rebuild.
-DICT_DIR: Path = Path(os.getenv("DICT_DIR", "dictionaries"))
+DICT_DIR: Path = _resolve_path("DICT_DIR", "dictionaries")
 
 # Anki
 

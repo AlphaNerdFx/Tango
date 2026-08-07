@@ -17,9 +17,9 @@ installed environment at the time of writing, not recalled from memory. See
 pushed to `tango-origin/main`
 **Working toward:** v0.4.5, untagged — the commits since v0.4.4 are shipped
 and verified but have not been cut as a release
-**Test state:** 640 passing, 0 failing, 24 integration deselected (`make test`,
-79s). CLAUDE.md and ARCHITECTURE.md both still said 524/22 before this session;
-corrected in the same pass.
+**Test state:** 654 passing, 0 failing, 24 integration deselected (`make test`,
+80s). CLAUDE.md and ARCHITECTURE.md both still said 524/22 before this session;
+corrected in the same pass, then again when `tests/test_config.py` added 14.
 **Overall completion estimate:** roughly 80 percent toward a v1.0.0 CLI tool,
 roughly 25 percent toward the full multi-surface product vision
 

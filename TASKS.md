@@ -650,8 +650,25 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
 - [ ] Hyphenated compound handling in the deck fuzzy match — `semi-relevé` is
       now admitted by the NLP filter but the fuzzy matcher has not been tested
       against hyphenated fronts.
-- [ ] `DB_PATH` should default to an absolute path so running from different
-      directories does not create multiple database files.
+- [x] **`DB_PATH` should default to an absolute path so running from different
+      directories does not create multiple database files.** Done, and wider
+      than the entry described. `DICT_DIR`, `REVIEW_FILE`, and `OUTPUT_DIR`
+      had the identical bug, and `DICT_DIR`'s consequence is worse than the
+      database's: a missing index is a supported state, so a run from the
+      wrong directory silently drops every non-English definition and still
+      reports success.
+
+      Anchoring the defaults alone would have fixed nothing in practice.
+      `.env.example` ships `DB_PATH=pipeline.db`, `OUTPUT_DIR=output`, and
+      `REVIEW_FILE=review.json`, so a documented install always takes the
+      override branch and never reaches the default — the local `.env` here
+      does exactly that. Relative values are now anchored whatever their
+      source; absolute ones are honoured as given, with `~` expanded first.
+
+      Verified by mutation, not by the new tests passing: the unanchored
+      version fails 5 of the 14, and the narrower defaults-only version
+      still fails the relative-override pair plus three module constants.
+      See ARCHITECTURE.md 8.21.
 - [ ] Investigate whether `token.is_alpha` removal admits any junk in languages
       other than French. Only one video was tested.
 - [ ] Audio on cards. Requires a TTS source and genanki media file handling.

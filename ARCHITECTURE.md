@@ -1340,6 +1340,47 @@ and examples from the Wiktionary index, synonyms from OMW. The empty
 field was a matching failure, and "savoir" now carries "déjà me faites
 pas croire que vous savez" straight from the video.
 
+### 8.21 Configured paths anchor to the project root, not the working directory
+
+`DB_PATH`, `DICT_DIR`, `REVIEW_FILE`, and `OUTPUT_DIR` were resolved
+relative to whatever directory the process happened to start in. Running
+`python -m pipeline` from anywhere but the repository root therefore used a
+different set of files, and every one of those failures is silent:
+
+| Path | Consequence of resolving elsewhere |
+|---|---|
+| `DB_PATH` | A second, empty database. The definition cache is gone, and so is the record of which videos have been processed, so `check_video_not_processed` passes for a video already done. |
+| `DICT_DIR` | An empty index directory. `wiktdata` treats a missing index as "not built", which is a supported state, so every non-English card loses its definition and the run reports success. |
+| `REVIEW_FILE` | Words deferred to one `review.json` while `--process-review` reads another, reporting the queue as empty. |
+| `OUTPUT_DIR` | The `.apkg` written somewhere other than where the docs and the Makefile say to look. |
+
+None raises. This is 8.4 and 6.12's recurring shape again -- two values that
+should be the same with nothing enforcing it -- with the working directory
+as the unenforced half.
+
+`config._project_root()` resolves the root from `config.py`'s own location:
+the file sits at `<root>/src/pipeline/config.py`, so the root is three
+levels up. `pyproject.toml` is the marker confirming it really is a project
+root. A non-editable install puts the package under `site-packages`, where
+three levels up is not a root and is the wrong place to write a database;
+that case falls back to the working directory, which is exactly the old
+behaviour. The documented install is `pip install -e .`, where the marker
+is present.
+
+**Anchoring the defaults alone would have fixed nothing.** `.env.example`
+ships `DB_PATH=pipeline.db`, `OUTPUT_DIR=output`, and
+`REVIEW_FILE=review.json`, so anyone who followed the documented setup has
+a relative override in `.env` and never reaches the default. A relative
+value is therefore anchored wherever it came from. An absolute path is
+honoured as given, and `~` is expanded first so `~/tango.db` counts as
+absolute instead of becoming a literal `~` directory inside the repository.
+
+Verified by mutation rather than by the tests passing: reverting to the
+unanchored version fails five of the new tests, and the narrower "anchor
+the default only" version still fails the relative-override pair and the
+three module constants this environment's own `.env` sets. Both matched
+pairs are in `tests/test_config.py` per CLAUDE.md section 5.
+
 ---
 
 ## 9. Known architectural gaps
@@ -1391,7 +1432,7 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-640 unit tests across ten test files, 24 more marked integration and
+654 unit tests across eleven test files, 24 more marked integration and
 deselected by default. All run without network, Anki, or installed models.
 Integration tests use `@pytest.mark.integration` and are excluded by the
 default `addopts` in `pyproject.toml`.
