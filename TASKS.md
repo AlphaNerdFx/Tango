@@ -415,6 +415,32 @@ current state.
 
 ---
 
+## High — next up
+
+- [ ] **Test the three CLI run modes.** `make coverage` puts the project at
+      83% overall but `__main__.py` at 55%, with lines 245-500 —
+      `_run_pipeline`, `_run_review`, `_run_backlog` — essentially
+      untested. That is not a coincidental gap: both bugs found on 7 August
+      were wiring rather than logic, invisible to a unit test of any single
+      module, and the modules they sat in report 92% and 100%. The run
+      modes decide what gets called with what, and nothing checks that.
+
+- [ ] **Antonyms, the one visibly thin field.** Measured on real cards read
+      back out of Anki: 23.2% against Definition's 98.6% and Synonyms' 85%.
+      OMW returns none for any non-English language, so the offline index is
+      the only source and Wiktionary carries antonyms far less often than
+      definitions. German and Russian measure 51% and 46%, so this is
+      per-language, not a global ceiling. See the Datamuse note under Medium,
+      and verify its non-English coverage before scoping anything.
+
+- [ ] **`make install` is broken in this environment.** The Makefile uses
+      `$(VENV_PIP)` = `.tangovenv/bin/pip`, which does not exist here —
+      only `python -m pip` works. `install` and `translate-setup` both call
+      it. Found while installing pytest-cov; not fixed, since whether the
+      venv or the Makefile is wrong is a setup decision.
+
+---
+
 ## Medium
 
 - [x] **Concurrent definition fetching.**

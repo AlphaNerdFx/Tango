@@ -1406,6 +1406,19 @@ End to end, reprocessing the video whose cards are already in
 `LangTest_fr2` went from 1054 NEW -- a wholly duplicate run -- to 1050
 SKIP, 4 QUEUE, 0 NEW.
 
+Confirmed afterwards with two real pipeline runs into a purpose-made empty
+deck, rather than only by replaying decisions against fetched fronts:
+
+```
+run 1, empty deck      Deck check: 0 skip / 0 queue / 207 new
+                       imported 207 notes
+run 2, --force, same   Deck check: 207 skip / 0 queue / 0 new
+```
+
+The second run created nothing. Before this fix it would have re-fetched
+207 definitions and generated 207 duplicate cards. A snapshot of all 64
+decks taken before and after confirms only the test deck changed.
+
 The fix reads the field with the lowest `order`, which is what Anki itself
 treats as a note's identity for its own duplicate detection. That makes the
 check note-type agnostic rather than trading one hardcoded field name for
@@ -1436,6 +1449,37 @@ l'horreur` even after stripping. The length-ratio guard rejects those, so
 they stay effectively invisible -- 152 of 2172 notes in the `French` deck.
 Recovering them needs a first-segment heuristic, which is a different
 decision.
+
+### 8.23 Measured card quality, per field, on real French cards
+
+Coverage numbers elsewhere in this document count what a *source* returned.
+This is what actually reaches a card, read back out of Anki after import —
+207 French cards from video `2yHn8uc5_-4`, deck `Tango_Verify_20260807`,
+with the offline index built:
+
+| Field | Filled | Notes |
+|---|---|---|
+| Word | 100% | |
+| Example from Youtube Video | 100% | 8.20's surface-form matching holding at ceiling |
+| VideoID / Source | 100% | provenance, always written |
+| Class (POS) | 98.6% | from the index, same 3 misses as Definition |
+| Definition | 98.6% | 3 of 207 unresolved, up from 0% pre-index |
+| 1st Example Sentence | 97.1% | |
+| 2nd Example Sentence | 74.9% | Wiktionary often has only one |
+| Synonyms | 85.0% | OMW first, index behind it |
+| **Antonyms** | **23.2%** | the weakest field by a wide margin |
+
+Definitions are effectively solved for a language with an index: 98.6%
+here against the 95% recorded on the larger 1036-card run, and the residual
+is transcription noise and proper nouns.
+
+Antonyms are the one field still visibly thin, and it is a data problem
+rather than a plumbing one. OMW returns no antonyms for any non-English
+language (8.18), so the index is the only source, and Wiktionary entries
+carry antonyms far less often than definitions. German and Russian measure
+better than French here (51% and 46% against 20-23%), so this is
+per-language rather than a global ceiling — an earlier claim that it was
+"at the data ceiling" was measured on French alone and did not generalise.
 
 ---
 
@@ -1488,10 +1532,33 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-662 unit tests across eleven test files, 24 more marked integration and
+670 unit tests across eleven test files, 24 more marked integration and
 deselected by default. All run without network, Anki, or installed models.
 Integration tests use `@pytest.mark.integration` and are excluded by the
 default `addopts` in `pyproject.toml`.
+
+Line coverage, measured with `make coverage` (83% overall, 1949 statements):
+
+| Module | Cover | What is untested |
+|---|---|---|
+| `cards.py` | 100% | — |
+| `config.py` | 100% | — |
+| `state.py` | 100% | — |
+| `language.py` | 99% | one branch |
+| `nlp.py` | 93% | model-load failure paths |
+| `deck.py` | 92% | the AnkiConnect transport itself |
+| `wiktdata.py` | 91% | download and build error paths |
+| `definition.py` | 88% | scattered source-specific branches |
+| `transcript.py` | 82% | proxy and fetch-failure paths |
+| `translation.py` | 68% | the argostranslate path |
+| `__main__.py` | **55%** | **`_run_pipeline`, `_run_review`, `_run_backlog` in full** |
+
+The number worth acting on is `__main__.py`. Lines 245-500 are the three
+run modes — the wiring that decides what gets called with what — and they
+are essentially untested. That is precisely where 8.21 and 8.22 lived:
+neither was a logic error inside a well-covered function, and neither was
+findable by a unit test of a module in isolation. The modules those bugs
+sat in report 92% and 100%.
 
 Mocking strategy: `unittest.mock.patch` and `MagicMock` with pytest as the
 runner. `unittest.mock` is used because there is no pytest-native equivalent —

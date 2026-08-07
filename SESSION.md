@@ -64,6 +64,31 @@ fix: the matcher handles them. `semi-relevé` scores 100 against its own front
 in the real deck. Only testable after the fix above, since the matcher had
 been receiving an empty list.
 
+**Live end-to-end verification, in a purpose-made deck.**
+`Tango_Verify_20260807` was created empty and both runs went into it, so no
+existing deck was touched — confirmed by snapshotting all 64 decks before and
+after: only the test deck changed, 0 → 207.
+
+```
+run 1, empty deck        0 skip / 0 queue / 207 new    → imported 207 notes
+run 2, --force, same     207 skip / 0 queue / 0 new    → created nothing
+```
+
+French definitions came back 204 of 207 (98.6%) from the offline index, on a
+video that produced zero definitions before the index existed.
+
+**Measured card quality, read back out of Anki** (207 French cards): Word,
+transcript example, VideoID, Source 100%; Class and Definition 98.6%; 1st
+example 97.1%; 2nd example 74.9%; synonyms 85.0%; antonyms 23.2%. Antonyms
+are the one visibly thin field, and it is a data problem — OMW has none for
+any non-English language, so the index is the only source.
+
+**Test coverage measured for the first time:** 83% overall via a new
+`make coverage`. `__main__.py` is 55%, with the three run modes essentially
+untested. Both bugs found today were wiring rather than logic, and the
+modules they sat in report 92% and 100% — the gap and the bugs are the same
+fact.
+
 Method note worth keeping: both fixes were verified by mutation, not by the
 new tests passing. Reverting each to its old behaviour fails five of the new
 tests in one case and four in the other. Given 6.11 — this codebase has

@@ -8,6 +8,7 @@
 #   make spacy-model  — download the spaCy model for SPACY_LANG (default: en)
 #   make test         — run unit tests only (no network, no Anki required)
 #   make test-all     — run full suite including integration tests
+#   make coverage     — run unit tests with a per-module coverage report
 #   make format       — auto-format source and test files with black
 #   make lint         — check code style with ruff
 #   make typecheck    — static type checking with mypy
@@ -52,7 +53,7 @@ CYAN   := \033[36m
 # -- Phony targets ------------------------------------------------------------
 
 .PHONY: all venv install setup spacy-model dictionary translate-setup translate-stop \
-        test test-all format lint typecheck \
+        test test-all coverage format lint typecheck \
         run review backlog clean check-os help
 
 .DEFAULT_GOAL := help
@@ -204,6 +205,18 @@ test-all: check-os
 		-q
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Full test suite passed.\n"
 
+# -- coverage -----------------------------------------------------------------
+
+coverage: check-os
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Running unit tests with coverage...\n"
+	@PYTHONPATH=src $(VENV_PYTHON) -m pytest tests/ \
+		-m "not integration" \
+		--tb=short \
+		-q \
+		--cov=pipeline \
+		--cov-report=term-missing
+	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Coverage report complete.\n"
+
 # -- format -------------------------------------------------------------------
 
 format: check-os
@@ -310,6 +323,7 @@ help:
 	@printf "$(BOLD)Development:$(RESET)\n"
 	@printf "  $(CYAN)make test$(RESET)                             Unit tests only (no network or Anki needed)\n"
 	@printf "  $(CYAN)make test-all$(RESET)                         Full suite including integration tests\n"
+	@printf "  $(CYAN)make coverage$(RESET)                         Unit tests plus a per-module coverage report\n"
 	@printf "  $(CYAN)make format$(RESET)                           Auto-format with black\n"
 	@printf "  $(CYAN)make lint$(RESET)                             Lint with ruff\n"
 	@printf "  $(CYAN)make typecheck$(RESET)                        Type check with mypy\n"
