@@ -24,7 +24,14 @@
 PYTHON        := python3
 VENV_DIR      := .tangovenv
 VENV_PYTHON   := $(VENV_DIR)/bin/python
-VENV_PIP      := $(VENV_DIR)/bin/pip
+# `python -m pip`, not the bin/pip console script. The script can go missing
+# while pip itself is perfectly fine: an interrupted `pip install --upgrade
+# pip` leaves the old tree orphaned as site-packages/~ip and never restores
+# the script, which is exactly what happened in this repo's venv. `install`
+# and `translate-setup` both died on it with "No such file or directory".
+# The module form works whenever pip is importable, which is the condition
+# that actually matters.
+VENV_PIP      := $(VENV_PYTHON) -m pip
 VENV_ACTIVATE := $(VENV_DIR)/bin/activate
 
 SPACY_LANG    ?= en
