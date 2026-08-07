@@ -75,6 +75,34 @@ def download_url(language: str) -> str:
     """Return the bulk-extract URL for a language."""
     return _DOWNLOAD_URL_OVERRIDES.get(language, _DOWNLOAD_URL.format(lang=language))
 
+
+# Languages where building an index is a waste rather than a win. English is
+# the only one so far, and it was measured rather than assumed: a live run
+# produced 273 of 274 definitions from Merriam-Webster and consulted the
+# index zero times. The single MW miss was a brand name the index does not
+# have either. So it costs a 475 MB download and ~194 MB on disk to change
+# nothing. Its first-sense definitions are frequently archaic too, because
+# English Wiktionary orders senses historically rather than by frequency:
+# "may" -> "To be strong; to have power (over)".
+_DISCOURAGED: dict[str, str] = {
+    "en": (
+        "English already gets ~98% definition coverage from Merriam-Webster "
+        "and dictionaryapi.dev, which are better curated.\n"
+        "  A measured English run used this index zero times, so it costs a "
+        "475 MB download to change nothing."
+    ),
+}
+
+
+def is_discouraged(language: str) -> Optional[str]:
+    """
+    Return why building this language's index is not worth it, or None.
+
+    Advisory only -- callers may still build. Exists so nobody repeats an
+    experiment already run and recorded.
+    """
+    return _DISCOURAGED.get(language)
+
 # Schema version, bumped when the table layout changes so a stale index is
 # rebuilt rather than silently queried with the wrong columns.
 _SCHEMA_VERSION = 1
@@ -292,12 +320,21 @@ def build_index(
             urllib.request.urlretrieve(url, archive)
             downloaded = True
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
+            # A partial download is worthless and can be hundreds of MB.
+            # Only ever removes an archive this function fetched, never one
+            # the caller supplied.
+            archive.unlink(missing_ok=True)
             raise DictionaryDownloadError(
                 f"Could not download the {language} dictionary.\n"
                 f"  {exc}\n"
                 f"  Check the language has an extract at https://kaikki.org "
                 f"and that you are online."
             ) from exc
+        except BaseException:
+            # Interrupting a multi-minute download is normal, and leaving
+            # a truncated archive behind after it is not acceptable.
+            archive.unlink(missing_ok=True)
+            raise
 
     target = index_path(language)
     tmp = target.with_suffix(".building")
@@ -347,6 +384,8 @@ def build_index(
         conn.close()
     except (OSError, sqlite3.Error, gzip.BadGzipFile) as exc:
         tmp.unlink(missing_ok=True)
+        if downloaded:
+            archive.unlink(missing_ok=True)
         raise DictionaryBuildError(
             f"Could not build the {language} dictionary index.\n  {exc}"
         ) from exc

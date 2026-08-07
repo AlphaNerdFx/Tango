@@ -683,6 +683,20 @@ def _run_build_dictionary(language: str) -> None:
     from pipeline import wiktdata
 
     language = language.strip().lower()
+
+    reason = wiktdata.is_discouraged(language)
+    if reason:
+        _warn(f"Building a dictionary for '{language}' is not recommended.")
+        for line in reason.splitlines():
+            _info(line)
+        try:
+            answer = input("  Build it anyway? [y/N]: ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            answer = ""
+        if answer != "y":
+            _info("Skipped.")
+            return
+
     if wiktdata.is_available(language):
         _warn(f"A dictionary index for '{language}' already exists.")
         _info(f"Rebuilding it. Delete {wiktdata.index_path(language)} to skip.")

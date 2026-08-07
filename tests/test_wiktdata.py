@@ -236,3 +236,61 @@ class TestDownloadUrl:
         url = wiktdata.download_url("en")
         assert "en-extract" not in url
         assert url.endswith("kaikki.org-dictionary-English.jsonl.gz")
+
+
+# -- Discouraged languages ----------------------------------------------------
+
+class TestDiscouraged:
+
+    def test_english_is_discouraged_with_a_reason(self):
+        # Measured, not assumed: a live English run consulted the index zero
+        # times because Merriam-Webster already answered everything.
+        reason = wiktdata.is_discouraged("en")
+        assert reason
+        assert "Merriam-Webster" in reason
+
+    def test_languages_that_need_the_index_are_not_discouraged(self):
+        # These are exactly the languages with no other definition source.
+        for lang in ("fr", "de", "ru"):
+            assert wiktdata.is_discouraged(lang) is None
+
+    def test_discouraged_is_advisory_and_does_not_block_building(self, tmp_path):
+        # It must stay a warning, not a refusal -- the data is real and
+        # someone may have a reason to want it.
+        count = build_index("en", archive=_archive(tmp_path, [
+            _record("house", lang_code="en", gloss="A building for living in."),
+        ]))
+        assert count == 1
+        assert lookup("house", "en") is not None
+
+    def test_failed_download_leaves_no_partial_archive(self, monkeypatch, tmp_path):
+        # A truncated archive can be hundreds of MB of useless disk. Found
+        # for real by interrupting a French build mid-download.
+        monkeypatch.setattr(wiktdata, "DICT_DIR", tmp_path / "d")
+
+        def _partial(_url, dest):
+            (tmp_path / "d").mkdir(parents=True, exist_ok=True)
+            open(dest, "wb").write(b"truncated")
+            raise OSError("connection reset")
+
+        monkeypatch.setattr(wiktdata.urllib.request, "urlretrieve", _partial)
+        with pytest.raises(DictionaryDownloadError):
+            build_index("fr")
+        assert not (tmp_path / "d" / "fr-extract.jsonl.gz").exists()
+
+    def test_interrupt_during_download_leaves_no_partial_archive(
+        self, monkeypatch, tmp_path
+    ):
+        # Ctrl-C on a multi-minute download is normal usage, and
+        # KeyboardInterrupt is not an OSError so it needs its own handling.
+        monkeypatch.setattr(wiktdata, "DICT_DIR", tmp_path / "d")
+
+        def _interrupted(_url, dest):
+            (tmp_path / "d").mkdir(parents=True, exist_ok=True)
+            open(dest, "wb").write(b"partial")
+            raise KeyboardInterrupt()
+
+        monkeypatch.setattr(wiktdata.urllib.request, "urlretrieve", _interrupted)
+        with pytest.raises(KeyboardInterrupt):
+            build_index("fr")
+        assert not (tmp_path / "d" / "fr-extract.jsonl.gz").exists()

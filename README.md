@@ -46,6 +46,17 @@ make run VIDEO_ID=<id> DECK="MyDeck"
 
 Then import the generated .apkg from `output/` into Anki.
 
+**Learning a language other than English?** Build its offline dictionary
+first, or every card will read "No definition found":
+
+```bash
+make dictionary LANGUAGE=fr        # any code from --list-languages
+```
+
+One large download per language (a few hundred MB), then it works offline
+forever. See [Definition coverage](#definition-coverage) for why this is
+needed and what it gives you.
+
 ---
 
 ## Configuration
@@ -117,7 +128,21 @@ Example sentences, synonyms, and antonyms are always returned in the original tr
 
 Translation between languages uses argostranslate locally or community LibreTranslate mirrors. Run make translate-setup to install the local model for your language pair.
 
-Note: definition APIs have varying coverage by language. English vocabulary has the best coverage via Merriam-Webster. Other languages use dictionaryapi.dev natively.
+### Definition coverage
+
+English is covered by Merriam-Webster and dictionaryapi.dev out of the box, at around 98%.
+
+**Every other language needs `make dictionary LANGUAGE=<code>`.** Without it, non-English cards show "No definition found" for essentially every word. This is not a limitation of a particular language: dictionaryapi.dev returns nothing usable for any non-English language tested, measured at 0% across French, German, Spanish, Portuguese, Japanese, Russian, Korean and Chinese.
+
+The offline dictionary is built from Wiktionary data and works with no network access once built. Measured against real generated decks:
+
+| language | definitions | examples | synonyms | antonyms |
+|---|---|---|---|---|
+| French | 95% | 92% | 83% | 20% |
+| German | 91% | 84% | 60% | 51% |
+| Russian | 91% | 72% | 72% | 46% |
+
+Do not build it for English. English already scores 98% from Merriam-Webster, whose definitions are better curated; the index would add nothing and costs a 475 MB download.
 
 ---
 
