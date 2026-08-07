@@ -197,13 +197,18 @@ DEFINITION_FETCH_WORKERS: int = int(os.getenv("DEFINITION_FETCH_WORKERS", "5"))
 CIRCUIT_BREAKER_THRESHOLD: int = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "5"))
 
 # Proxy (youtube-transcript-api)
+#
+# Most users never need one — default traffic already comes from a
+# residential IP, which is what YouTube blocks least. If you are genuinely
+# rate-limited, bring your own reputable paid or VPN proxy; this project
+# does not recommend a provider. A free-tier datacenter proxy made things
+# measurably worse when tested (repeated 429s through it, success without
+# it) — see issue #8 and SESSION.md 6.5.
+# Format: "http://user:pass@host:port" or "socks5://user:pass@host:port"
+PROXY_HTTP_URL: str | None = os.getenv("PROXY_HTTP_URL")
+PROXY_HTTPS_URL: str | None = os.getenv("PROXY_HTTPS_URL")
 
-# Webshare proxy credentials — recommended provider for youtube-transcript-api
-# Leave unset to run without a proxy (may trigger IP blocks on heavy use)
+# Webshare-specific credentials, for anyone already using that service.
+# Listed second deliberately: it is not the suggested starting point.
 WEBSHARE_USERNAME: str | None = os.getenv("WEBSHARE_USERNAME")
 WEBSHARE_PASSWORD: str | None = os.getenv("WEBSHARE_PASSWORD")
-
-# Generic proxy URLs — alternative to Webshare
-# Format: "http://user:pass@host:port" or "socks5://user:pass@host:port"
-PROXY_HTTP_URL:  str | None = os.getenv("PROXY_HTTP_URL")
-PROXY_HTTPS_URL: str | None = os.getenv("PROXY_HTTPS_URL")
