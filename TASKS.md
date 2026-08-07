@@ -417,13 +417,27 @@ current state.
 
 ## High — next up
 
-- [ ] **Test the three CLI run modes.** `make coverage` puts the project at
-      83% overall but `__main__.py` at 55%, with lines 245-500 —
-      `_run_pipeline`, `_run_review`, `_run_backlog` — essentially
-      untested. That is not a coincidental gap: both bugs found on 7 August
-      were wiring rather than logic, invisible to a unit test of any single
-      module, and the modules they sat in report 92% and 100%. The run
-      modes decide what gets called with what, and nothing checks that.
+- [x] **Test the three CLI run modes.** Done, and it paid for itself
+      immediately: 5 of the first 22 tests failed, all of them one real bug.
+
+      `_run_review` and `_run_backlog` called `fetch_definitions()` and
+      `build_package()` with no language at all, taking their `"en"`
+      default, so `make review DECK="French"` fetched every French word
+      from English sources and built cards tagged English — silently, with
+      the run reporting success. The GUID half is worse: `build_package`'s
+      language feeds `guid_for()`, so a French review card collided with
+      the English card for the same spelling, the collision class issue #14
+      closed for the video path and left open on these two. The same call
+      sites were also dropping every `not_found_*` channel, so review and
+      backlog cards lost the Wiktionary examples, synonyms and antonyms the
+      video path has carried since 8.19.
+
+      Both modes now resolve a language the same way the video path does,
+      falling back to `"en"` with a warning rather than exiting when a deck
+      name carries no language — review has no subtitle track to select, so
+      failing hard would break decks that work today. Both branches checked
+      live. `__main__.py` 55% → 82%, suite 83% → 88%, 692 passing.
+      See ARCHITECTURE.md 8.24.
 
 - [ ] **Antonyms, the one visibly thin field.** Measured on real cards read
       back out of Anki: 23.2% against Definition's 98.6% and Synonyms' 85%.

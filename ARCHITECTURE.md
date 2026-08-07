@@ -1481,6 +1481,43 @@ better than French here (51% and 46% against 20-23%), so this is
 per-language rather than a global ceiling — an earlier claim that it was
 "at the data ceiling" was measured on French alone and did not generalise.
 
+### 8.24 Review and backlog modes resolve a language like the video path does
+
+`_run_review` and `_run_backlog` called `fetch_definitions(words)` and
+`build_package(...)` with no `language` argument, so both took the `"en"`
+default in their signatures. `make review DECK="French"` fetched every
+French word from English sources and built cards tagged English, and
+reported success either way.
+
+The GUID half is the worse half. `build_package`'s language feeds
+`guid_for(lemma, video_id, language)` (8.12), so a French word added
+through review mode carried an `"en"` GUID and collided with the English
+card for the same spelling — the collision class issue #14 closed for the
+video path and left open on these two.
+
+Both modes now resolve the language through the same
+`resolve_language_code()` the video path uses, via
+`_resolve_side_mode_language()`, which also honours `--def-lang`.
+
+**An unresolvable language is deliberately not fatal here**, unlike in
+`_run_pipeline`. There the language selects the subtitle track and the run
+cannot proceed without one, so it exits 1. Review and backlog have no
+transcript — the language only steers definitions — so a deck named
+"My Words" warns and falls back to `"en"` rather than starting to exit
+non-zero on decks that work today. Both branches verified live.
+
+The same two call sites were also dropping every `not_found_*` channel, so
+review and backlog cards lost the Wiktionary examples, synonyms, and
+antonyms the video path has carried since 8.19. Fixed in the same pass: it
+is the same defect, at the same call sites.
+
+Worth recording for how it was found. This was not spotted by reading the
+module, and it had survived every previous session. It fell out of writing
+the run-mode tests: 5 of the first 22 failed immediately, all of them this,
+while the other 17 passed and confirmed the video path's wiring was sound.
+`__main__.py` went 55% to 82% line coverage in the same commit, and the
+suite 83% to 88%.
+
 ---
 
 ## 9. Known architectural gaps
@@ -1532,12 +1569,12 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-670 unit tests across eleven test files, 24 more marked integration and
+692 unit tests across eleven test files, 24 more marked integration and
 deselected by default. All run without network, Anki, or installed models.
 Integration tests use `@pytest.mark.integration` and are excluded by the
 default `addopts` in `pyproject.toml`.
 
-Line coverage, measured with `make coverage` (83% overall, 1949 statements):
+Line coverage, measured with `make coverage` (88% overall, 1963 statements):
 
 | Module | Cover | What is untested |
 |---|---|---|
@@ -1551,14 +1588,14 @@ Line coverage, measured with `make coverage` (83% overall, 1949 statements):
 | `definition.py` | 88% | scattered source-specific branches |
 | `transcript.py` | 82% | proxy and fetch-failure paths |
 | `translation.py` | 68% | the argostranslate path |
-| `__main__.py` | **55%** | **`_run_pipeline`, `_run_review`, `_run_backlog` in full** |
+| `__main__.py` | 82% | the interactive prompts and the setup wizard |
 
-The number worth acting on is `__main__.py`. Lines 245-500 are the three
-run modes — the wiring that decides what gets called with what — and they
-are essentially untested. That is precisely where 8.21 and 8.22 lived:
-neither was a logic error inside a well-covered function, and neither was
-findable by a unit test of a module in isolation. The modules those bugs
-sat in report 92% and 100%.
+`__main__.py` was 55% when first measured, with the three run modes
+untested. Writing those tests (8.24) took it to 82% and immediately found a
+real bug — review and backlog silently processing every word as English.
+That is the pattern worth remembering: 8.21, 8.22 and 8.24 were all wiring
+rather than logic, none was findable by a unit test of a module in
+isolation, and the modules they sat in reported 92% and 100% at the time.
 
 Mocking strategy: `unittest.mock.patch` and `MagicMock` with pytest as the
 runner. `unittest.mock` is used because there is no pytest-native equivalent —
