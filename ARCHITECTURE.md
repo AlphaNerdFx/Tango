@@ -1381,6 +1381,62 @@ the default only" version still fails the relative-override pair and the
 three module constants this environment's own `.env` sets. Both matched
 pairs are in `tests/test_config.py` per CLAUDE.md section 5.
 
+### 8.22 The duplicate check reads a note's first field, not one named "Front"
+
+`get_card_fronts()` read `fields["Front"]["value"]`. The model this project
+generates names its first field `Word` (`cards.py`), so a deck built by this
+pipeline returned **no fronts at all**, `_check_single` took its
+empty-fronts branch, and every word added by an earlier run came back NEW.
+Anki does not catch it downstream either: the GUID includes the video ID
+(8.12), so the same lemma extracted from a second video is a different note
+and imports as a duplicate rather than merging.
+
+Measured against the real collection, the blindness was never limited to
+this pipeline's own cards -- most real decks use something other than the
+stock Basic type:
+
+| Deck | Notes | Fronts seen before | After |
+|---|---|---|---|
+| `LangTest_fr2` | 1036 | 0 | 1036 |
+| `French_to_English_Test` | 1074 | 0 | 1074 |
+| `English_Test` | 1041 | 0 | 1041 |
+| `French` (hand-built, 12 note types) | 2172 | 305 | 2172 |
+
+End to end, reprocessing the video whose cards are already in
+`LangTest_fr2` went from 1054 NEW -- a wholly duplicate run -- to 1050
+SKIP, 4 QUEUE, 0 NEW.
+
+The fix reads the field with the lowest `order`, which is what Anki itself
+treats as a note's identity for its own duplicate detection. That makes the
+check note-type agnostic rather than trading one hardcoded field name for
+two. When `order` is absent (older AnkiConnect responses, and every test
+fixture written before this change) it falls back to `Front` then `Word`,
+and gives up rather than guessing at an unrecognised note type: feeding an
+arbitrary field into the matcher would put definitions or audio filenames
+in the candidate pool as if they were headwords.
+
+**HTML stripping came with it, and was measured before being trusted.**
+Anki stores fields as HTML and hand-made cards are full of it -- one real
+front is `abominable<br><br>*qui inspire l'horreur`. Since this change is
+what introduces those notes into the candidate pool, leaving the markup
+would have been introducing the noise too. The concern was that stripping
+raises word counts and tips a vocabulary deck over
+`_is_sentence_structured_deck`'s threshold, silently disabling fuzzy
+matching. Measured across 7453 real notes it does the opposite: French's
+average falls from 2.11 to 1.93 words, because tag soup was being counted
+as words. No deck changed its verdict.
+
+This is 6.11 again, exactly. Every fixture for this function named the
+field `Front`, so no test could express a note type that does not have one,
+and the bug was invisible to a suite that covered the function heavily.
+
+Known limitation, not addressed: some hand-made note types put the word and
+its definition in one field, so the front is `abominable *qui inspire
+l'horreur` even after stripping. The length-ratio guard rejects those, so
+they stay effectively invisible -- 152 of 2172 notes in the `French` deck.
+Recovering them needs a first-segment heuristic, which is a different
+decision.
+
 ---
 
 ## 9. Known architectural gaps
@@ -1432,7 +1488,7 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-654 unit tests across eleven test files, 24 more marked integration and
+662 unit tests across eleven test files, 24 more marked integration and
 deselected by default. All run without network, Anki, or installed models.
 Integration tests use `@pytest.mark.integration` and are excluded by the
 default `addopts` in `pyproject.toml`.

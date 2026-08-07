@@ -144,6 +144,130 @@ class TestGetCardFronts:
         with pytest.raises(AnkiNotRunningError):
             get_card_fronts("English")
 
+    @patch("pipeline.deck._anki_request")
+    def test_reads_notes_created_by_this_pipeline(self, mock_req):
+        """
+        The generated model's first field is "Word", not "Front".
+
+        Reading the field by name meant a deck built by this pipeline
+        returned no fronts at all, so every word added by an earlier run
+        came back NEW on the next one. The fixtures above could not express
+        this: all of them name the field "Front".
+        """
+        mock_req.side_effect = [
+            [2001],
+            [{"fields": {
+                "Word":       {"value": "Aller",       "order": 0},
+                "Class":      {"value": "verb",        "order": 1},
+                "Definition": {"value": "se déplacer", "order": 2},
+            }}],
+        ]
+        assert get_card_fronts("French") == ["aller"]
+
+    @patch("pipeline.deck._anki_request")
+    def test_reads_the_first_field_not_a_later_one(self, mock_req):
+        """
+        The pair to the test above.
+
+        Taking any field that happens to be present would satisfy that one
+        while returning "verb" or "se déplacer" here. Anki identifies a note
+        by its first field, so `order` decides — not position in the dict,
+        which JSON gives no meaning to.
+        """
+        mock_req.side_effect = [
+            [2002],
+            [{"fields": {
+                "Definition": {"value": "to eat", "order": 2},
+                "Class":      {"value": "verb",   "order": 1},
+                "Word":       {"value": "manger", "order": 0},
+            }}],
+        ]
+        assert get_card_fronts("French") == ["manger"]
+
+    @patch("pipeline.deck._anki_request")
+    def test_mixed_note_types_in_one_deck(self, mock_req):
+        """
+        A real deck accumulates both: cards the user made by hand on Anki's
+        Basic type, and cards imported from this pipeline.
+        """
+        mock_req.side_effect = [
+            [2003, 2004],
+            [
+                {"fields": {"Front": {"value": "manger", "order": 0},
+                            "Back":  {"value": "to eat", "order": 1}}},
+                {"fields": {"Word":  {"value": "aller",  "order": 0},
+                            "Class": {"value": "verb",   "order": 1}}},
+            ],
+        ]
+        assert sorted(get_card_fronts("French")) == ["aller", "manger"]
+
+    @patch("pipeline.deck._anki_request")
+    def test_falls_back_to_known_names_without_order(self, mock_req):
+        """
+        Older AnkiConnect responses omit `order`, as do the fixtures written
+        before this change. Both known first-field names still resolve.
+        """
+        mock_req.side_effect = [
+            [2005, 2006],
+            [
+                {"fields": {"Front": {"value": "water"}}},
+                {"fields": {"Word":  {"value": "eau"}}},
+            ],
+        ]
+        assert sorted(get_card_fronts("French")) == ["eau", "water"]
+
+    @patch("pipeline.deck._anki_request")
+    def test_strips_html_from_hand_made_cards(self, mock_req):
+        """
+        Anki stores fields as HTML and hand-made cards are full of it. This
+        front is taken verbatim from a real deck; the markup is noise to
+        every comparison downstream, and left in place it also miscounts
+        words for the sentence-structure check.
+        """
+        mock_req.side_effect = [
+            [2008],
+            [{"fields": {"Front": {
+                "value": "Abominable<br><br>*qui inspire&nbsp;l'horreur",
+                "order": 0,
+            }}}],
+        ]
+        assert get_card_fronts("French") == ["abominable *qui inspire l'horreur"]
+
+    @patch("pipeline.deck._anki_request")
+    def test_strips_anki_media_references(self, mock_req):
+        """A [sound:...] reference is a filename, never part of the word."""
+        mock_req.side_effect = [
+            [2009],
+            [{"fields": {"Front": {"value": "manger [sound:manger_fr.mp3]", "order": 0}}}],
+        ]
+        assert get_card_fronts("French") == ["manger"]
+
+    @patch("pipeline.deck._anki_request")
+    def test_a_front_that_is_only_markup_is_skipped(self, mock_req):
+        """
+        The pair to the two tests above. Stripping must not turn an
+        image-only front into an empty string that then enters the
+        candidate pool and matches everything.
+        """
+        mock_req.side_effect = [
+            [2010],
+            [{"fields": {"Front": {"value": '<img src="diagram.png">', "order": 0}}}],
+        ]
+        assert get_card_fronts("French") == []
+
+    @patch("pipeline.deck._anki_request")
+    def test_unknown_note_type_without_order_is_skipped(self, mock_req):
+        """
+        No order and no recognised name: skipped rather than guessed at.
+        Guessing would feed an arbitrary field — a definition, a tag, an
+        audio filename — into the fuzzy matcher as if it were a headword.
+        """
+        mock_req.side_effect = [
+            [2007],
+            [{"fields": {"Expression": {"value": "食べる"}}}],
+        ]
+        assert get_card_fronts("Japanese") == []
+
 
 # ── _check_single ─────────────────────────────────────────────────────────────
 

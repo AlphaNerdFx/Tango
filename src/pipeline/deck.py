@@ -25,9 +25,11 @@ Dependencies:
 
 from __future__ import annotations
 
+import html
 import json
 import logging
 import os
+import re
 import sqlite3
 from dataclasses import dataclass, field
 from enum import Enum
@@ -161,9 +163,90 @@ def get_deck_names() -> list[str]:
     return sorted(result)
 
 
+# Field names tried when a note carries no usable "order" key. "Front" is
+# Anki's stock Basic type; "Word" is this pipeline's own model. Only the
+# fallback path below consults these — the ordinary path does not care what
+# the first field is called.
+_FRONT_FIELD_NAMES = ("Front", "Word")
+
+# Anki stores field values as HTML, and hand-made cards are full of it.
+# Markup is never part of a headword, so it is removed before matching:
+# "abominable<br><br>*qui inspire l'horreur" is a real front from a real
+# deck, and the tags are noise to every comparison downstream.
+_HTML_TAG = re.compile(r"<[^>]+>")
+_ANKI_MEDIA = re.compile(r"\[(?:sound|anki:tts)[^]]*\]")
+
+
+def _clean_field_value(value: str) -> str:
+    """
+    Reduce one raw Anki field value to comparable text.
+
+    Removes media references and HTML tags, resolves entities, then
+    collapses whitespace. Measured against two real decks (7453 notes):
+    stripping lowers the average word count rather than raising it, since
+    tag soup was previously being counted as words, so it does not push a
+    vocabulary deck over `_is_sentence_structured_deck`'s threshold.
+
+    Args:
+        value: Raw field value as AnkiConnect returned it.
+
+    Returns:
+        Stripped, lowercased text with runs of whitespace collapsed.
+    """
+    text = _ANKI_MEDIA.sub(" ", value)
+    text = _HTML_TAG.sub(" ", text)
+    text = html.unescape(text)
+    return " ".join(text.split()).strip().lower()
+
+
+def _extract_front(fields: dict) -> str:
+    """
+    Return one note's front text from its AnkiConnect ``fields`` mapping.
+
+    Anki identifies a note by its FIRST field — that is what its own
+    duplicate detection uses — so that is what this reads, via the ``order``
+    key AnkiConnect returns beside each value.
+
+    Reading a field named ``Front`` instead, as this did, was wrong for
+    every deck the pipeline itself produces. The generated model's first
+    field is named ``Word`` (see ``cards.py``), so a deck built by Tango
+    yielded no fronts at all, `_check_single` took its empty-fronts branch,
+    and every word added by an earlier run came back NEW: definitions
+    re-fetched, and a duplicate card generated that Anki imports rather
+    than merges, since the GUID includes the video ID.
+
+    Args:
+        fields: The ``fields`` mapping from one ``notesInfo`` entry, shaped
+                ``{name: {"value": str, "order": int}}``.
+
+    Returns:
+        The front text, stripped and lowercased, or ``""`` when the note has
+        no usable field.
+    """
+    ordered = [
+        (spec["order"], name)
+        for name, spec in fields.items()
+        if isinstance(spec, dict) and isinstance(spec.get("order"), int)
+    ]
+    if ordered:
+        _, first_field = min(ordered)
+        return _clean_field_value(str(fields[first_field].get("value", "")))
+
+    # No order information. Older AnkiConnect responses omit it, and so does
+    # every fixture written against this function before now — which is
+    # precisely why the bug above survived: no test could express a note
+    # whose first field is not called "Front".
+    for name in _FRONT_FIELD_NAMES:
+        spec = fields.get(name)
+        if isinstance(spec, dict) and spec.get("value"):
+            return _clean_field_value(str(spec["value"]))
+
+    return ""
+
+
 def get_card_fronts(deck_name: str) -> list[str]:
     """
-    Fetch the Front field of every note in the given deck.
+    Fetch the first field of every note in the given deck.
 
     Returns an empty list if the deck has no cards.
 
@@ -180,9 +263,7 @@ def get_card_fronts(deck_name: str) -> list[str]:
 
     fronts = []
     for note in notes_info:
-        fields = note.get("fields", {})
-        front_field = fields.get("Front", {})
-        front_value = front_field.get("value", "").strip().lower()
+        front_value = _extract_front(note.get("fields") or {})
         if front_value:
             fronts.append(front_value)
 

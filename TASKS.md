@@ -54,7 +54,33 @@ verification session.
 
 ## Critical
 
-All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
+- [x] **The deck duplicate check could not see most cards, including every
+      card this pipeline creates.** `get_card_fronts()` read the note field
+      literally named `Front`; the generated model's first field is named
+      `Word`, so a deck built by Tango returned zero fronts and every word
+      from an earlier run came back NEW — definitions re-fetched, duplicate
+      cards generated, and Anki importing rather than merging them because
+      the GUID carries the video ID.
+
+      Not limited to our own cards. Measured against the real collection:
+      `LangTest_fr2` 0 of 1036 notes visible, `English_Test` 0 of 1041, and
+      the hand-built `French` deck 305 of 2172 across 12 note types — most
+      real decks are not on Anki's stock Basic type. Reprocessing the video
+      already imported into `LangTest_fr2` went from 1054 NEW to 1050 SKIP /
+      4 QUEUE / 0 NEW.
+
+      Now reads the lowest-`order` field, which is what Anki itself uses as
+      a note's identity, so it is note-type agnostic rather than hardcoding
+      a second name. HTML stripping came with it and was measured first:
+      across 7453 real notes it lowers French's average word count 2.11 →
+      1.93, so no deck tips into `_is_sentence_structured_deck` and silently
+      loses fuzzy matching. See ARCHITECTURE.md 8.22.
+
+      Found while starting the hyphenated-fuzzy-match item below, which is
+      downstream of this function and was worth doing in this order.
+
+Everything below was done for v0.4.1. See CLAUDE.md/ARCHITECTURE.md for
+current state.
 
 - [x] **Verify the WordNet fix is actually applied.**
       Confirmed: gated on `language == "en"`, passes `lemma` not `query_lemma`
