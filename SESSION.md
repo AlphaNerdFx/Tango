@@ -13,13 +13,13 @@ installed environment at the time of writing, not recalled from memory. See
 ## 1. Where the project is
 
 **Tagged release:** v0.4.4
-**HEAD:** `b6a59eb`, 35 commits past the v0.4.4 tag, working tree clean,
-pushed to `tango-origin/main`
+**HEAD:** `002c01e`, 40 commits past the v0.4.4 tag, working tree clean.
+The last five commits are local only — `tango-origin/main` is at `b6a59eb`.
 **Working toward:** v0.4.5, untagged — the commits since v0.4.4 are shipped
 and verified but have not been cut as a release
-**Test state:** 654 passing, 0 failing, 24 integration deselected (`make test`,
-80s). CLAUDE.md and ARCHITECTURE.md both still said 524/22 before this session;
-corrected in the same pass, then again when `tests/test_config.py` added 14.
+**Test state:** 670 passing, 0 failing, 24 integration deselected (`make test`,
+84s). CLAUDE.md and ARCHITECTURE.md both said 524/22 before this session, which
+was 116 tests out of date.
 **Overall completion estimate:** roughly 80 percent toward a v1.0.0 CLI tool,
 roughly 25 percent toward the full multi-surface product vision
 
@@ -35,6 +35,40 @@ For non-English it needs one extra step, `make dictionary LANGUAGE=<code>`,
 documented in CLAUDE.md section 6 and the README. Without an index a
 non-English run still works but produces no definitions — it falls back to OMW
 synonyms, Wiktionary REST examples, and transcript examples.
+
+---
+
+## 1a. The most recent session, 7 August
+
+Five commits, all local. Started as a documentation sync and turned into two
+real bugs, one of them the most damaging found in this project so far.
+
+**Configured paths resolved against the working directory.** `DB_PATH`,
+`DICT_DIR`, `REVIEW_FILE`, and `OUTPUT_DIR` are now anchored to the project
+root. Running from another directory used a second empty database, an unbuilt
+index directory, and a different `review.json`, all silently. Anchoring the
+defaults alone would have fixed nothing, because `.env.example` ships relative
+overrides that every documented install inherits. ARCHITECTURE 8.21.
+
+**The deck duplicate check could not see the deck.** `get_card_fronts()` read
+the note field named `Front`; the generated model's first field is named
+`Word`, so a deck built by this pipeline returned zero fronts and every word
+from a previous run came back NEW. Measured against the running Anki
+collection, it was worse than that — the hand-built `French` deck showed 305
+of 2172 notes, because most real decks are not on the stock Basic type.
+Reprocessing an already-imported video went from 1054 NEW to 1050 SKIP /
+4 QUEUE / 0 NEW. ARCHITECTURE 8.22.
+
+**Hyphenated compounds in the fuzzy matcher.** Tested and closed without a
+fix: the matcher handles them. `semi-relevé` scores 100 against its own front
+in the real deck. Only testable after the fix above, since the matcher had
+been receiving an empty list.
+
+Method note worth keeping: both fixes were verified by mutation, not by the
+new tests passing. Reverting each to its old behaviour fails five of the new
+tests in one case and four in the other. Given 6.11 — this codebase has
+shipped three separate bugs that its own tests could not express — a passing
+test is not evidence that it tests anything.
 
 ---
 
@@ -140,7 +174,8 @@ senses historically — "may" resolves to "To be strong; to have power (over)".
 
 ## 4. Uncommitted state
 
-None. The working tree is clean and `main` is level with `tango-origin/main`.
+None. The working tree is clean. `main` is five commits ahead of
+`tango-origin/main`, which has not been pushed — the 7 August work is local.
 
 Every item the previous revision of this file listed as uncommitted —
 the `DICT_API_BASE` fix, the WordNet language guard, the lemma validation
@@ -328,9 +363,19 @@ Two values that should be the same, with nothing enforcing that they are:
 - `_is_valid_token` guarded `token.text` where `token.lemma_` was used
 - The batch loop built a cache key differently from `fetch_definition`
 - The transcript search used the lemma where the surface form was needed
+- The deck check read a field named `Front` where the generated model's
+  first field is named `Word`
+- Configured paths were resolved against the working directory where the
+  project root was meant
 
 None produced a crash. All produced valid-looking wrong output. This is the
 failure mode to watch for in this codebase specifically.
+
+The last two are worth noting for a second reason: both had been sitting in
+the code for the project's whole life, both were found by reading a module
+rather than by any test or any run failing, and both were invisible in
+`pipeline.db` and in the generated `.apkg` files. The output of a duplicated
+run looks exactly like the output of a correct one.
 
 ### 6.13 Lesson: fixing only the path you were looking at
 
