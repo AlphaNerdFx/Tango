@@ -480,11 +480,39 @@ current state.
       antonyms, `大` lists `郵局`. It needs the same filtering OMW synonyms
       got — drop self-references, cross-language leakage, and cap the list.
 
-- [ ] **`make install` is broken in this environment.** The Makefile uses
-      `$(VENV_PIP)` = `.tangovenv/bin/pip`, which does not exist here —
-      only `python -m pip` works. `install` and `translate-setup` both call
-      it. Found while installing pytest-cov; not fixed, since whether the
-      venv or the Makefile is wrong is a setup decision.
+- [x] **`make install` was broken.** Both it and `translate-setup` called
+      `$(VENV_DIR)/bin/pip`, which does not exist in this venv. The earlier
+      note here framed it as "whether the venv or the Makefile is wrong is a
+      setup decision" — the diagnosis settles that, and it is the Makefile.
+      pip is installed and healthy; only its console script is missing,
+      removed by an interrupted `pip install --upgrade pip` that also left
+      the orphaned `~ip` and `~ip-26.1.2.dist-info` behind, which is what
+      emits the "Ignoring invalid distribution -ip" warning on every pip
+      call since. `VENV_PIP` is now `$(VENV_PYTHON) -m pip`, which works
+      whenever pip is importable rather than depending on a script an
+      installer may or may not have written. The `~ip*` orphans are left in
+      place — deleting things inside someone's venv is not a call to make
+      while they are away. `rm -rf .tangovenv/lib/python3.10/site-packages/~ip*`
+      clears the warning.
+
+- [x] **Stale packaging metadata and a stale proxy recommendation.**
+      `pyproject.toml` still declared `version = "0.1.0"` against a v0.4.4
+      tag, still told users to download `omw-1.4` (silently ignored by this
+      nltk version, corrected in the setup docs back in d657834), and still
+      set both lint targets to `py39`, dropped in b1bdb9e once spaCy's thinc
+      stopped publishing 3.9 wheels. `config.py` still called Webshare the
+      "recommended provider" directly above the variables, long after issue
+      #8 established the opposite and corrected the README and wiki.
+
+      All four are the same trailing-edge pattern, frequent enough now to be
+      worth naming: a fix updates the places its author remembered, not
+      every place the claim lives. The outlined-pill entry and the 524-test
+      count were the same shape.
+
+      Raising ruff's target was checked rather than assumed, since it can
+      activate more pyupgrade rules: the finding breakdown is identical
+      before and after, with only UP045's fixes moving from unsafe to
+      safe-fixable.
 
 ---
 
