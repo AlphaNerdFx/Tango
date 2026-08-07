@@ -673,9 +673,27 @@ current state.
       documentation fix, and deserves its own decision rather than being
       bundled into a docs-only issue.
 
-- [ ] Hyphenated compound handling in the deck fuzzy match — `semi-relevé` is
-      now admitted by the NLP filter but the fuzzy matcher has not been tested
-      against hyphenated fronts.
+- [x] **Hyphenated compound handling in the deck fuzzy match.** Tested, and
+      the concern does not reproduce — the matcher already handles them, so
+      this closes with regression tests rather than a fix. Verified against
+      the real French deck, which holds `semi-relevé` and `avant-garde` as
+      actual fronts: `semi-relevé`, the word from the original bug report,
+      scores 100 against its own front. `week-end`/`weekend` match in both
+      directions, `porte-monnaie` matches `porte monnaie`, and the guards
+      hold the other way — `semi-relevé` does not collide with `relevé`
+      (length ratio), and `arc-en-ciel` does not collide with `arc` or
+      `ciel` (short-front exclusion).
+
+      Two boundary cases worth knowing. A typographic apostrophe
+      (`aujourd'hui` vs `aujourd’hui`) passes at 91, one point above
+      CONFIDENCE_HIGH — narrow, not comfortable. An accent difference
+      (`après-midi` vs `apres-midi`) scores exactly 90 and QUEUEs, since
+      SKIP requires strictly above; asking is the right answer there. Both
+      are pinned by tests so a threshold change fails loudly.
+
+      Could only be tested properly after the Critical item above: the
+      matcher was being fed an empty front list for most decks, so any
+      earlier test would have been measuring nothing.
 - [x] **`DB_PATH` should default to an absolute path so running from different
       directories does not create multiple database files.** Done, and wider
       than the entry described. `DICT_DIR`, `REVIEW_FILE`, and `OUTPUT_DIR`

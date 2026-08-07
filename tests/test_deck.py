@@ -757,3 +757,76 @@ class TestThreeConditionFilter:
         assert CONFIDENCE_LOW == 60
         assert CONFIDENCE_HIGH == 90
         assert SHORT_WORD_THRESHOLD == 4
+
+
+# -- Hyphenated compounds and apostrophes --------------------------------------
+
+class TestHyphenatedCompounds:
+    """
+    `_is_valid_lemma` admits internal hyphens and apostrophes, so compounds
+    like "semi-relevé", "week-end", and "aujourd'hui" now reach the matcher.
+    TASKS.md flagged that the matcher had never been tested against them.
+
+    It turned out to handle them; these tests pin that rather than fix
+    anything. Verified against the real French deck, which contains
+    "semi-relevé" and "avant-garde" as actual fronts: of the twelve
+    hyphen-or-apostrophe lemmas in the local database, "semi-relevé" scores
+    100 against its own front and the rest resolve sensibly.
+    """
+
+    def test_hyphenated_lemma_matches_its_own_front(self):
+        """The word from the original bug report, against a real deck front."""
+        result = _check_single("semi-relevé", ["semi-relevé", "danser"])
+        assert result.decision == Decision.SKIP
+        assert result.score == 100.0
+
+    def test_hyphenated_matches_unhyphenated_spelling(self):
+        """"week-end" and "weekend" are the same word — a genuine duplicate."""
+        assert _check_single("week-end", ["weekend"]).decision == Decision.SKIP
+
+    def test_unhyphenated_matches_hyphenated_front(self):
+        """
+        The pair to the test above: the deck may hold either spelling, so
+        the match has to work in both directions, not just when the incoming
+        lemma is the hyphenated one.
+        """
+        assert _check_single("weekend", ["week-end"]).decision == Decision.SKIP
+
+    def test_spaced_spelling_matches_hyphenated_lemma(self):
+        """"porte-monnaie" vs "porte monnaie" — hyphen against a space."""
+        assert _check_single("porte-monnaie", ["porte monnaie"]).decision == Decision.SKIP
+
+    def test_compound_does_not_match_its_own_component(self):
+        """
+        "semi-relevé" is not a duplicate of "relevé". The length-ratio guard
+        rejects it: without that, every hyphenated compound would collide
+        with whichever component happens to be in the deck.
+        """
+        assert _check_single("semi-relevé", ["relevé"]).decision == Decision.NEW
+
+    def test_compound_does_not_match_short_components(self):
+        """
+        "arc-en-ciel" against "arc" and "ciel" — both are below
+        SHORT_WORD_THRESHOLD and excluded from the candidate pool entirely.
+        """
+        assert _check_single("arc-en-ciel", ["arc", "ciel"]).decision == Decision.NEW
+
+    def test_typographic_apostrophe_matches_straight_one(self):
+        """
+        Anki decks written on a Mac or by autocorrect hold U+2019, spaCy
+        lemmas carry the straight quote. The exact check misses, and fuzzy
+        catches it at 91 — one point above CONFIDENCE_HIGH, so this is a
+        narrow pass rather than a comfortable one.
+        """
+        assert _check_single("aujourd'hui", ["aujourd’hui"]).decision == Decision.SKIP
+
+    def test_accent_difference_queues_rather_than_skips(self):
+        """
+        "après-midi" vs "apres-midi" scores exactly 90, and SKIP requires
+        strictly above, so it QUEUEs for the user to decide.
+
+        Pinned deliberately: it is the boundary case for CONFIDENCE_HIGH,
+        and asking is the right answer for an unaccented near-match. If a
+        threshold moves, this fails and says so.
+        """
+        assert _check_single("après-midi", ["apres-midi"]).decision == Decision.QUEUE
