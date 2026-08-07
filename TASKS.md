@@ -525,9 +525,19 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       pipeline's own lemmatizer data. Issue #13 stays open for this half.
 
 - [ ] **Separate synonym and antonym API source.**
-      Antonyms are empty on roughly 99 percent of cards. WordNet helps for
-      English only. Investigate Datamuse API — free, no key, has an
-      `rel_ant` parameter for antonyms.
+      The "empty on roughly 99 percent of cards" figure this entry used to
+      carry predates OMW and the offline index, and is no longer true.
+      Measured antonym coverage now: German 51%, Russian 46%, English 31%,
+      French 20%. Synonyms are 60-83%. Still worth a dedicated source —
+      French in particular lags, and the index is the only antonym source
+      for any non-English language, so a language without a built index
+      still gets none. Investigate Datamuse API — free, no key, has an
+      `rel_ant` parameter for antonyms. Unverified and worth checking before
+      scoping the work: Datamuse's vocabulary is documented as primarily
+      English, so it may raise English's 31% and do nothing for the
+      languages that need it most. Test `rel_ant` against a non-English
+      vocabulary first — this project has been burned twice by building on
+      an API's documented multilingual support without testing it (6.8).
 
 - [ ] **Dockerfile.**
       For cloud deployment and reproducible environments. Base
@@ -539,10 +549,14 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       (~100MB), `[nlp]` adding spaCy (~600MB), `[translation]` adding
       argostranslate (~2.5GB).
 
-- [ ] **Outlined pill CSS.**
-      Synonyms and antonyms currently render as filled pills. The intended
-      design is transparent background with a coloured border. Verify whether
-      the change was ever applied to `cards.py`.
+- [x] **Outlined pill CSS.** Already shipped; this entry was stale.
+      `.vocab-pill` and `.antonym-pill` both carry `background: transparent`
+      with a `1px solid` coloured border (`cards.py:147-163`), which is the
+      intended design. It went in with the issue #2 fix recorded under
+      Critical above, and this duplicate entry under Medium was never
+      cleared — it still asked to "verify whether the change was ever
+      applied to `cards.py`" long after the Critical entry recorded that it
+      had been, and verified with two live runs.
 
 ---
 

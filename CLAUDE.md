@@ -22,8 +22,8 @@ a video plays. Only the CLI exists today.
 **Repository:** https://github.com/AlphaNerdFx/Tango
 **Virtual environment:** `.tangovenv` — do NOT create `.venv`, it is the wrong name
 **Python:** 3.10, running in WSL2 on Windows 11
-**Current tag:** v0.4.0
-**Working toward:** v0.4.1
+**Current tag:** v0.4.4
+**Working toward:** v0.4.5 — shipped and verified, not yet tagged
 
 ---
 
@@ -254,7 +254,8 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 524+ passing, 22 deselected.
+Expected: 640 passing, 24 deselected. The count drifts as tests are added —
+trust `make test` over this number, and update it here when it moves.
 
 ### Quality
 
