@@ -198,9 +198,10 @@ Known environment issues:
   installed. Pre-existing warning, not blocking.
 - WSL gateway IP for `ANKI_HOST` changes between WSL restarts. Re-check with
   `ip route | grep default` if AnkiConnect stops responding.
-- `make test` takes roughly four minutes here, not the ~90s CLAUDE.md
-  suggests — the repository lives on `/mnt/c`, and WSL2's filesystem bridge is
-  the cost.
+- `make test` matches CLAUDE.md's ~90s once the filesystem cache is warm
+  (79-81s measured across four runs). The first run after a cold boot took
+  roughly four minutes; the repository lives on `/mnt/c`, and WSL2's
+  filesystem bridge is the cost.
 - `pip install tango` installs an unrelated PyPI package. Never run it.
 
 ---
