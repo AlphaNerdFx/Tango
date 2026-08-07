@@ -8,7 +8,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name        = "yt-anki-pipeline"
-version     = "0.1.0"
+version     = "0.4.4"
 description = "YouTube transcript to Anki flashcard pipeline"
 readme      = "README.md"
 requires-python = ">=3.10"
@@ -41,7 +41,8 @@ dependencies = [
     "python-dotenv>=1.0,<2.0",
 
     # WordNet for synonym/antonym supplementation
-    # After install run: python -m nltk.downloader wordnet omw-1.4
+    # After install run: python -m nltk.downloader wordnet omw-2.0
+    # (omw-1.4 is silently ignored by this nltk version -- see CLAUDE.md)
     "nltk>=3.8",
 ]
 
@@ -104,7 +105,7 @@ addopts      = "-m 'not integration' --tb=short -q"
 
 [tool.black]
 line-length    = 100
-target-version = ["py39", "py310", "py311", "py312"]
+target-version = ["py310", "py311", "py312"]
 include        = '(src/pipeline|tests)/.*\.py$'
 
 # =============================================================================
@@ -113,7 +114,7 @@ include        = '(src/pipeline|tests)/.*\.py$'
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py310"
 
 [tool.ruff.lint]
 select = [
