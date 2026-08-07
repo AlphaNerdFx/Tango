@@ -9,7 +9,7 @@ Run: pytest tests/test_main.py -m "not integration"
 
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import DEFAULT, MagicMock, patch, call
 
 import pytest
 
@@ -452,6 +452,280 @@ class TestPrintSummary:
         )
         out = capsys.readouterr().out
         assert tmp_apkg.name in out
+
+# ── Run modes: the wiring the three CLI entry points do ──────────────────────
+#
+# __main__.py sat at 55% line coverage with these three functions untested.
+# That is not an incidental gap: the two worst bugs found in this project
+# were both wiring rather than logic -- a field name that did not match the
+# model, and paths resolved against the wrong directory -- and neither was
+# reachable from a unit test of any single module. These functions decide
+# what gets called with which arguments, and nothing checked that.
+
+
+def _pipeline_args(**overrides):
+    """argparse.Namespace as _run_pipeline expects it, overridable per test."""
+    base = dict(
+        video_id=VIDEO_ID, deck=DECK_NAME, language="fr", def_lang=None,
+        force=False, verbose=False,
+    )
+    base.update(overrides)
+    return MagicMock(**base)
+
+
+def _fake_package(tmp_path):
+    result = MagicMock()
+    result.path = tmp_path / "out.apkg"
+    result.total_cards = 3
+    result.standard_count = 2
+    result.fallback_count = 1
+    result.skipped_count = 0
+    return result
+
+
+def _fake_batch(found=None, not_found=None):
+    batch = MagicMock()
+    batch.found = found if found is not None else ["def-a", "def-b"]
+    batch.not_found = not_found if not_found is not None else []
+    batch.from_cache = []
+    batch.not_found_examples = {}
+    batch.not_found_examples2 = {}
+    batch.not_found_synonyms = {}
+    batch.not_found_antonyms = {}
+    return batch
+
+
+@pytest.fixture
+def wired(tmp_path):
+    """
+    Patch every collaborator of the three run modes at once.
+
+    Returns the mock namespace so a test can assert one wiring fact without
+    restating the whole stack. Deliberately patches at the __main__ module
+    level, since that is where the names these functions actually call live.
+    """
+    check = MagicMock()
+    check.anki_available = True
+    check.skip, check.queue = [], []
+    new_word = MagicMock()
+    new_word.lemma = "aller"
+    check.new = [new_word]
+
+    with patch.multiple(
+        "pipeline.__main__",
+        _select_deck=DEFAULT,
+        reset_warning_state=DEFAULT,
+        reset_circuit_breaker=DEFAULT,
+        check_video_not_processed=DEFAULT,
+        save_vocabulary=DEFAULT,
+        log_package=DEFAULT,
+        mark_video_processed=DEFAULT,
+        prompt_queue=DEFAULT,
+        load_review_decisions=DEFAULT,
+        process_backlog=DEFAULT,
+        _print_summary=DEFAULT,
+        _prompt_import=DEFAULT,
+        transcript_module=DEFAULT,
+        nlp_module=DEFAULT,
+        deck_module=DEFAULT,
+        definition_module=DEFAULT,
+        cards=DEFAULT,
+    ) as mocks:
+        mocks["_select_deck"].return_value = DECK_NAME
+        mocks["prompt_queue"].return_value = ([], [])
+        mocks["load_review_decisions"].return_value = (["aller"], [])
+        mocks["process_backlog"].return_value = check
+        mocks["transcript_module"].get_snippets.return_value = {
+            "_snippet_count": 5, "_language_code": "fr", "_full_text": "je vais",
+        }
+        mocks["nlp_module"].process_transcript.return_value = {"aller": 2}
+        mocks["deck_module"].check_vocabulary.return_value = check
+        mocks["definition_module"].fetch_definitions.return_value = _fake_batch()
+        mocks["cards"].build_package.return_value = _fake_package(tmp_path)
+        mocks["_check_result"] = check
+        yield mocks
+
+
+class TestRunPipelineWiring:
+
+    def test_force_skips_the_already_processed_guard(self, wired, session):
+        """--force must bypass the guard entirely, not catch its exception."""
+        main_module._run_pipeline(_pipeline_args(force=True), session)
+        wired["check_video_not_processed"].assert_not_called()
+
+    def test_without_force_the_guard_runs(self, wired, session):
+        """The pair to the test above."""
+        main_module._run_pipeline(_pipeline_args(force=False), session)
+        wired["check_video_not_processed"].assert_called_once_with(VIDEO_ID)
+
+    def test_resolved_language_reaches_the_definition_fetch(self, wired, session):
+        """
+        --language fr must arrive at fetch_definitions. Defaulting to English
+        here would query the wrong dictionary for every word, and silently:
+        the run reports success either way.
+        """
+        main_module._run_pipeline(_pipeline_args(language="fr"), session)
+        assert wired["definition_module"].fetch_definitions.call_args.kwargs["language"] == "fr"
+
+    def test_resolved_language_reaches_the_card_builder(self, wired, session):
+        """
+        The pair to the test above, and not redundant: build_package's
+        language feeds guid_for(lemma, video_id, language), so a wrong value
+        here reintroduces the cross-language GUID collision issue #14 fixed.
+        """
+        main_module._run_pipeline(_pipeline_args(language="fr"), session)
+        assert wired["cards"].build_package.call_args.kwargs["language"] == "fr"
+
+    def test_def_lang_matching_language_is_treated_as_native(self, wired, session):
+        """
+        --def-lang fr with --language fr is native mode, so no translation
+        should be requested. Passing "fr" through would send every lemma
+        through a translator to produce the word it started as.
+        """
+        main_module._run_pipeline(_pipeline_args(language="fr", def_lang="fr"), session)
+        assert wired["definition_module"].fetch_definitions.call_args.kwargs["def_language"] is None
+
+    def test_differing_def_lang_is_passed_through(self, wired, session):
+        """The pair to the test above: a genuine translation request survives."""
+        main_module._run_pipeline(_pipeline_args(language="fr", def_lang="en"), session)
+        assert wired["definition_module"].fetch_definitions.call_args.kwargs["def_language"] == "en"
+
+    def test_surface_forms_reach_the_card_builder(self, wired, session):
+        """
+        The out-parameter 8.20 added. If it stops being threaded through,
+        transcript examples silently fall back to lemma-only matching and
+        coverage drops from 100% to 87% with nothing raised.
+        """
+        main_module._run_pipeline(_pipeline_args(), session)
+        assert "surface_forms" in wired["cards"].build_package.call_args.kwargs
+
+    def test_not_found_extras_reach_the_card_builder(self, wired, session):
+        """
+        Every not_found_* channel must be threaded. The second Wiktionary
+        example was fetched and then dropped for exactly this reason: the
+        data existed and the wiring did not carry it.
+        """
+        kwargs = None
+        main_module._run_pipeline(_pipeline_args(), session)
+        kwargs = wired["cards"].build_package.call_args.kwargs
+        for name in ("not_found_examples", "not_found_examples2",
+                     "not_found_synonyms", "not_found_antonyms"):
+            assert name in kwargs, f"{name} not passed to build_package"
+
+    def test_anki_unavailable_stops_before_fetching_definitions(self, wired, session):
+        """
+        Words went to the backlog, so there is nothing to define. Continuing
+        would spend API quota building a package for a deck check that never
+        happened.
+        """
+        wired["_check_result"].anki_available = False
+        with pytest.raises(SystemExit) as exc:
+            main_module._run_pipeline(_pipeline_args(), session)
+        assert exc.value.code == 0
+        wired["definition_module"].fetch_definitions.assert_not_called()
+
+    def test_queue_approvals_are_added_to_the_words_defined(self, wired, session):
+        """Approved queue words must join the new ones, not replace them."""
+        queued = MagicMock()
+        queued.lemma = "venir"
+        wired["_check_result"].queue = [queued]
+        wired["prompt_queue"].return_value = (["venir"], [])
+        main_module._run_pipeline(_pipeline_args(), session)
+        assert wired["definition_module"].fetch_definitions.call_args.args[0] == ["aller", "venir"]
+
+    def test_vocabulary_is_saved_before_the_deck_check(self, wired, session):
+        """
+        save_vocabulary records what the video contained, which is a
+        different question from what got added to the deck.
+        """
+        main_module._run_pipeline(_pipeline_args(), session)
+        wired["save_vocabulary"].assert_called_once_with(VIDEO_ID, {"aller": 2})
+
+    def test_marks_processed_with_the_real_counts(self, wired, session):
+        main_module._run_pipeline(_pipeline_args(), session)
+        kwargs = wired["mark_video_processed"].call_args.kwargs
+        assert kwargs["card_count"] == 3
+        assert kwargs["word_count"] == 1
+
+
+class TestRunReviewWiring:
+
+    def test_empty_decisions_exit_cleanly(self, wired, session):
+        wired["load_review_decisions"].return_value = ([], [])
+        with pytest.raises(SystemExit) as exc:
+            main_module._run_review(_pipeline_args(), session)
+        assert exc.value.code == 0
+
+    def test_skip_only_decisions_build_nothing(self, wired, session):
+        """Words marked 'skip' are decisions, but there is nothing to build."""
+        wired["load_review_decisions"].return_value = ([], ["chien"])
+        with pytest.raises(SystemExit) as exc:
+            main_module._run_review(_pipeline_args(), session)
+        assert exc.value.code == 0
+        wired["cards"].build_package.assert_not_called()
+
+    def test_language_reaches_the_definition_fetch(self, wired, session):
+        """
+        Review mode used to call fetch_definitions(to_add) with no language,
+        taking the "en" default, so `make review DECK="French"` fetched every
+        French word from English sources and reported success.
+        """
+        main_module._run_review(_pipeline_args(language="fr"), session)
+        assert wired["definition_module"].fetch_definitions.call_args.kwargs["language"] == "fr"
+
+    def test_language_reaches_the_card_builder(self, wired, session):
+        """
+        The pair: build_package's language feeds the note GUID, so an "en"
+        default here makes a French review card collide with the English card
+        for the same spelling -- the collision class issue #14 closed.
+        """
+        main_module._run_review(_pipeline_args(language="fr"), session)
+        assert wired["cards"].build_package.call_args.kwargs["language"] == "fr"
+
+    def test_unresolvable_language_falls_back_rather_than_exiting(self, wired, session):
+        """
+        A deck named "My Words" has no language in it and no transcript to
+        select, so review mode must keep working. _run_pipeline exits here
+        because the language picks the subtitle track; review has no such
+        dependency, and failing hard would break decks that work today.
+        """
+        main_module._run_review(_pipeline_args(language=None, deck="My Words"), session)
+        assert wired["cards"].build_package.call_args.kwargs["language"] == "en"
+
+
+class TestRunBacklogWiring:
+
+    def test_anki_down_exits_nonzero(self, wired, session):
+        wired["process_backlog"].side_effect = main_module.AnkiNotRunningError("down")
+        with pytest.raises(SystemExit) as exc:
+            main_module._run_backlog(_pipeline_args(), session)
+        assert exc.value.code == 1
+
+    def test_empty_backlog_exits_cleanly(self, wired, session):
+        empty = MagicMock()
+        empty.new, empty.queue = [], []
+        wired["process_backlog"].return_value = empty
+        with pytest.raises(SystemExit) as exc:
+            main_module._run_backlog(_pipeline_args(), session)
+        assert exc.value.code == 0
+
+    def test_language_reaches_the_definition_fetch(self, wired, session):
+        """Same defect as review mode, same silence."""
+        main_module._run_backlog(_pipeline_args(language="fr"), session)
+        assert wired["definition_module"].fetch_definitions.call_args.kwargs["language"] == "fr"
+
+    def test_language_reaches_the_card_builder(self, wired, session):
+        main_module._run_backlog(_pipeline_args(language="fr"), session)
+        assert wired["cards"].build_package.call_args.kwargs["language"] == "fr"
+
+    def test_queue_approvals_join_the_new_words(self, wired, session):
+        queued = MagicMock()
+        queued.lemma = "venir"
+        wired["_check_result"].queue = [queued]
+        wired["prompt_queue"].return_value = (["venir"], [])
+        main_module._run_backlog(_pipeline_args(), session)
+        assert wired["definition_module"].fetch_definitions.call_args.args[0] == ["aller", "venir"]
+
 
 @pytest.mark.integration
 class TestIntegration:

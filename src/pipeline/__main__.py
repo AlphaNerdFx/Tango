@@ -394,8 +394,61 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
 
 # ── Mode: review ──────────────────────────────────────────────────────────────
 
+def _resolve_side_mode_language(
+    args: argparse.Namespace,
+    deck_name: str,
+) -> tuple[str, str | None]:
+    """
+    Resolve the language pair for review and backlog mode.
+
+    Both modes used to call `fetch_definitions()` and `build_package()`
+    without a language at all, taking their `"en"` default, so
+    `make review DECK="French"` fetched every French word from English
+    sources and built cards tagged English. Nothing failed: the run
+    reported success, the definitions were simply wrong, and the note GUIDs
+    were computed with the wrong language — reintroducing the cross-language
+    collision issue #14 closed.
+
+    Unlike `_run_pipeline`, an unresolvable language is not fatal here.
+    There the language selects the subtitle track, so a run cannot proceed
+    without it. Review and backlog have no transcript, so the language only
+    steers definitions, and a deck named "My Words" must keep working rather
+    than start exiting non-zero.
+
+    Args:
+        args:      Parsed CLI arguments, read for --language and --def-lang.
+        deck_name: Resolved deck name, used to infer the language.
+
+    Returns:
+        (language_code, def_language). def_language is None in native mode,
+        which is also what a --def-lang equal to the target language means.
+    """
+    try:
+        language_code = resolve_language_code(
+            language_flag=getattr(args, "language", None),
+            deck_name=deck_name,
+        )
+    except LanguageResolutionError:
+        language_code = "en"
+        _warn(
+            f"Could not infer a language from deck '{deck_name}'. Defaulting to 'en'. "
+            "Pass --language to fetch definitions in the deck's own language."
+        )
+    else:
+        _ok(f"Target language: {language_code}")
+
+    def_language = getattr(args, "def_lang", None)
+    if def_language and def_language != language_code:
+        _info(f"Definition language: {def_language} (translation mode)")
+    else:
+        def_language = None
+
+    return language_code, def_language
+
+
 def _run_review(args: argparse.Namespace, session: Session) -> None:
     deck_name = _select_deck(args.deck, session)
+    language_code, def_language = _resolve_side_mode_language(args, deck_name)
     reset_circuit_breaker()
 
     to_add, to_skip = load_review_decisions()
@@ -412,7 +465,11 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
         sys.exit(0)
 
     _info(f"Fetching definitions for {len(to_add)} approved words...")
-    batch = definition_module.fetch_definitions(to_add)
+    batch = definition_module.fetch_definitions(
+        to_add,
+        language=language_code,
+        def_language=def_language,
+    )
     _ok(f"Definitions: {len(batch.found)} found / {len(batch.not_found)} not found")
 
     _info("Building Anki package from review decisions...")
@@ -422,6 +479,11 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
             deck_name=deck_name,
             found=batch.found,
             not_found=batch.not_found,
+            language=language_code,
+            not_found_examples=batch.not_found_examples,
+            not_found_examples2=batch.not_found_examples2,
+            not_found_synonyms=batch.not_found_synonyms,
+            not_found_antonyms=batch.not_found_antonyms,
         )
     except ValueError as exc:
         _err(str(exc))
@@ -445,6 +507,7 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
 
 def _run_backlog(args: argparse.Namespace, session: Session) -> None:
     deck_name = _select_deck(args.deck, session)
+    language_code, def_language = _resolve_side_mode_language(args, deck_name)
     reset_circuit_breaker()
 
     _info(f"Processing Anki backlog for deck: {deck_name}")
@@ -471,7 +534,11 @@ def _run_backlog(args: argparse.Namespace, session: Session) -> None:
         sys.exit(0)
 
     _info(f"Fetching definitions for {len(words_to_define)} words...")
-    batch = definition_module.fetch_definitions(words_to_define)
+    batch = definition_module.fetch_definitions(
+        words_to_define,
+        language=language_code,
+        def_language=def_language,
+    )
     _ok(f"Definitions: {len(batch.found)} found / {len(batch.not_found)} not found")
 
     _info("Building Anki package from backlog...")
@@ -481,6 +548,11 @@ def _run_backlog(args: argparse.Namespace, session: Session) -> None:
             deck_name=deck_name,
             found=batch.found,
             not_found=batch.not_found,
+            language=language_code,
+            not_found_examples=batch.not_found_examples,
+            not_found_examples2=batch.not_found_examples2,
+            not_found_synonyms=batch.not_found_synonyms,
+            not_found_antonyms=batch.not_found_antonyms,
         )
     except ValueError as exc:
         _err(str(exc))
