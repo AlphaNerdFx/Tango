@@ -214,6 +214,74 @@ All done — v0.4.1 tagged. See CLAUDE.md/ARCHITECTURE.md for current state.
       dictionaryapi 429s and the circuit-breaker trip visible rather than
       buried.
 
+- [x] **Transcript examples were searched by lemma, not surface form.**
+      The "Example from Youtube Video" field looked for the lemma, but
+      transcripts contain inflected forms: a French video says "sais", the
+      lemma is "savoir", and "savoir" appears nowhere in the text. So a
+      word extracted *from* the transcript then failed to find the very
+      sentence it came from -- 137 of 1036 cards, all infinitives. The #13
+      lemma fix had slightly worsened it, since correcting "joue" to
+      "jouer" removed a coincidental match.
+
+      `process_transcript()` now optionally records the forms each lemma
+      actually took, as an out-parameter so existing callers and their
+      tests are untouched. `_find_in_snippets()` tries the lemma first,
+      since where it does appear it gives the cleanest sentence, then
+      falls back to those forms. Standard cards are backfilled too, not
+      just fallback ones. Live-verified: 87% -> 100% (1040 of 1041), words
+      dropped for having nothing to show 5 -> 0.
+
+      Worth recording because the shape of the bug invited the wrong
+      conclusion: those cards were not fabricated. Every field is sourced
+      -- vocabulary from the transcript via spaCy, definitions and
+      examples from the index, synonyms from OMW. It was a matching
+      failure, and "savoir" now carries "déjà me faites pas croire que
+      vous savez" straight from the video.
+
+- [x] **Verified the dictionary generalises past French, and found where it
+      does not.** Measured against real deck vocabulary from previously
+      generated videos rather than sampled words:
+
+      | language | lemmas | definitions | examples | synonyms | antonyms |
+      |---|---|---|---|---|---|
+      | German | 384 | 91% | 84% | 60% | 51% |
+      | Russian | 420 | 91% | 72% | 72% | 46% |
+      | English | 274 | 100% | 91% | 43% | 31% |
+
+      German and Russian matter most: OMW covers neither, so they had no
+      synonyms at all before. Both also carry far richer antonyms than
+      French -- 51% and 46% against 20%. An earlier claim in this session
+      that antonym coverage was "at the data ceiling" was measured on
+      French alone and does not generalise; that was corrected.
+
+      **English is the exception and should not be built.** A live run
+      produced 273 of 274 definitions from Merriam-Webster and consulted
+      the index zero times; the single MW miss was "Momentic", a brand
+      name the index lacks too. Its first-sense definitions are also often
+      archaic, since English Wiktionary orders senses historically:
+      "may" -> "To be strong; to have power (over)". `--build-dictionary
+      en` now warns and asks for confirmation rather than silently
+      downloading 475 MB to change nothing. Advisory, not a refusal.
+
+      Also required a per-language download URL override: kaikki publishes
+      most languages under a uniform path but English, its primary
+      extraction, lives elsewhere and the uniform path 404s for it.
+
+- [x] **Interrupted dictionary builds left truncated archives behind.**
+      Found by killing a French rebuild mid-download, which orphaned a
+      partial file; a real one would be hundreds of MB. Failed and
+      interrupted downloads now clean up after themselves, and
+      `KeyboardInterrupt` is handled separately since it is not an
+      `OSError` and Ctrl-C during a multi-minute download is ordinary
+      usage. The same interrupt confirmed the atomic index swap works --
+      all three built indexes stayed intact and queryable.
+
+      README also corrected in the same pass: it claimed "Other languages
+      use dictionaryapi.dev natively", describing a source measured at 0%
+      for every non-English language tested. It now documents the
+      dictionary as a required non-English setup step with the measured
+      per-language coverage table.
+
 - [x] **Offline Wiktionary dictionary: non-English definitions, finally.**
       Closes the core of #1 and supersedes #16's API-plus-proxy plan.
       dictionaryapi.dev has no usable non-English data, so every
