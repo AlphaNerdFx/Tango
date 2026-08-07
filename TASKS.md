@@ -427,11 +427,44 @@ current state.
 
 - [ ] **Antonyms, the one visibly thin field.** Measured on real cards read
       back out of Anki: 23.2% against Definition's 98.6% and Synonyms' 85%.
-      OMW returns none for any non-English language, so the offline index is
-      the only source and Wiktionary carries antonyms far less often than
-      definitions. German and Russian measure 51% and 46%, so this is
-      per-language, not a global ceiling. See the Datamuse note under Medium,
-      and verify its non-English coverage before scoping anything.
+      German and Russian measure 51% and 46%, so this is per-language, not a
+      global ceiling.
+
+      **Fact-checked the "no worthwhile antonym source" claim.** It was
+      right about the sources it had actually tested, and wrong as a general
+      statement, because one obvious candidate had never been evaluated.
+
+      Verified true: OMW returns essentially nothing for non-English — 5
+      French words yield 469 lemmas and **2** antonyms, against English's 238
+      lemmas and 25. Verified true: Datamuse works for English (`big` →
+      little, small) and returns **empty** for its Spanish vocabulary, so it
+      raises the language that needs it least.
+
+      Verified false, and this one was my own theory: that the index was
+      discarding sense-level antonyms, since `_joined()` reads only
+      `raw["antonyms"]` at the entry's top level. Measured against 40000 real
+      kaikki French entries — **0** carry sense-level antonyms; all 1682 are
+      top-level and already read. The indexer leaves nothing on the table,
+      and 23.2% is Wiktionary's genuine ceiling for French.
+
+      Not evaluated before, and the one that fits: **ConceptNet's bulk
+      assertions dump.** Free, no key, CC BY-SA (same licence family as the
+      Wiktionary data already shipped), and one 475 MB download covers every
+      language at once rather than one download per language — more
+      generalizable than the current per-language dictionary, not less.
+      Real French antonyms for `grand`: petit, court, faible, minime,
+      minuscule, modeste, médiocre, réduit, exigu, bref. Breadth checked
+      across 12 languages: 9 returned real antonyms (de, ru, es, ja, zh, pt,
+      ko, it, fr); Arabic came back empty on the one word tried.
+
+      Two things to know before building it. Its **live API is currently
+      returning 502 on every endpoint including its root**, so an API
+      integration is not viable regardless — which is fine, because bulk is
+      what the rate-limit constraint demanded anyway, and is why this is not
+      a repeat of the Wikimedia 429 problem that killed ADR-008 Option B.
+      And the data is **noisy**: `grande` lists itself and `irrelevante` as
+      antonyms, `大` lists `郵局`. It needs the same filtering OMW synonyms
+      got — drop self-references, cross-language leakage, and cap the list.
 
 - [ ] **`make install` is broken in this environment.** The Makefile uses
       `$(VENV_PIP)` = `.tangovenv/bin/pip`, which does not exist here —
@@ -584,12 +617,12 @@ current state.
       French in particular lags, and the index is the only antonym source
       for any non-English language, so a language without a built index
       still gets none. Investigate Datamuse API — free, no key, has an
-      `rel_ant` parameter for antonyms. Unverified and worth checking before
-      scoping the work: Datamuse's vocabulary is documented as primarily
-      English, so it may raise English's 31% and do nothing for the
-      languages that need it most. Test `rel_ant` against a non-English
-      vocabulary first — this project has been burned twice by building on
-      an API's documented multilingual support without testing it (6.8).
+      `rel_ant` parameter for antonyms. **Tested, and rejected on the
+      evidence:** `rel_ant=big` returns little/small, `rel_ant=hot` returns
+      cold/cool, and the same query against its Spanish vocabulary (`v=es`)
+      returns an empty list. It is an English-only answer to a problem whose
+      English case is already the best-covered one. See the ConceptNet
+      finding under High, which is the generalizable alternative.
 
 - [ ] **Dockerfile.**
       For cloud deployment and reproducible environments. Base
