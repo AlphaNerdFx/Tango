@@ -438,7 +438,28 @@ def _prompt_translation_options(from_code: str, to_code: str) -> str:
     print(f"    [x] Exit\n")
 
     while True:
-        choice = input("  Choice [d/f/x]: ").strip().lower()
+        try:
+            choice = input("  Choice [d/f/x]: ").strip().lower()
+        except EOFError:
+            # No one is there to answer. Non-interactive runs are a documented
+            # pattern (CLAUDE.md section 6 pipes input into `make run`), and a
+            # piped run whose input is exhausted lands here, as does any use
+            # from a script or CI.
+            #
+            # This used to raise straight out of a definition-fetch worker
+            # thread, so `--def-lang` with no translation model produced a
+            # traceback per lemma and a run that neither finished nor exited.
+            # Continuing without translation is the honest default: it keeps
+            # the run alive and gives native-language definitions, which is
+            # what the [f] option does and what a user with no model would
+            # almost certainly pick.
+            print("\n  No input available — continuing with native definitions.")
+            return "continue"
+        except KeyboardInterrupt:
+            # Ctrl-C at a prompt means stop, not crash.
+            print("\n  Interrupted — exiting.")
+            return "exit"
+
         if choice == "d":
             return "download"
         elif choice == "f":
