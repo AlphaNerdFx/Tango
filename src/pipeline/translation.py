@@ -38,9 +38,18 @@ logger = logging.getLogger(__name__)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
-LIBRETRANSLATE_MIRRORS = [
-    "https://translate.argosopentech.com",
-    "https://libretranslate.de",
+# Both public mirrors this list used to carry are gone: translate.argosopentech.com
+# no longer resolves, and libretranslate.de 301-redirects to the commercial
+# libretranslate.com, which requires an API key. Probing them cost a timeout per
+# run and never once produced a translation, while printing "community mirrors
+# are unavailable" as though that were a temporary condition.
+#
+# Empty by default, therefore. Set LIBRETRANSLATE_URL to your own instance
+# (`make translate-setup` installs one you can run locally) and it is used
+# first; otherwise translation goes straight to local argostranslate models,
+# which need no key, no network at query time, and no one else's uptime.
+LIBRETRANSLATE_MIRRORS: list[str] = [
+    m for m in os.getenv("LIBRETRANSLATE_MIRRORS", "").split(",") if m.strip()
 ]
 LIBRETRANSLATE_LOCAL       = os.getenv("LIBRETRANSLATE_URL", "http://localhost:5000")
 LIBRETRANSLATE_TIMEOUT     = 5    # seconds for mirror probe
@@ -130,7 +139,12 @@ def try_community_mirror(
 # ── Tier 2: Local argostranslate ──────────────────────────────────────────────
 
 def is_model_installed(from_code: str, to_code: str) -> bool:
-    """Return True if the argostranslate model for this pair is installed."""
+    """
+    Return True if a *direct* argostranslate package for this pair is installed.
+
+    Direct only. Use is_translation_available() to ask whether translation can
+    actually happen, which is a weaker and more useful question — see there.
+    """
     try:
         from argostranslate import package as pkg
         installed = pkg.get_installed_packages()
@@ -142,11 +156,135 @@ def is_model_installed(from_code: str, to_code: str) -> bool:
         return False
 
 
+def is_translation_available(from_code: str, to_code: str) -> bool:
+    """
+    Return True if argostranslate can translate this pair, pivots included.
+
+    This is deliberately a different question from is_model_installed().
+    argostranslate publishes 100 packages: 49 into English, 49 out of it, and
+    exactly two (pt<->es) involving no English at all. So a direct package for
+    de->fr does not exist and never will, but argostranslate composes one
+    itself: get_installed_languages() walks the installed set and builds a
+    CompositeTranslation for every pair reachable through an intermediate.
+    With de->en and en->fr installed, de->fr works.
+
+    Gating translation on a direct package therefore refused pairs that would
+    have worked, which is most non-English pairs — the whole point of
+    --def-lang for a learner whose own language is not English.
+
+    Args:
+        from_code: BCP-47 source code.
+        to_code:   BCP-47 target code.
+
+    Returns:
+        True if a translation object exists for the pair.
+    """
+    if from_code == to_code:
+        return True
+    try:
+        from argostranslate import translate
+        return translate.get_translation_from_codes(from_code, to_code) is not None
+    except Exception:
+        # Raised when no route exists, and when argostranslate is absent.
+        return False
+
+
+def get_translation_route(from_code: str, to_code: str) -> list[tuple[str, str]] | None:
+    """
+    Return the packages that must be installed to serve this pair.
+
+    Args:
+        from_code: BCP-47 source code.
+        to_code:   BCP-47 target code.
+
+    Returns:
+        [(from, to)] when a direct package exists, [(from, "en"), ("en", to)]
+        when the pair must pivot through English, or None when neither is
+        possible. Pairs already covered still return their route — the caller
+        decides what is missing.
+    """
+    if from_code == to_code:
+        return []
+
+    try:
+        from argostranslate import package as pkg
+        available = pkg.get_available_packages()
+    except Exception as exc:
+        logger.warning("Could not fetch the argostranslate package index: %s", exc)
+        return None
+
+    pairs = {(p.from_code, p.to_code) for p in available}
+
+    if (from_code, to_code) in pairs:
+        return [(from_code, to_code)]
+
+    # Pivot. English is the hub for all but pt<->es, so this is the only
+    # intermediate worth trying rather than a general graph search.
+    if (from_code, "en") in pairs and ("en", to_code) in pairs:
+        return [(from_code, "en"), ("en", to_code)]
+
+    return None
+
+
+def install_translation(from_code: str, to_code: str) -> bool:
+    """
+    Install everything needed to translate this pair, pivots included.
+
+    A direct package is one download. A pivot pair is two, and both must
+    succeed for the pair to work — argostranslate only composes de->fr once
+    de->en and en->fr are both present.
+
+    Args:
+        from_code: BCP-47 source code.
+        to_code:   BCP-47 target code.
+
+    Returns:
+        True when the pair can be translated afterwards.
+    """
+    if is_translation_available(from_code, to_code):
+        return True
+
+    route = get_translation_route(from_code, to_code)
+    if route is None:
+        print(
+            f"\n  [{from_code}->{to_code}] argostranslate publishes no model for "
+            f"this pair, and no route through English either."
+        )
+        return False
+
+    if len(route) > 1:
+        hops = " -> ".join([route[0][0]] + [hop[1] for hop in route])
+        print(
+            f"\n  No direct {from_code}->{to_code} model exists; "
+            f"translating via {hops} instead ({len(route)} downloads)."
+        )
+
+    for hop_from, hop_to in route:
+        if is_model_installed(hop_from, hop_to):
+            continue
+        if not download_model(hop_from, hop_to):
+            return False
+
+    # argostranslate caches the installed-language graph, and it is that graph
+    # the composite pivot is built from. Without clearing it, a model
+    # installed in this process stays invisible until the next one.
+    try:
+        from argostranslate import translate
+        translate.get_installed_languages.cache_clear()
+    except Exception:  # pragma: no cover — cache is an implementation detail
+        pass
+
+    return is_translation_available(from_code, to_code)
+
+
 def download_model(from_code: str, to_code: str) -> bool:
     """
-    Download and install the argostranslate model for a language pair.
+    Download and install one argostranslate package for a language pair.
 
     Shows a progress bar during download. Returns True on success.
+
+    Handles a single direct package only. Use install_translation() for a
+    pair that may need to pivot through English.
 
     The download is done via requests streaming (not argostranslate's
     internal downloader) so we can track and display progress.
@@ -251,7 +389,11 @@ def translate_local(word: str, from_code: str, to_code: str) -> Optional[str]:
     Raises:
         ModelNotInstalledError: Model not installed for this pair.
     """
-    if not is_model_installed(from_code, to_code):
+    # Asks whether translation is possible, not whether a direct package
+    # exists: argostranslate composes de->en->fr itself, and requiring a
+    # direct package refused every pair it publishes no model for, which is
+    # every non-English pair except pt<->es.
+    if not is_translation_available(from_code, to_code):
         raise ModelNotInstalledError(from_code, to_code)
 
     import concurrent.futures
@@ -362,7 +504,9 @@ def translate_word(
         _user_choice[pair] = choice
 
         if choice == "download":
-            success = download_model(from_code, to_code)
+            # install_translation, not download_model: the pair may need two
+            # hops through English, and one of them alone leaves it unusable.
+            success = install_translation(from_code, to_code)
             if success:
                 result = translate_local(word, from_code, to_code)
                 return result

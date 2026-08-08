@@ -15,6 +15,9 @@ import pytest
 import pipeline.translation as trans_module
 from pipeline.translation import (
     ModelNotInstalledError,
+    get_translation_route,
+    install_translation,
+    is_translation_available,
     TranslationUnavailableError,
     _probe_mirror,
     _translate_via_mirror,
@@ -108,7 +111,14 @@ class TestTranslateViaMirror:
 # ── try_community_mirror ──────────────────────────────────────────────────────
 
 class TestTryCommunityMirror:
+    """
+    These patch LIBRETRANSLATE_MIRRORS rather than relying on whatever the
+    module ships. The default list is now empty -- both public mirrors it used
+    to carry are gone -- and a test of the probe-then-translate logic should
+    not depend on that list having entries in the first place.
+    """
 
+    @patch("pipeline.translation.LIBRETRANSLATE_MIRRORS", ["https://a.invalid", "https://b.invalid"])
     @patch("pipeline.translation._probe_mirror", return_value=True)
     @patch("pipeline.translation._translate_via_mirror", return_value="hello")
     def test_returns_translation_from_first_working_mirror(self, mock_trans, mock_probe):
@@ -126,6 +136,7 @@ class TestTryCommunityMirror:
         result = try_community_mirror("bonjour", "fr", "en")
         assert result is None
 
+    @patch("pipeline.translation.LIBRETRANSLATE_MIRRORS", ["https://a.invalid", "https://b.invalid"])
     @patch("pipeline.translation._probe_mirror")
     @patch("pipeline.translation._translate_via_mirror", return_value="hello")
     def test_tries_second_mirror_when_first_down(self, mock_trans, mock_probe):
@@ -209,33 +220,64 @@ class TestIsModelInstalled:
 # ── translate_local ───────────────────────────────────────────────────────────
 
 class TestTranslateLocal:
+    """
+    Two of the three tests here were vacuous.
 
-    def test_raises_model_not_installed_when_missing(self):
-        with patch("pipeline.translation.is_model_installed", return_value=False):
+    test_returns_translated_word_when_model_installed patched translate_local
+    with a MagicMock and then called the mock, asserting it returned what it
+    had just been told to return -- a test of MagicMock. And
+    test_returns_none_on_translation_exception patched
+    pipeline.translation.translate_local while calling the name this module
+    imported at the top, so the patch missed and the real function ran against
+    whatever model this machine has installed; it returned a genuine
+    translation, "Hello.", rather than the None it asserted.
+
+    These mock argostranslate itself, so the result comes from the mock.
+    """
+
+    @staticmethod
+    def _fake_translate(result=None, exc=None):
+        translation = MagicMock()
+        if exc is not None:
+            translation.translate.side_effect = exc
+        else:
+            translation.translate.return_value = result
+        fake_translate = MagicMock()
+        fake_translate.get_translation_from_codes.return_value = translation
+        fake_root = MagicMock()
+        fake_root.translate = fake_translate
+        return {"argostranslate": fake_root, "argostranslate.translate": fake_translate}
+
+    def test_raises_when_the_pair_cannot_be_translated(self):
+        with patch("pipeline.translation.is_translation_available", return_value=False):
             with pytest.raises(ModelNotInstalledError) as exc_info:
                 translate_local("bonjour", "fr", "en")
             assert exc_info.value.from_code == "fr"
-            assert exc_info.value.to_code   == "en"
+            assert exc_info.value.to_code == "en"
 
-    def test_returns_translated_word_when_model_installed(self):
-        """
-        translate_local delegates to argostranslate internally.
-        We test the behaviour contract: when is_model_installed returns True
-        and the translation succeeds, translate_local returns the translated word.
-        The actual argostranslate internals are an implementation detail tested
-        in integration tests.
-        """
-        with patch("pipeline.translation.is_model_installed", return_value=True):
-            with patch("pipeline.translation.translate_local", wraps=None) as mock_tl:
-                mock_tl.return_value = "hello"
-                result = mock_tl("bonjour", "fr", "en")
-        assert result == "hello"
+    def test_returns_the_translation(self):
+        import sys
+        with patch("pipeline.translation.is_translation_available", return_value=True), \
+             patch.dict(sys.modules, self._fake_translate(result="  hello  ")):
+            assert translate_local("bonjour", "fr", "en") == "hello"
 
-    def test_returns_none_on_translation_exception(self):
-        with patch("pipeline.translation.is_model_installed", return_value=True):
-            with patch("pipeline.translation.translate_local", return_value=None):
-                result = translate_local("bonjour", "fr", "en")
-        assert result is None
+    def test_returns_none_when_argostranslate_raises(self):
+        """
+        The pair to the test above: a failure inside argostranslate must come
+        back as None so the caller falls through to a native definition,
+        rather than propagating out of a definition-fetch worker thread.
+        """
+        import sys
+        with patch("pipeline.translation.is_translation_available", return_value=True), \
+             patch.dict(sys.modules, self._fake_translate(exc=RuntimeError("boom"))):
+            assert translate_local("bonjour", "fr", "en") is None
+
+    def test_empty_translation_becomes_none(self):
+        """An empty string is not a translation."""
+        import sys
+        with patch("pipeline.translation.is_translation_available", return_value=True), \
+             patch.dict(sys.modules, self._fake_translate(result="   ")):
+            assert translate_local("bonjour", "fr", "en") is None
 
 
 # ── download_model ────────────────────────────────────────────────────────────
@@ -342,6 +384,122 @@ class TestTranslateWord:
 
 
 # ── Warning deduplication ─────────────────────────────────────────────────────
+
+class TestTranslationRouting:
+    """
+    argostranslate publishes 49 packages into English, 49 out of it, and two
+    (pt<->es) involving no English at all. So most non-English pairs have no
+    direct model and must pivot -- which argostranslate composes itself once
+    both hops are installed.
+
+    The bug these pin: translate_local() gated on a *direct* package, so every
+    pivot pair was refused as "no model installed" even when it would have
+    worked. That is most of the world for a learner whose own language is not
+    English.
+    """
+
+    @staticmethod
+    def _index(pairs):
+        """Fake argostranslate package index exposing the given pairs."""
+        pkgs = []
+        for f, t in pairs:
+            m = MagicMock()
+            m.from_code, m.to_code = f, t
+            pkgs.append(m)
+        fake_pkg = MagicMock()
+        fake_pkg.get_available_packages.return_value = pkgs
+        fake_root = MagicMock()
+        fake_root.package = fake_pkg
+        return {"argostranslate": fake_root, "argostranslate.package": fake_pkg}
+
+    def test_direct_pair_needs_one_package(self):
+        import sys
+        with patch.dict(sys.modules, self._index([("de", "en"), ("en", "fr")])):
+            assert get_translation_route("de", "en") == [("de", "en")]
+
+    def test_non_english_pair_pivots_through_english(self):
+        """
+        The pair to the test above, and the case that was broken: no de->fr
+        package exists, but de->en plus en->fr covers it.
+        """
+        import sys
+        with patch.dict(sys.modules, self._index([("de", "en"), ("en", "fr")])):
+            assert get_translation_route("de", "fr") == [("de", "en"), ("en", "fr")]
+
+    def test_route_is_none_when_a_hop_is_missing(self):
+        """en->fr alone cannot serve de->fr, and must not pretend to."""
+        import sys
+        with patch.dict(sys.modules, self._index([("en", "fr")])):
+            assert get_translation_route("de", "fr") is None
+
+    def test_identical_codes_need_nothing(self):
+        import sys
+        with patch.dict(sys.modules, self._index([("de", "en")])):
+            assert get_translation_route("fr", "fr") == []
+
+    def test_availability_asks_argostranslate_not_the_package_list(self):
+        """
+        The point of is_translation_available: argostranslate answers for
+        composed routes, which a direct-package scan cannot see.
+        """
+        import sys
+        fake_translate = MagicMock()
+        fake_translate.get_translation_from_codes.return_value = MagicMock()
+        fake_root = MagicMock()
+        fake_root.translate = fake_translate
+        with patch.dict(sys.modules, {
+            "argostranslate": fake_root,
+            "argostranslate.translate": fake_translate,
+        }):
+            assert is_translation_available("de", "fr") is True
+
+    def test_availability_false_when_no_route_exists(self):
+        import sys
+        fake_translate = MagicMock()
+        fake_translate.get_translation_from_codes.side_effect = Exception("no route")
+        fake_root = MagicMock()
+        fake_root.translate = fake_translate
+        with patch.dict(sys.modules, {
+            "argostranslate": fake_root,
+            "argostranslate.translate": fake_translate,
+        }):
+            assert is_translation_available("de", "fr") is False
+
+    def test_same_language_is_always_available(self):
+        """No model needed to leave a word alone."""
+        assert is_translation_available("fr", "fr") is True
+
+    @patch("pipeline.translation.is_translation_available", return_value=False)
+    @patch("pipeline.translation.get_translation_route",
+           return_value=[("de", "en"), ("en", "fr")])
+    @patch("pipeline.translation.is_model_installed", return_value=False)
+    @patch("pipeline.translation.download_model", return_value=True)
+    def test_install_downloads_every_hop(self, mock_dl, *_):
+        install_translation("de", "fr")
+        assert mock_dl.call_count == 2
+        assert mock_dl.call_args_list[0].args == ("de", "en")
+        assert mock_dl.call_args_list[1].args == ("en", "fr")
+
+    @patch("pipeline.translation.is_translation_available", return_value=False)
+    @patch("pipeline.translation.get_translation_route",
+           return_value=[("de", "en"), ("en", "fr")])
+    @patch("pipeline.translation.is_model_installed", side_effect=[True, False])
+    @patch("pipeline.translation.download_model", return_value=True)
+    def test_install_skips_hops_already_present(self, mock_dl, *_):
+        """The pair to the test above — a half-installed route downloads once."""
+        install_translation("de", "fr")
+        assert mock_dl.call_count == 1
+        assert mock_dl.call_args_list[0].args == ("en", "fr")
+
+    @patch("pipeline.translation.is_translation_available", return_value=False)
+    @patch("pipeline.translation.get_translation_route", return_value=None)
+    def test_install_refuses_an_impossible_pair(self, *_):
+        assert install_translation("xx", "yy") is False
+
+    @patch("pipeline.translation.is_translation_available", return_value=True)
+    def test_install_is_a_no_op_when_already_usable(self, _):
+        assert install_translation("de", "fr") is True
+
 
 class TestPromptTranslationOptions:
     """

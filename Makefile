@@ -61,7 +61,7 @@ CYAN   := \033[36m
 # -- Phony targets ------------------------------------------------------------
 
 .PHONY: all venv install setup spacy-model dictionary translate-setup translate-stop \
-        test test-all coverage format lint typecheck \
+        test test-all coverage format lint typecheck translate-model \
         run review backlog clean check-os help
 
 .DEFAULT_GOAL := help
@@ -140,6 +140,25 @@ dictionary: venv
 		exit 1; \
 	fi
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --build-dictionary "$(LANGUAGE)"
+
+# -- translate-model ----------------------------------------------------------
+# Installs the argostranslate models for one language pair, so --def-lang
+# works without prompting mid-run. Pairs with no direct model pivot through
+# English, which is two downloads -- argostranslate publishes 49 packages into
+# English and 49 out of it, but almost none between two non-English languages.
+
+translate-model: venv
+	@if [ -z "$(LANGUAGE)" ] || [ -z "$(DEF_LANG)" ]; then \
+		printf "$(RED)$(BOLD)[err ]$(RESET)  LANGUAGE and DEF_LANG are both required.\n"; \
+		printf "  Usage: $(CYAN)make translate-model LANGUAGE=de DEF_LANG=en$(RESET)\n"; \
+		exit 1; \
+	fi
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Installing translation for $(LANGUAGE) -> $(DEF_LANG)...\n"
+	@PYTHONPATH=src $(VENV_PYTHON) -c \
+		"from pipeline.translation import install_translation; \
+		import sys; \
+		sys.exit(0 if install_translation('$(LANGUAGE)', '$(DEF_LANG)') else 1)"
+	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Translation ready: $(LANGUAGE) -> $(DEF_LANG)\n"
 
 # -- spacy-model --------------------------------------------------------------
 # Model name is resolved from SPACY_LANG via language.get_spacy_model() --
