@@ -12,9 +12,10 @@
 #   make format       — auto-format source and test files with black
 #   make lint         — check code style with ruff
 #   make typecheck    — static type checking with mypy
-#   make run          — run the pipeline (VIDEO_ID and DECK required)
-#   make review       — process the review.json file
-#   make backlog      — process the Anki backlog for a deck
+#   make run          — run the pipeline (VIDEO_ID and DECK required;
+#                       optional LANGUAGE, DEF_LANG, FORCE=1)
+#   make review       — process the review.json file (optional LANGUAGE, DEF_LANG)
+#   make backlog      — process the Anki backlog for a deck (optional LANGUAGE, DEF_LANG)
 #   make clean        — remove venv, output, cache files
 #   make check-os     — warn if running on Windows without a compatible shell
 # =============================================================================
@@ -263,7 +264,8 @@ run: check-os
 		--video-id "$(VIDEO_ID)" \
 		--deck "$(DECK)" \
 		$(if $(LANGUAGE),--language "$(LANGUAGE)",) \
-		$(if $(DEF_LANG),--def-lang "$(DEF_LANG)",)
+		$(if $(DEF_LANG),--def-lang "$(DEF_LANG)",) \
+		$(if $(FORCE),--force,)
 
 # -- review -------------------------------------------------------------------
 
@@ -276,7 +278,9 @@ review: check-os
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing review file for deck: $(DECK)\n"
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
 		--review \
-		--deck "$(DECK)"
+		--deck "$(DECK)" \
+		$(if $(LANGUAGE),--language "$(LANGUAGE)",) \
+		$(if $(DEF_LANG),--def-lang "$(DEF_LANG)",)
 
 # -- backlog ------------------------------------------------------------------
 
@@ -289,7 +293,9 @@ backlog: check-os
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing Anki backlog for deck: $(DECK)\n"
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
 		--process-backlog \
-		--deck "$(DECK)"
+		--deck "$(DECK)" \
+		$(if $(LANGUAGE),--language "$(LANGUAGE)",) \
+		$(if $(DEF_LANG),--def-lang "$(DEF_LANG)",)
 
 # -- clean --------------------------------------------------------------------
 
@@ -324,8 +330,10 @@ help:
 	@printf "\n"
 	@printf "$(BOLD)Run the pipeline:$(RESET)\n"
 	@printf "  $(CYAN)make run$(RESET) VIDEO_ID=<id> DECK=\"<name>\"   Process a YouTube video\n"
+	@printf "        optional: LANGUAGE=fr  DEF_LANG=en  FORCE=1 (reprocess a done video)\n"
 	@printf "  $(CYAN)make review$(RESET) DECK=\"<name>\"               Process deferred review.json words\n"
 	@printf "  $(CYAN)make backlog$(RESET) DECK=\"<name>\"              Process Anki backlog (Anki must be running)\n"
+	@printf "        both optional: LANGUAGE=fr  DEF_LANG=en\n"
 	@printf "\n"
 	@printf "$(BOLD)Development:$(RESET)\n"
 	@printf "  $(CYAN)make test$(RESET)                             Unit tests only (no network or Anki needed)\n"
