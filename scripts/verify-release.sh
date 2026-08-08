@@ -2,8 +2,13 @@
 # ---------------------------------------------------------------------------
 # Release verification for Tango. Run from the repo root:
 #
-#     bash scripts/verify-release.sh <VIDEO_ID> <LANGUAGE>
-#     bash scripts/verify-release.sh dQw4w9WgXcQ en
+#     bash scripts/verify-release.sh                    # prompts for everything
+#     bash scripts/verify-release.sh dQw4w9WgXcQ         # prompts for the rest
+#     bash scripts/verify-release.sh https://youtu.be/dQw4w9WgXcQ
+#
+# It asks for the target language and the destination deck rather than taking
+# them as positional arguments: checking coverage across languages means
+# picking a different pair on nearly every run.
 #
 # This exists because a written checklist goes stale silently, which has
 # happened repeatedly in this repo, while a script goes stale loudly by
@@ -25,14 +30,57 @@
 # Step 0 warns when this applies.
 # ---------------------------------------------------------------------------
 set -u
-VID="${1:?usage: bash scripts/verify-release.sh <VIDEO_ID> <LANGUAGE>}"
-LC="${2:?usage: bash scripts/verify-release.sh <VIDEO_ID> <LANGUAGE>}"
-DECK="Tango_V045_${VID}"
 ROOT=$(pwd)
 PY="$ROOT/.tangovenv/bin/python"
 A=$(grep '^ANKI_HOST=' .env | cut -d= -f2)
-ank() { curl -s "$A" -d "{\"action\":\"$1\",\"version\":6,\"params\":$2}"; }
-count() { ank findNotes "{\"query\":\"deck:$DECK\"}" | jq '.result|length'; }
+
+# JSON built with jq rather than string interpolation, so deck names with
+# spaces, quotes or hyphens survive the trip to AnkiConnect intact.
+ank() { curl -s "$A" -d "$(jq -nc --arg a "$1" --argjson p "$2" '{action:$a,version:6,params:$p}')"; }
+find_in_deck() { ank findNotes "$(jq -nc --arg q "deck:\"$DECK\"" '{query:$q}')"; }
+count() { find_in_deck | jq '.result|length'; }
+
+# ── Selection ───────────────────────────────────────────────────────────────
+# Prompted rather than positional: testing coverage across languages means
+# choosing a different deck and language on nearly every run, and remembering
+# argument order for that is friction where it is least wanted.
+
+VID="${1:-}"
+while [ -z "$VID" ]; do
+  read -rp "YouTube video ID or URL: " VID
+done
+
+echo
+echo "Languages — an offline index means real native definitions:"
+for code in $(ls dictionaries/ 2>/dev/null | sed -n 's/wiktionary_\(.*\)\.sqlite/\1/p'); do
+  echo "   $code   index built"
+done
+echo "   en   no index needed, Merriam-Webster covers English"
+echo "   (any other supported code works, but definitions will be sparse"
+echo "    without an index — build one with: make dictionary LANGUAGE=<code>)"
+read -rp "Target language code: " LC
+[ -z "$LC" ] && { echo "A language is required."; exit 1; }
+
+echo
+echo "Decks in your collection:"
+mapfile -t DECKS < <(ank deckNames '{}' | jq -r '.result[]' | sort)
+for i in "${!DECKS[@]}"; do printf "  %3d. %s\n" "$((i+1))" "${DECKS[$i]}"; done
+echo
+echo "Enter a number to use an existing deck, or type a new deck name."
+DEFAULT_DECK="Tango_${LC}_${VID}"
+read -rp "Deck [$DEFAULT_DECK]: " PICK
+if [ -z "$PICK" ]; then
+  DECK="$DEFAULT_DECK"
+elif [[ "$PICK" =~ ^[0-9]+$ ]] && [ "$PICK" -ge 1 ] && [ "$PICK" -le "${#DECKS[@]}" ]; then
+  DECK="${DECKS[$((PICK-1))]}"
+else
+  DECK="$PICK"
+fi
+echo
+echo "  video    : $VID"
+echo "  language : $LC"
+echo "  deck     : $DECK"
+echo
 
 echo "=== 0. pre-flight ==="
 # Anki dedups notes by GUID, and Tango derives the GUID from
@@ -41,13 +89,13 @@ echo "=== 0. pre-flight ==="
 # already live instead of filling a new deck -- the new deck stays empty and
 # every later step reads like a failure. Use a video you have not processed,
 # or point DECK at the one that already holds it.
-PRIOR=$(ank findNotes "{\"query\":\"VideoID:$VID\"}" | jq '.result|length')
+PRIOR=$(ank findNotes "$(jq -nc --arg q "VideoID:$VID" '{query:$q}')" | jq '.result|length')
 if [ "$PRIOR" -gt 0 ]; then
   echo "  WARNING: $PRIOR notes for video $VID already exist in this collection."
   echo "  Anki will update those in place rather than populate a new deck."
   echo "  Re-run with a video you have not processed for a clean end-to-end check."
 fi
-ank createDeck "{\"deck\":\"$DECK\"}" >/dev/null; echo "  target deck notes: $(count)"
+ank createDeck "$(jq -nc --arg d "$DECK" '{deck:$d}')" >/dev/null; echo "  target deck notes: $(count)"
 
 echo; echo "=== 1. first run into the empty deck — expect all NEW ==="
 # FORCE=1 here too: the video-level "already processed" guard is a separate
@@ -77,8 +125,8 @@ printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" FORCE=1 2
 
 echo; echo "=== 4. per-field card quality, read back out of Anki ==="
 if [ "$(count)" -eq 0 ]; then echo "  no cards in deck — steps 1/2 failed, skipping"; else
-IDS=$(ank findNotes "{\"query\":\"deck:$DECK\"}" | jq -c .result)
-ank notesInfo "{\"notes\":$IDS}" | jq -r '
+IDS=$(find_in_deck | jq -c .result)
+ank notesInfo "$(jq -nc --argjson n "$IDS" '{notes:$n}')" | jq -r '
   .result as $n | ($n|length) as $t |
   ["Definition","1st Example Sentence","2nd Example Sentence",
    "Example from Youtube Video","Synonyms","Antonyms"][] as $f |
