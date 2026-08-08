@@ -138,29 +138,71 @@ class TestTryCommunityMirror:
 # ── is_model_installed ────────────────────────────────────────────────────────
 
 class TestIsModelInstalled:
+    """
+    Both tests here used to be vacuous, and one of them was machine-dependent.
 
-    def test_returns_true_when_installed(self):
-        mock_model = MagicMock()
-        mock_model.from_code = "fr"
-        mock_model.to_code   = "en"
-        mock_pkg = MagicMock()
-        mock_pkg.get_installed_packages.return_value = [mock_model]
+    `test_returns_false_on_import_error` patched
+    `pipeline.translation.is_model_installed` and then called the name this
+    module imported at the top -- which still pointed at the real function,
+    so the patch did nothing and the real filesystem answered. It passed only
+    while no fr->en model happened to be installed, and this machine has had
+    one since 10 July, so it passed in full runs (where something upstream
+    perturbed the import) and failed in isolation. Its sibling ended in
+    `assert ... is True or True`, which cannot fail.
+
+    These mock argostranslate through sys.modules instead, so the answer
+    comes from the mock rather than from whatever the machine has installed
+    -- which is what CLAUDE.md 3.5 requires of a unit test.
+    """
+
+    @staticmethod
+    def _fake_argos(pairs):
+        """Build a stand-in argostranslate exposing the given (from, to) pairs."""
+        models = []
+        for from_code, to_code in pairs:
+            m = MagicMock()
+            m.from_code, m.to_code = from_code, to_code
+            models.append(m)
+        fake_pkg = MagicMock()
+        fake_pkg.get_installed_packages.return_value = models
+        fake_root = MagicMock()
+        fake_root.package = fake_pkg
+        return {"argostranslate": fake_root, "argostranslate.package": fake_pkg}
+
+    def test_returns_true_when_the_pair_is_installed(self):
         import sys
-        fake_argos = MagicMock()
-        fake_argos.get_installed_packages.return_value = [mock_model]
-        with patch.dict("sys.modules", {
-            "argostranslate": MagicMock(),
-            "argostranslate.package": fake_argos,
-        }):
-            # Call the real function with the module mocked
-            import importlib
-            import pipeline.translation as tm
-            original = tm.is_model_installed
-            # Inline test: patch returns True since real call hits mocked module
-            assert original("fr", "en") is True or True  # passes since argos is mocked
+        with patch.dict(sys.modules, self._fake_argos([("fr", "en")])):
+            assert is_model_installed("fr", "en") is True
+
+    def test_returns_false_when_a_different_pair_is_installed(self):
+        """
+        The pair to the test above. A blanket "any model means yes" would
+        satisfy that one while sending a de->en run to a French model.
+        """
+        import sys
+        with patch.dict(sys.modules, self._fake_argos([("fr", "en")])):
+            assert is_model_installed("de", "en") is False
+
+    def test_direction_matters(self):
+        """en->fr installed does not mean fr->en is available."""
+        import sys
+        with patch.dict(sys.modules, self._fake_argos([("en", "fr")])):
+            assert is_model_installed("fr", "en") is False
+
+    def test_returns_false_when_nothing_is_installed(self):
+        import sys
+        with patch.dict(sys.modules, self._fake_argos([])):
+            assert is_model_installed("fr", "en") is False
 
     def test_returns_false_on_import_error(self):
-        with patch("pipeline.translation.is_model_installed", return_value=False):
+        """
+        argostranslate is an optional dependency -- the base install does not
+        have it -- so an ImportError here is an ordinary state, not a crash.
+        Setting the module to None makes `from argostranslate import package`
+        raise, which is what actually happens when it is absent.
+        """
+        import sys
+        with patch.dict(sys.modules, {"argostranslate": None}):
             assert is_model_installed("fr", "en") is False
 
 
@@ -300,6 +342,56 @@ class TestTranslateWord:
 
 
 # ── Warning deduplication ─────────────────────────────────────────────────────
+
+class TestPromptTranslationOptions:
+    """
+    The prompt shown when --def-lang is set and no translation is available.
+
+    It had no tests and no EOF handling, so `input()` raised straight out of
+    a definition-fetch worker thread: a German video with --def-lang en
+    produced a traceback per lemma and a run that neither finished nor
+    exited. Non-interactive runs are a documented pattern (CLAUDE.md pipes
+    input into `make run`), so reaching EOF here is ordinary, not exceptional.
+    """
+
+    @patch("builtins.input", side_effect=EOFError)
+    def test_eof_continues_without_translation(self, _):
+        """No one is there to answer — keep the run alive with native defs."""
+        assert trans_module._prompt_translation_options("de", "en") == "continue"
+
+    @patch("builtins.input", return_value="x")
+    def test_explicit_exit_still_exits(self, _):
+        """
+        The pair to the test above. If EOF were handled by returning
+        "continue" unconditionally somewhere upstream, this would still
+        pass -- so it pins that a real "x" is honoured and the EOF path is
+        not just swallowing every answer.
+        """
+        assert trans_module._prompt_translation_options("de", "en") == "exit"
+
+    @patch("builtins.input", side_effect=KeyboardInterrupt)
+    def test_ctrl_c_exits_rather_than_crashing(self, _):
+        assert trans_module._prompt_translation_options("de", "en") == "exit"
+
+    @patch("builtins.input", return_value="d")
+    def test_download_choice(self, _):
+        assert trans_module._prompt_translation_options("de", "en") == "download"
+
+    @patch("builtins.input", return_value="f")
+    def test_continue_choice(self, _):
+        assert trans_module._prompt_translation_options("de", "en") == "continue"
+
+    @patch("builtins.input", side_effect=["q", "", "f"])
+    def test_invalid_answers_reprompt(self, mock_input):
+        """Bad input loops rather than falling through to a default."""
+        assert trans_module._prompt_translation_options("de", "en") == "continue"
+        assert mock_input.call_count == 3
+
+    @patch("builtins.input", side_effect=["zzz", EOFError])
+    def test_eof_after_a_bad_answer_still_continues(self, _):
+        """The loop must not turn EOF into an infinite retry."""
+        assert trans_module._prompt_translation_options("de", "en") == "continue"
+
 
 class TestWarningDeduplication:
 
