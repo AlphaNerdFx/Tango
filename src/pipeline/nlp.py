@@ -51,10 +51,10 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-import spacy  # noqa: E402  -- must follow the filter above to take effect
+# noqa: E402 throughout -- these must follow the filter above to take effect.
+import spacy  # noqa: E402,I001
 from spacy.language import Language  # noqa: E402
-
-from pipeline.language import SpacyModelUnavailableError, get_spacy_model  # noqa: E402  -- same reason as the spaCy imports above
+from pipeline.language import SpacyModelUnavailableError, get_spacy_model  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
