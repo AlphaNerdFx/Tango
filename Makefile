@@ -261,10 +261,10 @@ run: check-os
 	fi
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Running pipeline for video: $(VIDEO_ID)\n"
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
-		--video-id "$(VIDEO_ID)" \
-		--deck "$(DECK)" \
-		$(if $(LANGUAGE),--language "$(LANGUAGE)",) \
-		$(if $(DEF_LANG),--def-lang "$(DEF_LANG)",) \
+		--video-id="$(VIDEO_ID)" \
+		--deck="$(DECK)" \
+		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
+		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",) \
 		$(if $(FORCE),--force,)
 
 # -- review -------------------------------------------------------------------
@@ -278,9 +278,9 @@ review: check-os
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing review file for deck: $(DECK)\n"
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
 		--review \
-		--deck "$(DECK)" \
-		$(if $(LANGUAGE),--language "$(LANGUAGE)",) \
-		$(if $(DEF_LANG),--def-lang "$(DEF_LANG)",)
+		--deck="$(DECK)" \
+		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
+		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",)
 
 # -- backlog ------------------------------------------------------------------
 
@@ -293,9 +293,9 @@ backlog: check-os
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing Anki backlog for deck: $(DECK)\n"
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
 		--process-backlog \
-		--deck "$(DECK)" \
-		$(if $(LANGUAGE),--language "$(LANGUAGE)",) \
-		$(if $(DEF_LANG),--def-lang "$(DEF_LANG)",)
+		--deck="$(DECK)" \
+		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
+		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",)
 
 # -- clean --------------------------------------------------------------------
 

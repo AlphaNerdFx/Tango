@@ -546,6 +546,61 @@ def wired(tmp_path):
         yield mocks
 
 
+class TestNormaliseVideoId:
+    """
+    --help has always advertised "YouTube video ID or URL" while nothing
+    extracted an ID from a URL, and IDs beginning with "-" broke argument
+    parsing outright. Both surfaced during release verification: a run on
+    -an9d5V7Dvw created its deck, died at argparse, and left an empty deck
+    that read as a pipeline failure.
+    """
+
+    def test_bare_id_passes_through(self):
+        assert main_module._normalise_video_id("dQw4w9WgXcQ") == "dQw4w9WgXcQ"
+
+    def test_leading_hyphen_id_survives(self):
+        """
+        Roughly one ID in 64 starts with a hyphen. Nothing here may strip
+        or reject it -- the Makefile passes --video-id=<value> so argparse
+        accepts it, and this must not undo that.
+        """
+        assert main_module._normalise_video_id("-an9d5V7Dvw") == "-an9d5V7Dvw"
+
+    @pytest.mark.parametrize("url", [
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "https://youtu.be/dQw4w9WgXcQ",
+        "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+        "https://www.youtube.com/embed/dQw4w9WgXcQ",
+        "https://www.youtube.com/watch?list=PL123&v=dQw4w9WgXcQ",
+        "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=42s",
+    ])
+    def test_urls_yield_the_id(self, url):
+        assert main_module._normalise_video_id(url) == "dQw4w9WgXcQ"
+
+    def test_url_with_a_hyphen_leading_id(self):
+        """The two problems combined, which is the case that started this."""
+        assert main_module._normalise_video_id(
+            "https://youtu.be/-an9d5V7Dvw") == "-an9d5V7Dvw"
+
+    def test_unreadable_url_raises_rather_than_failing_later(self):
+        """
+        The pair to the tests above. Passing a URL through unchanged sends
+        an obviously-wrong string to the transcript API, which fails further
+        down with a worse message.
+        """
+        with pytest.raises(ValueError, match="Could not find a video ID"):
+            main_module._normalise_video_id("https://www.youtube.com/feed/subscriptions")
+
+    def test_unrecognised_non_url_is_left_alone(self):
+        """
+        Not everything that fails the ID regex is an error to raise on.
+        YouTube's format is stable now, but rejecting here would turn a
+        future format change into an outage for a check that adds nothing --
+        the transcript fetch reports a bad ID perfectly well.
+        """
+        assert main_module._normalise_video_id("  someFutureFormat123456  ") == "someFutureFormat123456"
+
+
 class TestRunPipelineWiring:
 
     def test_force_skips_the_already_processed_guard(self, wired, session):

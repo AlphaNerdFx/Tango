@@ -239,10 +239,71 @@ def _select_deck(deck_arg: str | None, session: Session) -> str:
         print(f"  Please enter a number between 1 and {len(decks)}.")
 
 
+# ── Video ID normalisation ────────────────────────────────────────────────────
+
+# A YouTube ID is 11 characters of base64url. The "-" and "_" matter here:
+# roughly one ID in 64 starts with a hyphen, and those are the ones that
+# break a naive `--video-id -abc` on the command line, since argparse reads
+# the value as another option. The Makefile passes --video-id=<value> for
+# that reason; this only has to recognise a well-formed ID.
+_VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
+
+# watch?v=, youtu.be/, /shorts/, /embed/, /live/ — the forms people paste.
+_YOUTUBE_URL_RE = re.compile(
+    r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\.be/)"
+    r"([A-Za-z0-9_-]{11})"
+)
+
+
+def _normalise_video_id(value: str) -> str:
+    """
+    Accept either a bare video ID or a YouTube URL, and return the ID.
+
+    ``--help`` has always said "YouTube video ID or URL", but nothing ever
+    extracted an ID from a URL: the full URL was handed to the transcript
+    API, which failed somewhere further down with a less obvious message.
+
+    A value that is neither a recognisable URL nor an 11-character ID is
+    returned unchanged rather than rejected. YouTube's ID format is stable
+    today, but refusing to run on anything that fails a regex here would
+    turn a future format change into an outage for a check that adds no
+    safety — the transcript fetch reports a bad ID perfectly well.
+
+    Args:
+        value: Raw --video-id argument.
+
+    Returns:
+        The extracted ID when the input was a URL, otherwise the input
+        stripped of surrounding whitespace.
+    """
+    value = value.strip()
+
+    match = _YOUTUBE_URL_RE.search(value)
+    if match:
+        return match.group(1)
+
+    # A URL we could not read an ID out of — better to say so here than to
+    # let the transcript API fail on a string that is obviously not an ID.
+    if "youtu" in value.lower() or value.startswith(("http://", "https://")):
+        raise ValueError(
+            f"Could not find a video ID in '{value}'.\n"
+            "  Expected something like https://www.youtube.com/watch?v=VIDEO_ID\n"
+            "  or just the 11-character ID on its own."
+        )
+
+    return value
+
+
 # ── Mode: default pipeline ────────────────────────────────────────────────────
 
 def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
-    video_id  = args.video_id
+    try:
+        video_id = _normalise_video_id(args.video_id)
+    except ValueError as exc:
+        _err(str(exc))
+        sys.exit(1)
+    if video_id != args.video_id.strip():
+        _info(f"Read video ID '{video_id}' from the URL you gave.")
     deck_name = _select_deck(args.deck, session)
 
     # ── 0. Resolve language ───────────────────────────────────────────────────
