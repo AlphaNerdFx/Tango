@@ -35,8 +35,11 @@ verification session.
 - [x] Makefile with setup, run, test, format, lint, clean targets
 - [x] 400+ unit tests, no external dependencies in the default run
       (exact count drifts as tests are added; check `make test` output
-      rather than trusting a hardcoded number here — see CONTRIBUTING.md's
-      own stale "411" claim, corrected during this session)
+      rather than trusting a hardcoded number here. CONTRIBUTING.md's stale
+      "411" claim was recorded here as "corrected during this session" — it
+      was not, and still said 411 until 8 August. The note claiming the fix
+      outlived the fix it claimed, which is the trailing-edge pattern in its
+      purest form.)
 - [x] GitHub Actions CI on push and pull request
 - [x] Documentation set: PRD, SAD, SRD, ADR, code walkthrough
 - [x] GitHub community files: code of conduct, contributing, security policy

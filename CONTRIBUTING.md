@@ -18,7 +18,7 @@ This creates the virtual environment, installs all dependencies, and downloads t
 make test
 ```
 
-All 411 tests should pass. If any fail on your machine before you change anything, open an issue before proceeding.
+All tests should pass — 692 at the time of writing, though the count moves as tests are added, so trust `make test` over any number written down. If any fail on your machine before you change anything, open an issue before proceeding.
 
 ## Project structure
 
@@ -47,7 +47,25 @@ Run the formatter and linter before committing.
 ```bash
 make format
 make lint
+make coverage    # per-module line coverage, currently 88%
 ```
+
+### Verifying a release
+
+`make test` cannot check that a real run produces the cards it claims to — it
+has no Anki, no network, and no spaCy model by design. For that there is a
+release script:
+
+```bash
+bash scripts/verify-release.sh <VIDEO_ID> <LANGUAGE>
+```
+
+It runs a video into a fresh deck, imports it, re-runs the same video to prove
+duplicate detection works, and reads the resulting cards back out of Anki to
+report per-field coverage. It needs a running Anki with AnkiConnect, network,
+and `jq`, and **it writes to your real collection**. Use a video you have not
+processed before: Anki dedups notes by GUID, so re-importing one you already
+have updates those notes in place rather than filling the new deck.
 
 ## Commit messages
 
