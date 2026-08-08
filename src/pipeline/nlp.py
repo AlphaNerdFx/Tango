@@ -28,9 +28,31 @@ from typing import Optional
 
 import logging
 import re
+import warnings
 
-import spacy
-from spacy.language import Language
+# Importing spaCy pulls in thinc, which imports torch when it finds one
+# installed -- and argostranslate installs one. torch then probes for CUDA at
+# import time, so a machine with an outdated NVIDIA driver prints a paragraph
+# about updating it before the pipeline has done anything, on every run and
+# in every test.
+#
+# Nothing here uses a GPU: spaCy runs the small CPU models and argostranslate
+# is CPU-bound by design (see the per-word timeout in translation.py). The
+# warning is therefore noise about a device we would not use even if it
+# initialised.
+#
+# Filtered rather than prevented. Setting CUDA_VISIBLE_DEVICES="" would also
+# silence it, but by disabling the GPU for anyone whose driver does work --
+# a real behaviour change to fix a cosmetic problem. This matches on the
+# message so an unrelated UserWarning from torch still gets through.
+warnings.filterwarnings(
+    "ignore",
+    message=r".*CUDA initialization.*",
+    category=UserWarning,
+)
+
+import spacy  # noqa: E402  -- must follow the filter above to take effect
+from spacy.language import Language  # noqa: E402
 
 from pipeline.language import SpacyModelUnavailableError, get_spacy_model
 
