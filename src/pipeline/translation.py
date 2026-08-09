@@ -53,6 +53,11 @@ LIBRETRANSLATE_MIRRORS: list[str] = [
 ]
 LIBRETRANSLATE_LOCAL       = os.getenv("LIBRETRANSLATE_URL", "http://localhost:5000")
 LIBRETRANSLATE_TIMEOUT     = 5    # seconds for mirror probe
+MODEL_WARMUP_TIMEOUT       = 180  # seconds for the first call of a pair, which
+                                   # loads the model and its sentence-boundary
+                                   # data. Measured at 43.5s here against a 15s
+                                   # per-word budget -- unwinnable, so the load
+                                   # gets its own budget outside that one.
 LOCAL_TRANSLATION_TIMEOUT  = 15   # seconds max per word for local argostranslate
                                    # argostranslate on CPU can take 30-60s/word
                                    # with Stanza SBD — abort and warn if exceeded
@@ -137,6 +142,59 @@ def try_community_mirror(
 
 
 # ── Tier 2: Local argostranslate ──────────────────────────────────────────────
+
+def _repair_packages_dir() -> Optional[str]:
+    """
+    Ignore ARGOS_PACKAGES_DIR when it points somewhere with no models.
+
+    Warning about this was not enough. A stale value in .env makes
+    argostranslate report zero installed packages, so --def-lang silently
+    produces native definitions no matter how many models are actually
+    installed -- and the user cannot tell, because the same machine
+    translates fine from any shell that never loaded .env.
+
+    When the variable points at a directory holding no models while models
+    do exist in argostranslate's default location, the variable is wrong and
+    following it helps nobody. It is dropped from this process's environment
+    only; the .env file is not touched.
+
+    Must run before anything imports argostranslate, which reads the
+    variable at import time. This module is imported lazily from
+    definition.py, well before any argostranslate use.
+
+    Returns:
+        A message describing what was done, or None if nothing was needed.
+    """
+    configured = os.getenv("ARGOS_PACKAGES_DIR")
+    if not configured:
+        return None
+
+    configured_path = Path(configured)
+    has_models = configured_path.exists() and any(
+        configured_path.glob("translate-*")
+    )
+    if has_models:
+        return None
+
+    default_dir = Path.home() / ".local" / "share" / "argos-translate" / "packages"
+    if not (default_dir.exists() and any(default_dir.glob("translate-*"))):
+        # Nothing anywhere -- an ordinary "no models yet" state.
+        return None
+
+    os.environ.pop("ARGOS_PACKAGES_DIR", None)
+    return (
+        f"ARGOS_PACKAGES_DIR points at '{configured}', which holds no "
+        f"translation models, while models are installed in '{default_dir}'. "
+        f"Ignoring the setting for this run so translation works. Unset it in "
+        f".env to silence this, or move the packages there."
+    )
+
+
+# Runs at import, before any argostranslate import can read the variable.
+_packages_dir_note = _repair_packages_dir()
+if _packages_dir_note:
+    logger.warning("%s", _packages_dir_note)
+
 
 _warned_packages_dir: set[str] = set()
 
@@ -423,6 +481,64 @@ class _TranslationTimeoutError(Exception):
     """Internal: local translation exceeded LOCAL_TRANSLATION_TIMEOUT."""
 
 
+_warm_lock = threading.Lock()
+_warmed_pairs: set[str] = set()
+
+
+def _warm_translation(from_code: str, to_code: str) -> bool:
+    """
+    Load a language pair's model once, before any word is timed against it.
+
+    The first call for a pair loads the translation model and its
+    sentence-boundary data; measured at 43.5s on this machine, against a
+    LOCAL_TRANSLATION_TIMEOUT of 15s. So the first word of every run timed
+    out no matter how fast the machine was, translate_word fell through to
+    its prompt, and the whole run silently produced native definitions --
+    while every subsequent word would have taken 0.1s.
+
+    Same shape as the OMW warm-up in definition.py (ARCHITECTURE 8.18): load
+    once under a lock, then let the concurrent callers through.
+
+    Args:
+        from_code: BCP-47 source code.
+        to_code:   BCP-47 target code.
+
+    Returns:
+        True if the pair is loaded and usable.
+    """
+    import concurrent.futures
+
+    pair = f"{from_code}->{to_code}"
+    with _warm_lock:
+        if pair in _warmed_pairs:
+            return True
+
+        def _load() -> bool:
+            from argostranslate import translate
+            translation = translate.get_translation_from_codes(from_code, to_code)
+            # A real translation, not just the lookup: the sentence-boundary
+            # data loads on first use, not on construction.
+            translation.translate("test")
+            return True
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                ex.submit(_load).result(timeout=MODEL_WARMUP_TIMEOUT)
+            _warmed_pairs.add(pair)
+            logger.info("Translation model warm for %s.", pair)
+            return True
+        except concurrent.futures.TimeoutError:
+            logger.warning(
+                "Translation model for %s did not load within %ds. Definitions "
+                "stay in %s for this run.",
+                pair, MODEL_WARMUP_TIMEOUT, from_code,
+            )
+            return False
+        except Exception as exc:
+            logger.warning("Could not load the %s translation model: %s", pair, exc)
+            return False
+
+
 def translate_local(word: str, from_code: str, to_code: str) -> Optional[str]:
     """
     Translate a word using the locally installed argostranslate model.
@@ -442,6 +558,10 @@ def translate_local(word: str, from_code: str, to_code: str) -> Optional[str]:
     # every non-English pair except pt<->es.
     if not is_translation_available(from_code, to_code):
         raise ModelNotInstalledError(from_code, to_code)
+
+    # Load the model before timing anything against the per-word budget.
+    if not _warm_translation(from_code, to_code):
+        return None
 
     import concurrent.futures
 
