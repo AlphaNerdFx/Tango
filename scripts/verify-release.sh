@@ -50,6 +50,20 @@ while [ -z "$VID" ]; do
   read -rp "YouTube video ID or URL: " VID
 done
 
+# A pasted watch URL carries ?v=, &pp=, %3D and slashes. The pipeline itself
+# copes -- _normalise_video_id extracts the ID -- but this script also puts
+# $VID in a deck name, in an Anki search query and in a make variable, and a
+# URL is wrong in all three. Reduce it here, once, using the same rules.
+VID=$(PYTHONPATH=src "$PY" -c "
+import sys; sys.path.insert(0,'src')
+from pipeline.__main__ import _normalise_video_id
+try:
+    print(_normalise_video_id(sys.argv[1]))
+except ValueError as exc:
+    print('ERR', exc, file=sys.stderr); sys.exit(1)
+" "$VID" 2>/dev/null) || { echo "Could not read a video ID from that input."; exit 1; }
+echo "  video id: $VID"
+
 echo
 echo "Languages — an offline index means real native definitions:"
 for code in $(ls dictionaries/ 2>/dev/null | sed -n 's/wiktionary_\(.*\)\.sqlite/\1/p'); do
@@ -128,7 +142,7 @@ import sys; sys.path.insert(0,'src')
 from pipeline import deck
 from pipeline.__main__ import _translate_wsl_path
 print('  importPackage ->', deck._anki_request('importPackage', path=_translate_wsl_path('$APKG')))
-" 2>/dev/null
+"
 echo "  notes now: $(count)"
 
 echo; echo "=== 3. SAME video again with FORCE — expect all SKIP, 0 new ==="
@@ -151,7 +165,7 @@ echo "  a deck whose language resolves:"
 printf 'n\n' | make review DECK="$DECK" LANGUAGE="$LC" 2>&1 | grep -E "Target language" | sed 's/^/    /'
 echo "  a deck whose name carries no language — falling back to en is the"
 echo "  designed behaviour here, not a failure:"
-printf 'n\n' | make review DECK="My Words" 2>&1 | grep -E "Could not infer" | sed 's/^/    /'""
+printf 'n\n' | make review DECK="My Words" 2>&1 | grep -E "Could not infer" | sed 's/^/    /' 
 
 echo; echo "=== 6. paths anchor to the project, not the shell's cwd ==="
 cd /tmp && PYTHONPATH="$ROOT/src" "$PY" -c "
@@ -159,7 +173,7 @@ from pipeline import config as c
 import os
 print('  DB_PATH :', c.DB_PATH, '| exists:', c.DB_PATH.exists())
 print('  DICT_DIR:', c.DICT_DIR, '| exists:', c.DICT_DIR.exists())
-print('  stray pipeline.db in /tmp:', os.path.exists('/tmp/pipeline.db'))" 2>/dev/null
+print('  stray pipeline.db in /tmp:', os.path.exists('/tmp/pipeline.db'))" 2>&1 | grep -v UserWarning
 cd "$ROOT"
 
 echo; echo "=== 7. make install no longer dies on a missing bin/pip ==="

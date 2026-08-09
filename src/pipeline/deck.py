@@ -44,7 +44,7 @@ logger = logging.getLogger(__name__)
 # ── Constants (override in config.py) ────────────────────────────────────────
 
 from pipeline.config import (
-    ANKI_HOST, ANKI_VERSION, ANKI_TIMEOUT,
+    ANKI_HOST, ANKI_VERSION, ANKI_TIMEOUT, ANKI_IMPORT_TIMEOUT,
     CONFIDENCE_HIGH, CONFIDENCE_LOW, SHORT_WORD_THRESHOLD,
     REVIEW_FILE, DB_PATH,
 )
@@ -113,17 +113,28 @@ class AnkiNotRunningError(Exception):
 
 # ── AnkiConnect client ────────────────────────────────────────────────────────
 
+# Actions whose duration scales with the collection rather than the request.
+# Everything else answers in milliseconds and keeps the short timeout.
+_SLOW_ACTIONS = {"importPackage", "exportPackage", "sync"}
+
+
 def _anki_request(action: str, **params) -> object:
     """
     Send a request to AnkiConnect and return the result field.
+
+    Uses ANKI_IMPORT_TIMEOUT for the actions in _SLOW_ACTIONS and
+    ANKI_TIMEOUT for everything else. One timeout for both was the bug:
+    importing a package into a large collection exceeded 5s, raised
+    AnkiNotRunningError, and looked exactly like Anki being closed.
 
     Raises:
         AnkiNotRunningError: If the connection is refused or times out.
         AnkiConnectError:    If AnkiConnect returns an error string.
     """
     payload = {"action": action, "version": ANKI_VERSION, "params": params}
+    timeout = ANKI_IMPORT_TIMEOUT if action in _SLOW_ACTIONS else ANKI_TIMEOUT
     try:
-        response = requests.post(ANKI_HOST, json=payload, timeout=ANKI_TIMEOUT)
+        response = requests.post(ANKI_HOST, json=payload, timeout=timeout)
         response.raise_for_status()
     except requests.exceptions.ConnectionError as exc:
         raise AnkiNotRunningError(
@@ -132,7 +143,7 @@ def _anki_request(action: str, **params) -> object:
         ) from exc
     except requests.exceptions.Timeout as exc:
         raise AnkiNotRunningError(
-            f"AnkiConnect timed out after {ANKI_TIMEOUT}s."
+            f"AnkiConnect timed out after {timeout}s on '{action}'."
         ) from exc
 
     data = response.json()

@@ -158,7 +158,8 @@ def _prompt_import(apkg_path: Path) -> None:
                 "version": 6,
                 "params":  {"path": absolute_path},
             },
-            timeout=deck_module.ANKI_TIMEOUT,
+            # importPackage, not a quick query -- see config.ANKI_IMPORT_TIMEOUT.
+            timeout=deck_module.ANKI_IMPORT_TIMEOUT,
         )
         data = response.json()
         if data.get("error"):

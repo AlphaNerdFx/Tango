@@ -127,8 +127,18 @@ ANKI_HOST: str = os.getenv("ANKI_HOST", "http://localhost:8765")
 # AnkiConnect API version — do not change unless AnkiConnect upgrades its API
 ANKI_VERSION: int = 6
 
-# Seconds to wait for AnkiConnect to respond before timing out
+# Seconds to wait for AnkiConnect to respond before timing out. Fine for the
+# quick calls -- deckNames, findNotes, notesInfo -- which answer immediately.
 ANKI_TIMEOUT: int = int(os.getenv("ANKI_TIMEOUT", "5"))
+
+# importPackage is not one of those. Anki writes every note, builds cards and
+# rebuilds indexes before it answers, and how long that takes scales with the
+# collection, not just the package: a 382-card import into a 57k-note
+# collection blew well past 5s, the request timed out on our side, and the
+# user saw an empty deck with no error -- while the same import had worked
+# weeks earlier on a smaller collection. Generous by design; it is a ceiling
+# for a hung server, not a target.
+ANKI_IMPORT_TIMEOUT: int = int(os.getenv("ANKI_IMPORT_TIMEOUT", "300"))
 
 # genanki model ID — NEVER change after first use.
 # Changing this causes Anki to treat all existing cards as belonging

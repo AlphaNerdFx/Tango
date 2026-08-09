@@ -38,6 +38,12 @@ VENV_ACTIVATE := $(VENV_DIR)/bin/activate
 SPACY_LANG    ?= en
 MIN_PYTHON    := 3.10
 
+# Every printf below that shows a user-supplied value passes it as a %s
+# ARGUMENT, never inside the format string. A YouTube URL ends in things like
+# %3D, and `printf "video: $(VIDEO_ID)\n"` made printf read that as a format
+# directive: "printf: %3D: invalid directive", recipe aborts with Error 2, and
+# the pipeline never ran at all. The user saw an empty deck.
+#
 # Pipeline run defaults — override from CLI:
 #   make run VIDEO_ID=LV_NoD2M54w DECK="Language::English"
 VIDEO_ID      ?=
@@ -153,12 +159,12 @@ translate-model: venv
 		printf "  Usage: $(CYAN)make translate-model LANGUAGE=de DEF_LANG=en$(RESET)\n"; \
 		exit 1; \
 	fi
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Installing translation for $(LANGUAGE) -> $(DEF_LANG)...\n"
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Installing translation for %s -> %s...\n" "$(LANGUAGE)" "$(DEF_LANG)"
 	@PYTHONPATH=src $(VENV_PYTHON) -c \
 		"from pipeline.translation import install_translation; \
 		import sys; \
 		sys.exit(0 if install_translation('$(LANGUAGE)', '$(DEF_LANG)') else 1)"
-	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Translation ready: $(LANGUAGE) -> $(DEF_LANG)\n"
+	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Translation ready: %s -> %s\n" "$(LANGUAGE)" "$(DEF_LANG)"
 
 # -- spacy-model --------------------------------------------------------------
 # Model name is resolved from SPACY_LANG via language.get_spacy_model() --
@@ -178,7 +184,7 @@ spacy-model: venv
 		printf "  or check language.SPACY_MODELS for spaCy-supported codes specifically.\n"; \
 		exit 1; \
 	fi
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading spaCy model: $(SPACY_MODEL_NAME)\n"
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading spaCy model: %s\n" "$(SPACY_MODEL_NAME)"
 	@$(VENV_PYTHON) -m spacy download $(SPACY_MODEL_NAME) --quiet
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading NLTK WordNet data...\n"
 	@$(VENV_PYTHON) -m nltk.downloader wordnet omw-2.0 --quiet 2>/dev/null || true
@@ -278,7 +284,7 @@ run: check-os
 		printf "  Usage: $(CYAN)make run VIDEO_ID=<youtube_video_id> DECK=\"<deck name>\"$(RESET)\n"; \
 		exit 1; \
 	fi
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Running pipeline for video: $(VIDEO_ID)\n"
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Running pipeline for video: %s\n" "$(VIDEO_ID)"
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
 		--video-id="$(VIDEO_ID)" \
 		--deck="$(DECK)" \
@@ -294,7 +300,7 @@ review: check-os
 		printf "  Usage: $(CYAN)make review DECK=\"<deck name>\"$(RESET)\n"; \
 		exit 1; \
 	fi
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing review file for deck: $(DECK)\n"
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing review file for deck: %s\n" "$(DECK)"
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
 		--review \
 		--deck="$(DECK)" \
@@ -309,7 +315,7 @@ backlog: check-os
 		printf "  Usage: $(CYAN)make backlog DECK=\"<deck name>\"$(RESET)\n"; \
 		exit 1; \
 	fi
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing Anki backlog for deck: $(DECK)\n"
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing Anki backlog for deck: %s\n" "$(DECK)"
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
 		--process-backlog \
 		--deck="$(DECK)" \
