@@ -138,6 +138,53 @@ def try_community_mirror(
 
 # ── Tier 2: Local argostranslate ──────────────────────────────────────────────
 
+_warned_packages_dir: set[str] = set()
+
+
+def check_packages_dir() -> Optional[str]:
+    """
+    Return a warning when ARGOS_PACKAGES_DIR hides the installed models.
+
+    argostranslate reads ARGOS_PACKAGES_DIR itself, and config.py's
+    load_dotenv() puts whatever .env holds into the environment. So a value
+    pointing at an empty directory makes argostranslate report zero installed
+    packages, translation silently falls back to native definitions, and the
+    same machine translates fine from a shell where .env was never loaded.
+    That is exactly the failure this function exists to name: it cost a full
+    debugging session precisely because nothing said anything.
+
+    Returns:
+        A human-readable explanation, or None when the setting is fine.
+    """
+    configured = os.getenv("ARGOS_PACKAGES_DIR")
+    if not configured:
+        return None
+
+    try:
+        from argostranslate import package as pkg
+        visible = pkg.get_installed_packages()
+    except Exception:
+        return None
+
+    if visible:
+        return None
+
+    default_dir = Path.home() / ".local" / "share" / "argos-translate" / "packages"
+    elsewhere = default_dir.exists() and any(default_dir.iterdir())
+    if not elsewhere:
+        # Nothing installed anywhere -- an ordinary "no models yet" state,
+        # not a misconfiguration.
+        return None
+
+    return (
+        f"ARGOS_PACKAGES_DIR is set to '{configured}', which contains no "
+        f"translation models, but models are installed in '{default_dir}'. "
+        f"argostranslate reads that variable directly, so translation will "
+        f"silently fall back to native definitions. Either unset it in .env "
+        f"or move the packages there."
+    )
+
+
 def is_model_installed(from_code: str, to_code: str) -> bool:
     """
     Return True if a *direct* argostranslate package for this pair is installed.
@@ -469,7 +516,22 @@ def translate_word(
         if result:
             return result
     except ModelNotInstalledError:
-        pass  # fall through to prompt
+        # Was a bare `pass`. Falling through in silence meant a run asked for
+        # English definitions, produced native ones, and said nothing -- and
+        # the words that did reach an English source went untranslated, so
+        # German "je" matched the English letter J. Say so, once per pair.
+        if pair not in _warned_packages_dir:
+            _warned_packages_dir.add(pair)
+            hint = check_packages_dir()
+            if hint:
+                logger.warning("%s", hint)
+            else:
+                logger.warning(
+                    "No translation model for %s. Install it with "
+                    "`make translate-model LANGUAGE=%s DEF_LANG=%s`; "
+                    "definitions stay in %s until then.",
+                    pair, from_code, to_code, from_code,
+                )
 
     # ── Tier 3: User prompt ───────────────────────────────────────────────────
     if not interactive:

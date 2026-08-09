@@ -936,6 +936,13 @@ def fetch_definition(
     All text fields are capped at 256 characters.
     """
     target_language = def_language or language
+    # The key names the language the definition will actually be IN, and that
+    # is not settled yet: when translation is unavailable, target_language
+    # falls back to `language` below and the definition comes back native.
+    # Keying on the requested language cached a German definition under
+    # "haus::en", so a later run with translation working read German text
+    # back believing it was English. The key is therefore rebuilt after the
+    # fallback decision; this one is only for the read.
     cache_key       = f"{lemma}::{target_language}"
 
     if use_cache:
@@ -1000,7 +1007,10 @@ def fetch_definition(
                 logger.info("Translated '%s' -> '%s'", lemma, translated)
                 query_lemma = translated
             else:
+                # Translation unavailable: the definition will be native, so
+                # the cache key has to say so too.
                 target_language = language
+                cache_key = f"{lemma}::{target_language}"
         except TranslationUnavailableError:
             raise
 
