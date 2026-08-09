@@ -63,6 +63,12 @@ FIELDS = [
     ("Antonyms", 7),
 ]
 
+# Source field, used to tell a real cross-language definition from one that
+# quietly fell back to the transcript language. Without this a --def-lang row
+# that translated nothing looks exactly like a native row.
+SOURCE_IDX = 9
+NATIVE_FALLBACK_SOURCE = "wiktionary-native"
+
 PLACEHOLDER = "No definition found"
 
 
@@ -151,7 +157,17 @@ def measure_package(apkg: Path) -> dict:
             if len(r) > idx and r[idx].strip() and r[idx].strip() != PLACEHOLDER
         )
         counts[label] = round(100 * filled / total)
+    sources: dict[str, int] = {}
+    for r in rows:
+        if len(r) > SOURCE_IDX:
+            sources[r[SOURCE_IDX].strip()] = sources.get(r[SOURCE_IDX].strip(), 0) + 1
     counts["cards"] = total
+    counts["sources"] = sources
+    # Share of definitions that came back in the transcript language because
+    # the target-language lookup found nothing. 0 on a native run by
+    # definition; high on a cross-language run means translation is not
+    # actually happening -- usually a missing model for that pair.
+    counts["native_fallback"] = round(100 * sources.get(NATIVE_FALLBACK_SOURCE, 0) / total)
     return counts
 
 
@@ -179,6 +195,9 @@ def main() -> int:
         combos += [(a, b) for a in langs for b in langs if a != b]
 
     print(f"{len(combos)} combinations across {len(langs)}: {', '.join(langs)}")
+    print("'fellback' = share of definitions that came back in the transcript "
+          "language\n             because the target-language lookup found "
+          "nothing (0% on native rows).")
     print(f"offline index built for: {', '.join(sorted(indexed)) or 'none'}")
     missing = [c for c in langs if c not in indexed and c != "en"]
     if missing:
@@ -192,7 +211,8 @@ def main() -> int:
         return 0
 
     results: dict[str, dict] = {}
-    header = f"{'combination':<16}{'cards':>7}{'defs':>7}{'class':>7}{'ex1':>6}{'ex2':>6}{'video':>7}{'syn':>6}{'ant':>6}{'secs':>7}"
+    header = (f"{'combination':<16}{'cards':>7}{'defs':>7}{'fellback':>9}{'class':>7}"
+              f"{'ex1':>6}{'ex2':>6}{'video':>7}{'syn':>6}{'ant':>6}{'secs':>7}")
     print(header)
     print("-" * len(header))
 
@@ -204,7 +224,8 @@ def main() -> int:
             print(f"{label:<16}  ERROR: {res['error']}")
             continue
         print(
-            f"{label:<16}{res['cards']:>7}{res['Definition']:>6}%{res['Class']:>6}%"
+            f"{label:<16}{res['cards']:>7}{res['Definition']:>6}%"
+            f"{res['native_fallback']:>8}%{res['Class']:>6}%"
             f"{res['1st Example']:>5}%{res['2nd Example']:>5}%{res['Video Example']:>6}%"
             f"{res['Synonyms']:>5}%{res['Antonyms']:>5}%{res['seconds']:>7}"
         )
