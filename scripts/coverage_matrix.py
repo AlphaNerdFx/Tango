@@ -48,7 +48,7 @@ VIDEOS: dict[str, str] = {
     "de": "JbHUxfOQ2-U",
     "fr": "2yHn8uc5_-4",
     "en": "hOJhDBhBErI",
-    "ru": "703B19Uz7Fk",
+    "ru": "c9ghnkHZLwo",
 }
 
 # Fields read back out of each generated package, in card-model order.
@@ -126,6 +126,16 @@ def run_pair(transcript: str, definition: str | None, timeout: int) -> dict:
     except subprocess.TimeoutExpired:
         return {"error": f"timed out after {timeout}s"}
 
+    output = proc.stdout + proc.stderr
+    # The commonest cross-language failure leaves no trace in the card data:
+    # when no model exists for the pair, translate_word returns None and
+    # fetch_definition resets target_language to the transcript language, so
+    # the run becomes a native one and every definition records the ordinary
+    # "wiktionary" source. Indistinguishable from a native run afterwards --
+    # de->fr and de->native produced byte-identical source counts. The only
+    # evidence is the warning emitted at the time.
+    no_model = bool(re.search(r"No translation model for|did not load within", output))
+
     match = re.search(r"(/\S+\.apkg)", proc.stdout)
     if not match:
         tail = (proc.stdout or proc.stderr).strip().splitlines()[-1:] or ["no output"]
@@ -133,6 +143,7 @@ def run_pair(transcript: str, definition: str | None, timeout: int) -> dict:
 
     result = measure_package(Path(match.group(1)))
     result["seconds"] = round(time.time() - started)
+    result["translated"] = not no_model if definition else None
     return result
 
 
@@ -195,6 +206,9 @@ def main() -> int:
         combos += [(a, b) for a in langs for b in langs if a != b]
 
     print(f"{len(combos)} combinations across {len(langs)}: {', '.join(langs)}")
+    print("'xlang'    = did translation actually run? NO MODEL means the pair "
+          "has no\n             argostranslate model, so the run silently "
+          "produced native definitions.")
     print("'fellback' = share of definitions that came back in the transcript "
           "language\n             because the target-language lookup found "
           "nothing (0% on native rows).")
@@ -212,7 +226,7 @@ def main() -> int:
 
     results: dict[str, dict] = {}
     header = (f"{'combination':<16}{'cards':>7}{'defs':>7}{'fellback':>9}{'class':>7}"
-              f"{'ex1':>6}{'ex2':>6}{'video':>7}{'syn':>6}{'ant':>6}{'secs':>7}")
+              f"{'ex1':>6}{'ex2':>6}{'video':>7}{'syn':>6}{'ant':>6}{'xlang':>8}{'secs':>7}")
     print(header)
     print("-" * len(header))
 
@@ -227,7 +241,9 @@ def main() -> int:
             f"{label:<16}{res['cards']:>7}{res['Definition']:>6}%"
             f"{res['native_fallback']:>8}%{res['Class']:>6}%"
             f"{res['1st Example']:>5}%{res['2nd Example']:>5}%{res['Video Example']:>6}%"
-            f"{res['Synonyms']:>5}%{res['Antonyms']:>5}%{res['seconds']:>7}"
+            f"{res['Synonyms']:>5}%{res['Antonyms']:>5}%"
+            f"{('-' if res['translated'] is None else ('yes' if res['translated'] else 'NO MODEL')):>8}"
+            f"{res['seconds']:>7}"
         )
 
     if args.out:
