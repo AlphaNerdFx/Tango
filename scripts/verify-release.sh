@@ -150,13 +150,16 @@ printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" $DEF_ARGS
   | grep -E "Deck check"
 
 echo; echo "=== 4. per-field card quality, read back out of Anki ==="
+echo "  (a fallback card carries the literal text 'No definition found'; that"
+echo "   counts as missing here, not as a filled field)"
 if [ "$(count)" -eq 0 ]; then echo "  no cards in deck — steps 1/2 failed, skipping"; else
 IDS=$(find_in_deck | jq -c .result)
 ank notesInfo "$(jq -nc --argjson n "$IDS" '{notes:$n}')" | jq -r '
   .result as $n | ($n|length) as $t |
   ["Definition","1st Example Sentence","2nd Example Sentence",
    "Example from Youtube Video","Synonyms","Antonyms"][] as $f |
-  ($n | map(select(.fields[$f].value != "")) | length) as $c |
+  ($n | map(select(.fields[$f].value != ""
+                   and .fields[$f].value != "No definition found")) | length) as $c |
   "  \($f): \($c)/\($t) (\((100*$c/$t)|floor)%)"'
 fi
 
