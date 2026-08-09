@@ -176,7 +176,7 @@ from pipeline import config as c
 import os
 print('  DB_PATH :', c.DB_PATH, '| exists:', c.DB_PATH.exists())
 print('  DICT_DIR:', c.DICT_DIR, '| exists:', c.DICT_DIR.exists())
-print('  stray pipeline.db in /tmp:', os.path.exists('/tmp/pipeline.db'))" 2>&1 | grep -v UserWarning
+print('  stray pipeline.db in /tmp:', os.path.exists('/tmp/pipeline.db'))" 2>&1 | grep -v "UserWarning"
 cd "$ROOT"
 
 echo; echo "=== 7. make install no longer dies on a missing bin/pip ==="
