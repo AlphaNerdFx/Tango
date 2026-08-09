@@ -1073,6 +1073,42 @@ def fetch_definition(
             if not native_ants:
                 native_ants = entry.antonyms
 
+    # Cross-language last resort: a native definition beats none.
+    #
+    # In --def-lang mode the lookups above all run against the TARGET language,
+    # and the index consulted is the target's. There is normally no English
+    # index (building one is advised against -- see 8.19), so when Merriam-
+    # Webster and dictionaryapi.dev both miss the translated word, the card
+    # shipped with "No definition found" even though the source language's own
+    # index had the word all along. Measured on a real German->English deck:
+    # 46 of 459 cards, including Spracherwerb, Intensivkurs, Spaziergang,
+    # Abschluss, Ende, Sehen, Auch -- ordinary words, every one of them
+    # present in the German index.
+    #
+    # The definition then comes back in the transcript language rather than
+    # the requested one, which CLAUDE.md 3.3 permits (it constrains examples,
+    # synonyms and antonyms, not the definition) and which is what the same
+    # word would have got in native mode. Source records "wiktionary-native"
+    # so the mixture is visible rather than silent.
+    if not definition and def_language and target_language != language:
+        if wiktdata.is_available(language):
+            entry = wiktdata.lookup(lemma, language)
+            if entry:
+                definition     = entry.definition
+                part_of_speech = part_of_speech or entry.part_of_speech
+                _actual_source = "wiktionary-native"
+                if not native_ex1:
+                    native_ex1 = entry.example1
+                    native_ex2 = entry.example2
+                if not native_syns:
+                    native_syns = entry.synonyms
+                if not native_ants:
+                    native_ants = entry.antonyms
+                logger.debug(
+                    "No %s definition for '%s'; using the native %s entry.",
+                    target_language, lemma, language,
+                )
+
     if not definition:
         # WARNING only where a miss is actually news. dictionaryapi.dev has
         # no usable non-English data at all (issue #1), so for those
