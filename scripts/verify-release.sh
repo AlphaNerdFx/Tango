@@ -58,8 +58,18 @@ done
 echo "   en   no index needed, Merriam-Webster covers English"
 echo "   (any other supported code works, but definitions will be sparse"
 echo "    without an index — build one with: make dictionary LANGUAGE=<code>)"
-read -rp "Target language code: " LC
+read -rp "Transcript language code: " LC
 [ -z "$LC" ] && { echo "A language is required."; exit 1; }
+
+echo
+echo "Definition language — leave blank for native definitions in $LC."
+echo "  Set it (e.g. en) to check cross-language mode, which needs a translation"
+echo "  model: make translate-model LANGUAGE=$LC DEF_LANG=en"
+read -rp "Definition language [native]: " DL
+DEF_ARGS=""
+if [ -n "$DL" ] && [ "$DL" != "$LC" ]; then
+  DEF_ARGS="DEF_LANG=$DL"
+fi
 
 echo
 echo "Decks in your collection:"
@@ -77,9 +87,10 @@ else
   DECK="$PICK"
 fi
 echo
-echo "  video    : $VID"
-echo "  language : $LC"
-echo "  deck     : $DECK"
+echo "  video      : $VID"
+echo "  language   : $LC"
+echo "  definitions: ${DL:-native ($LC)}"
+echo "  deck       : $DECK"
 echo
 
 echo "=== 0. pre-flight ==="
@@ -95,14 +106,15 @@ if [ "$PRIOR" -gt 0 ]; then
   echo "  Anki will update those in place rather than populate a new deck."
   echo "  Re-run with a video you have not processed for a clean end-to-end check."
 fi
-ank createDeck "$(jq -nc --arg d "$DECK" '{deck:$d}')" >/dev/null; echo "  target deck notes: $(count)"
+ank createDeck "$(jq -nc --arg d "$DECK" '{deck:$d}')" >/dev/null
+echo "  target deck notes before the run: $(count)   (0 is expected — the deck is new)"
 
 echo; echo "=== 1. first run into the empty deck — expect all NEW ==="
 # FORCE=1 here too: the video-level "already processed" guard is a separate
 # thing from the deck-level duplicate check this script is testing, and it
 # would otherwise exit before doing any work on any video you have run before.
 RUN1=$(mktemp)
-printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" FORCE=1 > "$RUN1" 2>&1
+printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" $DEF_ARGS FORCE=1 > "$RUN1" 2>&1
 grep -E "Target language|Deck check|Definitions:|Cards:|Package:" "$RUN1"
 
 echo; echo "=== 2. import the .apkg ==="
@@ -120,7 +132,7 @@ print('  importPackage ->', deck._anki_request('importPackage', path=_translate_
 echo "  notes now: $(count)"
 
 echo; echo "=== 3. SAME video again with FORCE — expect all SKIP, 0 new ==="
-printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" FORCE=1 2>&1 \
+printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" $DEF_ARGS FORCE=1 2>&1 \
   | grep -E "Deck check"
 
 echo; echo "=== 4. per-field card quality, read back out of Anki ==="
@@ -134,9 +146,12 @@ ank notesInfo "$(jq -nc --argjson n "$IDS" '{notes:$n}')" | jq -r '
   "  \($f): \($c)/\($t) (\((100*$c/$t)|floor)%)"'
 fi
 
-echo; echo "=== 5. review language — was silently English for every deck ==="
-printf 'n\n' | make review DECK="$DECK" LANGUAGE="$LC" 2>&1 | grep -E "Target language"
-printf 'n\n' | make review DECK="My Words" 2>&1 | grep -E "Could not infer"
+echo; echo "=== 5. review-mode language (both lines below are EXPECTED) ==="
+echo "  a deck whose language resolves:"
+printf 'n\n' | make review DECK="$DECK" LANGUAGE="$LC" 2>&1 | grep -E "Target language" | sed 's/^/    /'
+echo "  a deck whose name carries no language — falling back to en is the"
+echo "  designed behaviour here, not a failure:"
+printf 'n\n' | make review DECK="My Words" 2>&1 | grep -E "Could not infer" | sed 's/^/    /'""
 
 echo; echo "=== 6. paths anchor to the project, not the shell's cwd ==="
 cd /tmp && PYTHONPATH="$ROOT/src" "$PY" -c "
