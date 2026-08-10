@@ -127,9 +127,50 @@ Option (c) is worth noting because it costs almost nothing once (b) exists:
 the slicing, the media naming and the genanki wiring are identical, and only
 the acquisition step differs.
 
-### 2. Audio of the two dictionary example sentences
+### 2. Audio of the example sentences
 
-No corpus supplies audio for arbitrary sentences, so this is text-to-speech.
+The framing here changed after measurement, and the change matters.
+
+The obvious reading is "we have a sentence, now synthesise audio for it",
+which is text-to-speech. The better reading is the reverse: **take the
+sentence from a source that already has a recording of it.** Real human audio
+for the exact sentence beats synthesised audio for our sentence, and it
+removes the TTS dependency from the common case entirely.
+
+**Tatoeba** supplies exactly that — a CC-licensed sentence corpus with
+native-speaker recordings. Measured against the live API, German, `Haus`:
+
+```
+370 German sentences with audio for that one word
+  "Hau rein."        audio 695264  by MisterTrouser
+  "Hau ab!"          audio 42296   by peschiber
+  "Geh nach Hause."  audio 470082  by moskytoo
+```
+
+And it is bulk-downloadable, which is the pattern this project already uses
+for dictionaries rather than querying per word:
+
+```
+sentences_with_audio.tar.bz2      6.4 MB   (audio index, all languages)
+per_language/deu/deu_sentences    12.0 MB
+```
+
+That is small — three orders of magnitude below the Wiktionary extracts — so
+the index build cost is negligible.
+
+The cost is a design consequence rather than an engineering one: the card's
+example sentence would come from Tatoeba when a recording exists, and from
+Wiktionary otherwise. Two sources for one field, chosen per card by whether
+audio is available. That is a legitimate trade — a heard sentence is worth
+more than a marginally better-chosen written one — but it must be a decision
+taken deliberately, not a side effect of adding audio.
+
+Caveat found while testing: per-recording licence metadata came back empty on
+all three samples above. Tatoeba sentences are CC BY 2.0 FR, but audio
+licensing is per contributor and needs checking against the bulk export's own
+licence columns before anything is redistributed.
+
+**TTS remains the fallback**, for sentences with no recording:
 
 | option | licence / cost | offline | multilingual | notes |
 |---|---|---|---|---|
@@ -148,11 +189,25 @@ have us engineering around someone else's limits.
 
 ### 3. Isolated audio of the word
 
-Two tiers, in order:
+To be explicit, since the phrasing invites confusion: the 65.7% figure is
+**real recorded audio** — actual `.ogg` and `.mp3` files of human speakers,
+hosted on Wikimedia Commons and linked from the entry (`De-Hallo.ogg`). It is
+not the IPA. The IPA is the separate 91.5%, useful as a text field beside the
+audio rather than instead of it.
+
+Three tiers, in order:
 
 1. **Commons audio via the index** — 65.7% of German entries, real human
    speakers, already licensed, one URL fetch per word at build time
-2. **Piper TTS** for the remaining third, sharing whatever is built for item 2
+2. **Tatoeba word-level recordings** where a single-word sentence exists,
+   using whatever is built for item 2 — free, no key, already downloaded
+3. **Piper TTS** for whatever remains
+
+Rejected for tier 2: **Forvo**, which has the largest pronunciation corpus by
+some distance, because its API requires a key and caps requests on the free
+tier — the same grounds on which ADR-008 rejected PONS and this document
+rejects gTTS. Worth revisiting only if tiers 1-3 leave a gap that matters,
+measured on real vocabulary rather than assumed.
 
 Plus **IPA as a text field** at 91.5% coverage, which is free the moment the
 index stores it and is arguably as useful as the audio for pronunciation.
@@ -183,16 +238,26 @@ card fields. Highest value per unit of work by a wide margin: 91.5% and 65.7%
 coverage from data already downloaded, no new runtime dependency, no new
 service, no licence question beyond attribution.
 
-**Phase 2 — TTS for example sentences and for words lacking Commons audio.**
-Piper in an optional dependency group, voices installed per language like
-spaCy models and dictionaries.
+**Phase 2 — Tatoeba sentence audio.** Bulk index (6.4 MB, negligible beside
+the dictionaries), real human recordings, and the example sentence taken from
+the recording rather than a recording made for the sentence. TTS via Piper
+becomes the fallback for what Tatoeba does not cover, in an optional
+dependency group with voices installed per language like spaCy models.
 
 **Phase 3 — images, gated to concrete nouns.** Commons, with the POS gate and
 an attribution field. Ship it disabled by default until the relevance gate is
 measured on real vocabulary rather than five hand-picked words.
 
-**Phase 4 — video audio, or not at all.** Requires an explicit decision on the
-ToS position first. If built, option (b) or (c) above, never on by default.
+**Phase 4 — dropped as originally posed.** Downloading YouTube audio is
+contrary to YouTube's terms, and that is settled rather than weighed. What the
+request actually wanted — the word heard in real speech — is delivered by
+phases 1-3 from sources that exist to be redistributed. The `Example from
+Youtube Video` field stays as text, which is still the card's most reliable
+field at 100% coverage.
+
+The user-supplied-audio path (option (c)) remains available if someone wants
+the video's own audio for a file they already hold, and costs little once the
+slicing work exists. It is not scheduled.
 
 ---
 
