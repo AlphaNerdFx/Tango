@@ -420,6 +420,34 @@ current state.
 
 ## High — next up
 
+- [x] **Cross-language mode violated CLAUDE.md 3.3.** Examples, synonyms and
+      antonyms were taken from the target-language entry, so a German video
+      with `--def-lang ru` shipped Russian example sentences. Found by the
+      first full coverage sweep, not by tests. Gated at all three call sites;
+      see ARCHITECTURE.md 8.25. The measured example coverage on
+      cross-language rows will DROP on the next sweep — the metric had been
+      rewarding the violation.
+
+- [x] **Cross-language runs gave up instead of falling back.** 46 of 459
+      cards on a German->English deck shipped "No definition found" while the
+      German index had the word. ARCHITECTURE.md 8.26.
+
+- [x] **Merriam-Webster examples were parsed and discarded.** English example
+      coverage 14% -> 72% on a full video. Third instance of the
+      fetched-parsed-dropped shape.
+
+- [x] **Coverage sweep across language combinations.**
+      `scripts/coverage_matrix.py`, 16 combinations for 4 languages. It found
+      the 3.3 violation above and the fact that 10 of 12 cross-language pairs
+      had been silently producing native output for want of a translation
+      model.
+
+- [ ] **Re-run the sweep and record the corrected baseline.** The numbers in
+      hand were taken before the 3.3 fix and overstate cross-language example
+      and synonym coverage.
+
+
+
 - [x] **Test the three CLI run modes.** Done, and it paid for itself
       immediately: 5 of the first 22 tests failed, all of them one real bug.
 

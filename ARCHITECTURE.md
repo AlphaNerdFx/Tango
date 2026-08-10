@@ -1517,6 +1517,61 @@ the run-mode tests: 5 of the first 22 failed immediately, all of them this,
 while the other 17 passed and confirmed the video path's wiring was sound.
 `__main__.py` went 55% to 82% line coverage in the same commit, and the
 suite 83% to 88%.
+### 8.25 Cross-language mode: which fields may change language, and which may not
+
+CLAUDE.md 3.3 allows the definition and part of speech to be in the
+definition language while requiring examples, synonyms and antonyms to stay
+in the transcript language. Enforcing that is not automatic, because the
+sources are keyed by language and it is easy to take a whole entry.
+
+Three call sites populate those fields and each needed the same gate:
+
+| Source | Definition | Examples / synonyms / antonyms |
+|---|---|---|
+| Merriam-Webster | target language | only when target == transcript |
+| Offline index, target language | target language | only when target == transcript |
+| Offline index, transcript language | transcript (8.26 fallback) | always allowed |
+
+Two of the three were missing the gate and were caught by the first full
+coverage sweep, not by tests:
+
+```
+de --def-lang ru   Frage      -> "Вопросы по пройденному материалу есть?"
+en --def-lang de   Comment    -> "Comment ça va ?"
+```
+
+A German learner was being shown Russian sentences. The second case has an
+extra edge worth knowing: a language's index carries entries for foreign
+words too -- German Wiktionary documents French -- so a French-looking token
+matched a French entry inside the German index.
+
+**The metric was rewarding the violation.** Cross-language rows scored higher
+on examples than native ones (de->ru 87% against de->en 45%), which is
+impossible if the fields are constrained to the transcript language, and that
+impossibility is what exposed it. A coverage number that improves when a
+constraint is broken will hide the break; the sweep is only useful because
+the numbers sat next to each other and could be compared.
+
+Expect cross-language example and synonym columns to fall on the next sweep.
+That is the measurement becoming honest.
+
+### 8.26 A native definition beats no definition in cross-language mode
+
+In --def-lang mode every lookup runs against the target language, and the
+index consulted is the target's. There is normally no English index, so when
+Merriam-Webster and dictionaryapi.dev both miss the translated word the card
+used to ship with "No definition found" -- while the transcript language's
+own index had the word.
+
+Measured on a real German->English deck: 46 of 459 cards, and not obscure
+ones (Spracherwerb, Intensivkurs, Spaziergang, Abschluss, Ende, Sehen, Auch).
+A native definition is now the last resort before giving up. It records
+"wiktionary-native" as its source so the mixture is visible in the data
+rather than silent, and the coverage matrix reports the share as "fellback".
+
+Recovers 19 of 30 sampled failures; the rest are transcription noise and
+productive German compounds Wiktionary does not carry.
+
 
 ---
 
