@@ -899,6 +899,72 @@ class TestFetchDefinition:
         mock_wikt.assert_not_called()
 
 
+class TestCrossLanguageFieldLanguage:
+    """
+    CLAUDE.md 3.3: examples, synonyms and antonyms stay in the transcript
+    language; only the definition may differ. The coverage sweep caught this
+    being violated -- a German video with --def-lang ru shipped
+    "Вопросы по пройденному материалу есть?" as the example for "Frage",
+    and the wrong-language content inflated the measured coverage, so
+    cross-language rows scored higher on examples than native ones.
+    """
+
+    @patch("pipeline.definition.wiktdata")
+    @patch("pipeline.definition._fetch_from_wiktionary", return_value=None)
+    @patch("pipeline.definition._fetch_from_mw", return_value=None)
+    @patch("pipeline.definition._fetch_from_dictapi", return_value=None)
+    @patch("pipeline.definition.translate_word", create=True)
+    def test_target_language_entry_gives_definition_only(
+        self, _tr, _dict, _mw, _wikt, mock_wiktdata
+    ):
+        entry = MagicMock()
+        entry.definition = "определение"
+        entry.part_of_speech = "noun"
+        entry.example1 = "Вопросы по пройденному материалу есть?"
+        entry.example2 = None
+        entry.synonyms = ["вопрос"]
+        entry.antonyms = ["ответ"]
+        mock_wiktdata.is_available.return_value = True
+        mock_wiktdata.lookup.return_value = entry
+
+        with patch("pipeline.translation.translate_word", return_value="вопрос"):
+            r = fetch_definition("frage", None, use_cache=False,
+                                 language="de", def_language="ru")
+
+        assert r is not None
+        assert r.definition == "определение"          # definition may be target-language
+        assert r.example_dict is None                  # example may not
+        assert r.synonyms == []
+        assert r.antonyms == []
+
+    @patch("pipeline.definition.wiktdata")
+    @patch("pipeline.definition._fetch_from_wiktionary", return_value=None)
+    @patch("pipeline.definition._fetch_from_mw", return_value=None)
+    @patch("pipeline.definition._fetch_from_dictapi", return_value=None)
+    def test_native_run_still_takes_every_field(self, _dict, _mw, _wikt, mock_wiktdata):
+        """
+        The pair to the test above. Gating on the wrong condition would strip
+        these from native runs too, where the index entry IS in the
+        transcript language and supplies most of the card.
+        """
+        entry = MagicMock()
+        entry.definition = "eine Äußerung"
+        entry.part_of_speech = "noun"
+        entry.example1 = "Hast du eine Frage?"
+        entry.example2 = None
+        entry.synonyms = ["Anfrage"]
+        entry.antonyms = ["Antwort"]
+        mock_wiktdata.is_available.return_value = True
+        mock_wiktdata.lookup.return_value = entry
+
+        r = fetch_definition("frage", None, use_cache=False, language="de")
+
+        assert r is not None
+        assert r.example_dict == "Hast du eine Frage?"
+        assert r.synonyms == ["Anfrage"]
+        assert r.antonyms == ["Antwort"]
+
+
 # ── _fetch_definition_or_fallback_example ───────────────────────────────────
 #
 # Covers the actual failure mode issue #1 documented: a language where

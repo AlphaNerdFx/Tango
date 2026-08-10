@@ -1089,13 +1089,29 @@ def fetch_definition(
             definition     = entry.definition
             part_of_speech = part_of_speech or entry.part_of_speech
             _actual_source = "wiktionary"
-            if not native_ex1:
-                native_ex1 = entry.example1
-                native_ex2 = entry.example2
-            if not native_syns:
-                native_syns = entry.synonyms
-            if not native_ants:
-                native_ants = entry.antonyms
+            # Examples, synonyms and antonyms only when this entry is in the
+            # transcript language. CLAUDE.md 3.3 requires those three fields
+            # to stay in the language the learner is hearing; the definition
+            # may differ, and does here.
+            #
+            # Without this gate a --def-lang run took them from the TARGET
+            # language's entry, and the sweep caught it: a German video with
+            # --def-lang ru put "Вопросы по пройденному материалу есть?" on
+            # the card for "Frage", and an English video with --def-lang de
+            # put "Comment ça va ?" on "Comment" -- the de index carries
+            # French entries too, so a French-looking word matched one.
+            #
+            # It also explains why cross-language rows scored *higher* on
+            # examples than native ones (de->ru 87% against de->en 45%):
+            # the field was being filled with content in the wrong language.
+            if target_language == language:
+                if not native_ex1:
+                    native_ex1 = entry.example1
+                    native_ex2 = entry.example2
+                if not native_syns:
+                    native_syns = entry.synonyms
+                if not native_ants:
+                    native_ants = entry.antonyms
 
     # Cross-language last resort: a native definition beats none.
     #
