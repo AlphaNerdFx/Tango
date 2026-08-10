@@ -442,6 +442,32 @@ current state.
       had been silently producing native output for want of a translation
       model.
 
+- [ ] **ADR-009: card media enrichment (audio, IPA, images).** Written and
+      proposed; see `docs/ADR-009-card-media-enrichment.md`. Four phases in
+      dependency order, each independently shippable.
+
+      Phase 1 is the clear first move: 91.5% of German entries in the kaikki
+      data already carry IPA and 65.7% carry a Wikimedia Commons audio URL —
+      real human pronunciation, already licensed, in data we already
+      download. The index does not store either field, so it is a schema
+      change plus a rebuild, not a new source.
+
+      Phase 2 TTS (Piper, offline, optional group) for example sentences.
+      Phase 3 images from Commons, gated to concrete nouns — measured 2 of 5
+      usable, with "laufen" returning a coin from the town of Laufen, so a
+      relevance gate is mandatory rather than optional.
+      Phase 4 video audio needs a ToS decision before any code: downloading
+      YouTube audio is contrary to YouTube's terms whatever the local
+      copyright position, and it brings yt-dlp plus an ffmpeg system
+      dependency. Accepting a user-supplied audio file reuses all the slicing
+      work without the download.
+
+      Two constraints the ADR flags for whoever implements: new fields append
+      at index 10+ and may never be inserted (3.2 is positional), and keeping
+      MODEL_ID while changing the field list is a notetype schema change that
+      must be verified against a collection with real review history before
+      shipping.
+
 - [ ] **Re-run the sweep and record the corrected baseline.** The numbers in
       hand were taken before the 3.3 fix and overstate cross-language example
       and synonym coverage.
