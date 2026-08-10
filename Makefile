@@ -6,6 +6,7 @@
 #   make venv         — create virtual environment
 #   make install      — install package and all dependencies into venv
 #   make spacy-model  — download the spaCy model for SPACY_LANG (default: en)
+#   make doctor       — report what is installed and what is missing
 #   make test         — run unit tests only (no network, no Anki required)
 #   make test-all     — run full suite including integration tests
 #   make coverage     — run unit tests with a per-module coverage report
@@ -67,7 +68,7 @@ CYAN   := \033[36m
 # -- Phony targets ------------------------------------------------------------
 
 .PHONY: all venv install setup spacy-model dictionary translate-setup translate-stop \
-        test test-all coverage format lint typecheck translate-model \
+        test test-all coverage format lint typecheck translate-model doctor \
         run review backlog clean check-os help
 
 .DEFAULT_GOAL := help
@@ -132,6 +133,15 @@ install: venv
 
 setup: venv
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --setup
+
+# -- doctor -------------------------------------------------------------------
+# Reports what is installed and what is missing, with the command to fix each.
+# Start here when something is not working: nearly every failure investigated
+# in this project turned out to be setup rather than logic, and none of it was
+# visible from the failure itself.
+
+doctor: venv
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --doctor
 
 # -- dictionary ---------------------------------------------------------------
 # Builds the offline Wiktionary index for one language. Large one-time
@@ -359,6 +369,19 @@ help:
 	@printf "  $(CYAN)make review$(RESET) DECK=\"<name>\"               Process deferred review.json words\n"
 	@printf "  $(CYAN)make backlog$(RESET) DECK=\"<name>\"              Process Anki backlog (Anki must be running)\n"
 	@printf "        both optional: LANGUAGE=fr  DEF_LANG=en\n"
+	@printf "\n"
+	@printf "  $(CYAN)make doctor$(RESET)                           What is installed, what is missing\n"
+	@printf "\n"
+	@printf "$(BOLD)Every target above has a CLI equivalent, for use without make:$(RESET)\n"
+	@printf "  python -m pipeline --doctor\n"
+	@printf "  python -m pipeline --setup\n"
+	@printf "  python -m pipeline --list-languages\n"
+	@printf "  python -m pipeline --install-model de\n"
+	@printf "  python -m pipeline --install-translation de:en\n"
+	@printf "  python -m pipeline --build-dictionary de\n"
+	@printf "  python -m pipeline --video-id <id> --deck \"<name>\" --language de\n"
+	@printf "  python -m pipeline --review --deck \"<name>\"\n"
+	@printf "  python -m pipeline --process-backlog --deck \"<name>\"\n"
 	@printf "\n"
 	@printf "$(BOLD)Development:$(RESET)\n"
 	@printf "  $(CYAN)make test$(RESET)                             Unit tests only (no network or Anki needed)\n"

@@ -601,6 +601,78 @@ class TestNormaliseVideoId:
         assert main_module._normalise_video_id("  someFutureFormat123456  ") == "someFutureFormat123456"
 
 
+class TestSetupCommands:
+    """
+    --doctor, --install-model and --install-translation.
+
+    They exist because nearly every failure investigated in this project was
+    setup rather than logic, and none of it was visible from the failure: an
+    ARGOS_PACKAGES_DIR pointing at an empty directory hid every translation
+    model, a missing dictionary index produced definition-less cards silently,
+    and each printed either nothing or something that read like a different
+    problem. --doctor makes that state inspectable in one command.
+
+    The install commands exist for parity: everything the Makefile can do
+    should be reachable without make, for anyone who does not use it.
+    """
+
+    def test_doctor_is_reachable_without_a_video_id(self, capsys):
+        """
+        Same regression guard as --setup and --list-languages: standalone
+        modes must run before the --video-id requirement, which used to exit
+        first for every one of them.
+        """
+        with patch("sys.argv", ["pipeline", "--doctor"]):
+            with pytest.raises(SystemExit):
+                main()
+        assert "Tango environment" in capsys.readouterr().out
+
+    def test_doctor_exit_code_reports_missing_items(self):
+        """Non-zero when something is absent, so a setup script can branch."""
+        with patch("pipeline.__main__._run_doctor", return_value=1) as mock_doc:
+            with patch("sys.argv", ["pipeline", "--doctor"]):
+                with pytest.raises(SystemExit) as exc:
+                    main()
+        mock_doc.assert_called_once()
+        assert exc.value.code == 1
+
+    @patch("pipeline.__main__.subprocess.run")
+    def test_install_model_resolves_the_language_code(self, mock_run):
+        """The user names a language; the spaCy model name is looked up."""
+        mock_run.return_value = MagicMock(returncode=0)
+        with patch("sys.argv", ["pipeline", "--install-model", "de"]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 0
+        assert "de_core_news_sm" in mock_run.call_args.args[0]
+
+    @patch("pipeline.__main__.subprocess.run")
+    def test_install_model_rejects_an_unsupported_language(self, mock_run):
+        """The pair to the test above — no download attempted for a bad code."""
+        with patch("sys.argv", ["pipeline", "--install-model", "zzz"]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 1
+        mock_run.assert_not_called()
+
+    def test_install_translation_parses_the_pair(self):
+        with patch("pipeline.translation.install_translation", return_value=True) as mock_i:
+            with patch("sys.argv", ["pipeline", "--install-translation", "de:en"]):
+                with pytest.raises(SystemExit) as exc:
+                    main()
+        mock_i.assert_called_once_with("de", "en")
+        assert exc.value.code == 0
+
+    def test_install_translation_rejects_a_malformed_pair(self):
+        """FROM:TO, not "de en" or "de-en"."""
+        with patch("pipeline.translation.install_translation") as mock_i:
+            with patch("sys.argv", ["pipeline", "--install-translation", "de-en"]):
+                with pytest.raises(SystemExit) as exc:
+                    main()
+        assert exc.value.code == 1
+        mock_i.assert_not_called()
+
+
 class TestRunPipelineWiring:
 
     def test_force_skips_the_already_processed_guard(self, wired, session):

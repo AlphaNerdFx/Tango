@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import logging
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -775,6 +776,26 @@ examples:
              "Nothing it configures is required to run the pipeline.",
     )
     parser.add_argument(
+        "--doctor",
+        action="store_true",
+        help="Report what is installed and what is missing, with the command "
+             "to fix each, then exit. Start here when something is not working.",
+    )
+    parser.add_argument(
+        "--install-model",
+        metavar="LANG",
+        dest="install_model",
+        help="Download the spaCy model for a language, then exit. "
+             "e.g. --install-model de",
+    )
+    parser.add_argument(
+        "--install-translation",
+        metavar="FROM:TO",
+        dest="install_translation",
+        help="Install translation models for a language pair, then exit. "
+             "Needed only for --def-lang. e.g. --install-translation de:en",
+    )
+    parser.add_argument(
         "--build-dictionary",
         metavar="LANG",
         dest="build_dictionary",
@@ -803,6 +824,169 @@ examples:
     )
 
     return parser
+
+
+# ── Mode: doctor ──────────────────────────────────────────────────────────────
+
+def _run_doctor() -> int:
+    """
+    Report what this installation has and what it is missing.
+
+    Written because nearly every failure investigated in this project turned
+    out to be setup rather than logic, and none of it was visible: an
+    ARGOS_PACKAGES_DIR pointing at an empty directory hid every translation
+    model, a missing dictionary index silently produced cards with no
+    definitions, and a spaCy model absent for the chosen language stopped a
+    run before it began. Each printed either nothing or something that read
+    like a different problem.
+
+    Every missing item is reported with the command that fixes it.
+
+    Returns:
+        0 when nothing is missing, 1 when something optional is absent, so
+        the exit code is usable in a setup script.
+    """
+    from pipeline.config import DICT_DIR, DB_PATH, MW_API_KEY, PROJECT_ROOT
+    from pipeline.language import SPACY_MODELS
+
+    missing = 0
+    print()
+    print("  Tango environment")
+    print(f"    project root   {PROJECT_ROOT}")
+    print(f"    database       {DB_PATH}  {'(exists)' if DB_PATH.exists() else '(will be created)'}")
+    print()
+
+    # ── spaCy models: without one, a language cannot be processed at all ──
+    print("  spaCy models (vocabulary extraction)")
+    try:
+        import spacy.util
+        installed = set(spacy.util.get_installed_models())
+    except Exception:
+        installed = set()
+    present = sorted(c for c, m in SPACY_MODELS.items() if m in installed)
+    print(f"    installed for  {', '.join(present) if present else 'none'}")
+    if not present:
+        missing += 1
+        print("    -> python -m pipeline --install-model <code>")
+    print()
+
+    # ── Dictionary indexes: the only source of non-English definitions ──
+    print("  Offline dictionaries (native-language definitions)")
+    built = sorted(p.stem.replace("wiktionary_", "") for p in DICT_DIR.glob("wiktionary_*.sqlite")) \
+        if DICT_DIR.exists() else []
+    if built:
+        for code in built:
+            size = (DICT_DIR / f"wiktionary_{code}.sqlite").stat().st_size / 1e6
+            print(f"    {code:<6} {size:>7.0f} MB")
+    else:
+        print("    none")
+    for code in present:
+        if code not in built and code != "en":
+            missing += 1
+            print(f"    {code:<6} missing  -> make dictionary LANGUAGE={code}")
+    print()
+
+    # ── Translation: only needed for --def-lang ──
+    print("  Translation models (only needed for --def-lang)")
+    try:
+        from pipeline.translation import check_packages_dir
+        from argostranslate import package as argos_pkg
+
+        note = check_packages_dir()
+        if note:
+            missing += 1
+            print(f"    WARNING {note}")
+        pairs = [(p.from_code, p.to_code) for p in argos_pkg.get_installed_packages()]
+        print(f"    installed      {', '.join(f'{a}->{b}' for a, b in pairs) if pairs else 'none'}")
+        if not pairs:
+            print("    -> make translate-model LANGUAGE=de DEF_LANG=en")
+    except ImportError:
+        print("    argostranslate not installed (optional)")
+        print("    -> pip install -e '.[translation]'")
+    print()
+
+    # ── Optional credentials and services ──
+    print("  Optional")
+    print(f"    MW_API_KEY     {'set' if MW_API_KEY else 'not set (English definitions fall back)'}")
+    try:
+        from pipeline.deck import is_anki_running
+        print(f"    AnkiConnect    {'reachable' if is_anki_running() else 'not reachable (words go to the backlog)'}")
+    except Exception:
+        print("    AnkiConnect    could not be checked")
+    print()
+
+    if missing:
+        print(f"  {missing} item(s) missing. Each is optional -- the pipeline runs without them,")
+        print("  but the cards it produces will be thinner. Commands are shown above.")
+    else:
+        print("  Everything checked is present.")
+    print()
+    return 1 if missing else 0
+
+
+# ── Mode: install a spaCy model ───────────────────────────────────────────────
+
+def _run_install_model(language: str) -> int:
+    """
+    Download the spaCy model for one language.
+
+    The CLI equivalent of `make spacy-model SPACY_LANG=<code>`, so that
+    everything the Makefile does is reachable without make.
+
+    Args:
+        language: BCP-47 code, e.g. "de".
+
+    Returns:
+        Process exit code.
+    """
+    from pipeline.language import SpacyModelUnavailableError, get_spacy_model
+
+    try:
+        model = get_spacy_model(language)
+    except (SpacyModelUnavailableError, KeyError):
+        _err(f"No spaCy model is mapped for '{language}'.")
+        _info("Run 'python -m pipeline --list-languages' to see supported codes.")
+        return 1
+
+    _info(f"Downloading spaCy model: {model}")
+    result = subprocess.run([sys.executable, "-m", "spacy", "download", model])
+    if result.returncode == 0:
+        _ok(f"Installed {model}.")
+    else:
+        _err(f"spaCy download failed for {model}.")
+    return result.returncode
+
+
+# ── Mode: install a translation pair ──────────────────────────────────────────
+
+def _run_install_translation(pair: str) -> int:
+    """
+    Install the translation models for one language pair.
+
+    Args:
+        pair: "from:to", e.g. "de:en".
+
+    Returns:
+        Process exit code.
+    """
+    if ":" not in pair:
+        _err(f"Expected FROM:TO, for example de:en — got '{pair}'.")
+        return 1
+    from_code, to_code = (part.strip() for part in pair.split(":", 1))
+
+    try:
+        from pipeline.translation import install_translation
+    except ImportError:
+        _err("argostranslate is not installed.")
+        _info("Install it with: pip install -e '.[translation]'")
+        return 1
+
+    _info(f"Installing translation for {from_code} -> {to_code}...")
+    if install_translation(from_code, to_code):
+        _ok(f"Translation ready: {from_code} -> {to_code}")
+        return 0
+    _err(f"Could not install translation for {from_code} -> {to_code}.")
+    return 1
 
 
 # ── Mode: build dictionary ────────────────────────────────────────────────────
@@ -862,6 +1046,15 @@ def main() -> None:
     if args.setup:
         _run_setup_wizard()
         sys.exit(0)
+
+    if args.doctor:
+        sys.exit(_run_doctor())
+
+    if args.install_model:
+        sys.exit(_run_install_model(args.install_model))
+
+    if args.install_translation:
+        sys.exit(_run_install_translation(args.install_translation))
 
     if args.build_dictionary:
         _run_build_dictionary(args.build_dictionary)
