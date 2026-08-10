@@ -987,7 +987,16 @@ def fetch_definition(
     # ARCHITECTURE.md 8.13 for why this exists and what it does not fix
     # (it supplements examples only, not definitions, synonyms, or
     # antonyms -- those remain limited for non-English languages).
-    if language != "en" and not native_ex1:
+    # English is no longer excluded here. The exclusion assumed Merriam-Webster
+    # covered English examples; measured, it does not -- an English video came
+    # back with examples on 14% of cards against French's 97%. MW returns
+    # definitions without example sentences far more often than Wiktionary
+    # does. On eight English words where the current sources supplied 3
+    # examples, English Wiktionary supplied 6, and good ones ("The dryer
+    # shrank my sweater."). The `not native_ex1` guard already means this only
+    # runs when nothing better was found, so English pays the call only where
+    # it would otherwise ship a card with no example at all.
+    if not native_ex1:
         wikt_data = _fetch_from_wiktionary(lemma, language)
         if wikt_data:
             wikt_examples = _parse_wiktionary_examples(wikt_data)
@@ -1033,6 +1042,21 @@ def fetch_definition(
                     native_syns = mw.synonyms
                 if not native_ants:
                     native_ants = mw.antonyms
+                # MW's verbal illustrations were parsed and then dropped here,
+                # so an English run kept only the examples dictionaryapi.dev
+                # happened to supply -- measured at 14% of cards, against
+                # French's 97%. Same shape as the second-Wiktionary-example
+                # bug: fetched, parsed, discarded at the call site.
+                #
+                # Only for an English target. MW is an English dictionary, and
+                # 3.3 requires examples to stay in the transcript language, so
+                # in --def-lang mode these would be English sentences on a
+                # German card.
+                if target_language == language:
+                    if not native_ex1:
+                        native_ex1 = mw.example_dict
+                    if not native_ex2:
+                        native_ex2 = getattr(mw, "example_dict2", None)
 
     # dictionaryapi.dev fallback for definition (or primary for non-English targets)
     if not definition:
@@ -1222,13 +1246,15 @@ def _fetch_definition_or_fallback_example(
 
     example: Optional[str] = None
     example2: Optional[str] = None
-    if language != "en":
-        wikt_data = _fetch_from_wiktionary(lemma, language)
-        if wikt_data:
-            examples = _parse_wiktionary_examples(wikt_data)
-            if examples:
-                example = examples[0]
-                example2 = examples[1] if len(examples) > 1 else None
+    # English included, same reasoning as the call site above: this path runs
+    # only for lemmas with no definition from any source, where a fallback
+    # card would otherwise carry the transcript sentence alone.
+    wikt_data = _fetch_from_wiktionary(lemma, language)
+    if wikt_data:
+        examples = _parse_wiktionary_examples(wikt_data)
+        if examples:
+            example = examples[0]
+            example2 = examples[1] if len(examples) > 1 else None
 
     synonyms, antonyms = _wordnet_synonyms_antonyms(lemma, language)
 

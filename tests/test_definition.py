@@ -859,13 +859,42 @@ class TestFetchDefinition:
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition._fetch_from_mw")
     @patch("pipeline.definition._fetch_from_dictapi")
-    def test_wiktionary_not_called_for_english(
+    def test_wiktionary_called_for_english_without_an_example(
         self, mock_dict, mock_mw, mock_wikt, mw_response, sample_snippets
     ):
-        # English already has solid MW/dictionaryapi.dev coverage; Wiktionary
-        # exists to supplement non-English examples only.
+        """
+        English used to be excluded here, on the premise that MW covered its
+        examples. Measured, it does not: an English video produced examples on
+        14% of cards against French's 97%, and on eight English words the
+        existing sources gave 3 examples where English Wiktionary gave 6.
+        """
         mock_mw.return_value = mw_response
         mock_dict.return_value = None
+        mock_wikt.return_value = None
+        fetch_definition("contaminate", None, use_cache=False, language="en")
+        mock_wikt.assert_called_once()
+
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition._fetch_from_mw")
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_wiktionary_skipped_when_an_example_was_already_found(
+        self, mock_dict, mock_mw, mock_wikt, mw_response, sample_snippets
+    ):
+        """
+        The pair to the test above. The `not native_ex1` guard is what keeps
+        this from becoming a Wikimedia request per word: it fires only where
+        the card would otherwise ship with no example at all.
+        """
+        # native_ex1 comes from the dictionaryapi call in step 1, not from MW,
+        # so the guard has to be set up with a dictionaryapi response that
+        # carries an example -- mocking MW alone does not exercise it.
+        mock_mw.return_value = mw_response
+        mock_dict.return_value = [{
+            "word": "contaminate",
+            "meanings": [{"partOfSpeech": "verb", "definitions": [
+                {"definition": "to make impure", "example": "they contaminated the water"}
+            ]}],
+        }]
         fetch_definition("contaminate", sample_snippets, use_cache=False, language="en")
         mock_wikt.assert_not_called()
 
@@ -916,15 +945,22 @@ class TestFetchDefinitionOrFallbackExample:
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
-    def test_no_wiktionary_attempt_for_english(self, mock_fetch, mock_wikt, mock_wn):
+    def test_wiktionary_attempted_for_english_too(self, mock_fetch, mock_wikt, mock_wn):
+        """
+        This path builds a fallback card for a lemma no source defined. It
+        skipped English entirely, so an English fallback card carried the
+        transcript sentence and nothing else, even where Wiktionary had a
+        usable example.
+        """
         mock_fetch.return_value = None
         mock_wn.return_value = ([], [])
+        mock_wikt.return_value = [{"language": "English",
+                                   "definitions": [{"examples": ["a real example"]}]}]
         result, example, _e2, _, _ = def_module._fetch_definition_or_fallback_example(
             "word", None, "en", None
         )
         assert result is None
-        assert example is None
-        mock_wikt.assert_not_called()
+        mock_wikt.assert_called_once()
 
     @pytest.mark.parametrize("language", ["fr", "de", "ja"])
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
@@ -1192,12 +1228,14 @@ class TestFetchDefinitions:
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
-    def test_not_found_examples_empty_for_english(self, mock_fetch, mock_wikt, mock_wn):
+    def test_not_found_examples_populated_for_english(self, mock_fetch, mock_wikt, mock_wn):
+        """English is no longer excluded -- see the call-site tests above."""
         mock_fetch.return_value = None
         mock_wn.return_value = ([], [])
+        mock_wikt.return_value = None
         result = fetch_definitions(["xyzqwerty"], language="en")
         assert result.not_found_examples == {}
-        mock_wikt.assert_not_called()
+        mock_wikt.assert_called_once()
 
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
