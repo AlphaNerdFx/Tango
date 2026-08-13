@@ -28,6 +28,10 @@ env/
 output/
 *.apkg
 pipeline.db
+# SQLite writes these two alongside the database in WAL mode, which
+# _get_db() enables. They are transient and meaningless without the .db.
+pipeline.db-shm
+pipeline.db-wal
 review.json
 
 # Offline Wiktionary indexes — hundreds of MB each, rebuildable at any time
