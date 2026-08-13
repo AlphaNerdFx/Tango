@@ -468,6 +468,23 @@ current state.
       must be verified against a collection with real review history before
       shipping.
 
+- [ ] **Sense selection by part of speech.** The first index row is often the
+      wrong sense (the "tapa" card defined Polynesian bark cloth for a video
+      about tapas bars). Word-overlap scoring was implemented, measured and
+      rejected — net-negative on real vocabulary, and no threshold separates
+      the right picks from the wrong ones because both score 2. Full evidence
+      in ARCHITECTURE.md 8.28.
+
+      What the data says to build instead: filter candidate rows by the POS
+      spaCy already assigned the lemma in its sentence, and never select a
+      row tagged `name` (proper nouns are filtered upstream anyway). That
+      separates `fait` (adj/noun/verb), `côté` (noun/name) and narrows `tapa`
+      and `marche` to the right POS. It does not solve `gens`, whose senses
+      are all nouns, so it narrows rather than solves.
+
+      146 of 231 lemmas on a real French video have more than one sense, so
+      this affects the majority of cards, not an edge case.
+
 - [ ] **Add a --no-cache flag for measurement runs.** The sweep exists to tell
       the truth about the pipeline and a warm cache is what stops it: the
       first corrected sweep still showed Russian examples on German cards

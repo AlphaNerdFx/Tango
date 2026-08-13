@@ -1605,6 +1605,67 @@ alone -- it has to be reconstructed by joining the vocabulary table back to
 the video's language. A key carrying both languages would make invalidation a
 one-line delete, and is the obvious fix if this happens a third time.
 
+### 8.28 Sense selection by word overlap: tried, measured, rejected
+
+The pipeline takes the first index row for a word. Wiktionary orders senses
+by its own conventions, so that is frequently the wrong sense for a given
+video -- the recorded case is a French video about tapas bars producing a
+card defining "tapa" as Polynesian bark cloth, with the food sense one row
+below.
+
+The obvious fix is to score each candidate against the sentence the word came
+from, counting content words shared between the context and the entry's own
+definition and examples. It was implemented and it fixed the case it was
+written for:
+
+```
+without context : "Étoffe faite d'écorce battue ... de Polynésie"
+with the video  : "Petite portion d'un aliment ... dans les bars en Espagne"
+```
+
+Measured on a real video's vocabulary rather than the case that motivated it,
+it is net-negative. Of 231 lemmas, 146 have more than one sense -- ambiguity
+is the norm here, not an edge case -- and context changed the pick on 15 of
+them:
+
+| lemma | first row | chosen by overlap | |
+|---|---|---|---|
+| heu | "Petit bateau d'environ 300 tonneaux" | "Interjection ... exprime le doute" | better |
+| côté | "Région des côtes" | "Nom de famille." | worse |
+| gens | "Personnes en nombre indéterminé" | "Clan familial." | worse |
+| fait | "Réalisé ; construit" | "Participe passé masculin singulier" | worse |
+| surtout | "Excès" | "Sorte de vêtement fort large" | worse |
+
+One improvement against several regressions. **No threshold separates them**,
+which is the part worth keeping: the correct "tapa" sense wins with an
+overlap of 2, and so do "Nom de famille", "Clan familial" and the obsolete
+garment. Raising the bar to 3 discards tapa while keeping "Participe passé"
+(3) and a questionable "obligé" (4). The signal and the noise have the same
+magnitude, so tuning cannot fix it.
+
+Reverted rather than shipped. It would have been an improvement measured on
+the one case already known to be broken and a regression everywhere else,
+which is the shape SESSION.md 6.6 records as the most dangerous kind of fix.
+
+**What the data says should work instead: part of speech.** spaCy already
+determines the POS of each lemma *in its sentence*, and every index row
+carries its own `pos`. The rows the overlap heuristic got wrong are mostly
+separable that way:
+
+```
+fait    adj | noun | verb     spaCy knows which one this sentence uses
+côté    noun | name           "Nom de famille." is tagged `name`
+tapa    noun | noun | verb    POS narrows to two, and those two differ in topic
+marche  noun | noun | verb    same
+```
+
+A `name` row should never be selected at all, since proper nouns are already
+filtered upstream by the NLP stage. Filtering candidates by POS first, and
+only then breaking ties, uses a signal the pipeline already computes and
+does not depend on shared vocabulary between a definition and a sentence.
+`gens` stays unsolved -- all three of its senses are nouns -- so this is a
+narrowing, not a solution.
+
 
 ---
 
