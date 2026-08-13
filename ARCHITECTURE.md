@@ -1572,6 +1572,39 @@ rather than silent, and the coverage matrix reports the share as "fellback".
 Recovers 19 of 30 sampled failures; the rest are transcription noise and
 productive German compounds Wiktionary does not carry.
 
+### 8.27 A card-quality fix does not reach cards that are already cached
+
+Twice now a fix has been verified in the code and then measured as still
+broken, because the definition cache served the old data.
+
+The false-friend case: German lemmas cached under `lemma::en` during the runs
+where translation was silently unavailable, so `je` kept returning "the 9th
+letter of the English alphabet" long after the cause was fixed. 349 rows.
+
+The cross-language case: after 8.25 gated examples to the transcript
+language, the corrected sweep still showed Russian sentences on German cards.
+The code was right -- a direct call with `use_cache=False` returned a Russian
+definition with no example and no synonyms, exactly as intended -- while the
+sweep read `kopf::ru` rows written by the previous sweep, example included.
+4532 rows.
+
+The cache stores the assembled fields, not the inputs, so nothing about a
+fetch-path fix invalidates them. Two consequences worth building on:
+
+- **Any change to what goes in a field needs the affected rows cleared**, and
+  the clearing is part of the fix rather than a follow-up. Neither of these
+  was noticed until a measurement disagreed with the code.
+- **A measurement run should be able to bypass the cache.** The sweep exists
+  to tell the truth about the pipeline, and a warm cache is exactly what
+  stops it doing so. `fetch_definition` already takes `use_cache`; the CLI
+  does not expose it.
+
+The cache key itself is `lemma::target_language`, which does not record the
+transcript language, so a contaminated row is not identifiable from the key
+alone -- it has to be reconstructed by joining the vocabulary table back to
+the video's language. A key carrying both languages would make invalidation a
+one-line delete, and is the obvious fix if this happens a third time.
+
 
 ---
 

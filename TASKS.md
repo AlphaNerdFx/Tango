@@ -468,6 +468,18 @@ current state.
       must be verified against a collection with real review history before
       shipping.
 
+- [ ] **Add a --no-cache flag for measurement runs.** The sweep exists to tell
+      the truth about the pipeline and a warm cache is what stops it: the
+      first corrected sweep still showed Russian examples on German cards
+      because it read rows written before the fix. `fetch_definition` already
+      takes `use_cache`; nothing exposes it. See ARCHITECTURE.md 8.27.
+
+- [ ] **Consider a cache key carrying both languages.** Today it is
+      `lemma::target_language`, so a row contaminated by a cross-language run
+      cannot be identified from the key -- invalidation had to reconstruct it
+      by joining the vocabulary table back to each video's language. Both
+      cache-poisoning incidents would have been a one-line delete.
+
 - [ ] **Re-run the sweep and record the corrected baseline.** The numbers in
       hand were taken before the 3.3 fix and overstate cross-language example
       and synonym coverage.
