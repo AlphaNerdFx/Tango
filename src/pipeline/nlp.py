@@ -24,6 +24,7 @@ ARCHITECTURE.md 9.1). Importing this module does not load any model.
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Optional
 
 import logging
@@ -308,6 +309,7 @@ def process_transcript(
     text: str,
     language: str = "en",
     surface_forms: Optional[dict] = None,
+    parts_of_speech: Optional[dict] = None,
 ) -> dict[str, int]:
     """
     Process a clean transcript string and return a vocabulary frequency dict.
@@ -335,6 +337,16 @@ def process_transcript(
               "Example from Youtube Video" field. Left as an out-parameter
               rather than a second return value so existing callers and
               their tests are unaffected.
+        parts_of_speech: Optional dict, populated in place with
+              lemma -> the POS tag spaCy assigned it most often across the
+              transcript. Pass one when the caller needs to choose between
+              several dictionary senses of the same word: the offline index
+              stores one row per (word, part of speech), and taking the
+              first row picks a noun's sense for a word used as a verb --
+              a French video about walking defined "marcher" as a noun,
+              "démarche". definition.fetch_definitions() uses this. Same
+              out-parameter shape as surface_forms above, for the same
+              reason.
 
     Returns:
         Ordered dict mapping lemma (lowercase) → frequency count.
@@ -369,6 +381,7 @@ def process_transcript(
     known = _known_lemmas(nlp) if language in _VERB_LEMMA_FALLBACKS else frozenset()
 
     vocabulary: dict[str, int] = {}
+    pos_counts: dict[str, Counter] = {}
     for token in doc:
         if not _is_valid_token(token):
             continue
@@ -387,6 +400,19 @@ def process_transcript(
             seen = surface_forms.setdefault(lemma, [])
             if surface not in seen and len(seen) < _MAX_SURFACE_FORMS:
                 seen.append(surface)
+
+        if parts_of_speech is not None:
+            pos_counts.setdefault(lemma, Counter())[token.pos_] += 1
+
+    # Resolved after the loop rather than during it, because the answer is
+    # the tag the word carried MOST often, not the one it happened to carry
+    # first. spaCy tags per sentence, so a word used ten times as a verb and
+    # once as a noun should be looked up as a verb. Counter.most_common
+    # breaks a tie by insertion order, so the winner is the earliest tag --
+    # deterministic, which matters because this feeds a cache key.
+    if parts_of_speech is not None:
+        for lemma, counts in pos_counts.items():
+            parts_of_speech[lemma] = counts.most_common(1)[0][0]
 
     logger.info(
         "Vocabulary extracted: %d unique lemmas from %d tokens",

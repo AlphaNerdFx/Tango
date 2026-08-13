@@ -55,7 +55,7 @@ def no_offline_dictionary(monkeypatch):
     index build their own via the wiktdata fixtures instead.
     """
     monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _lang: False)
-    monkeypatch.setattr(def_module.wiktdata, "lookup", lambda _w, _lang: None)
+    monkeypatch.setattr(def_module.wiktdata, "lookup", lambda _w, _lang, pos=None: None)
     yield
 
 
@@ -1102,7 +1102,9 @@ class TestOfflineDictionaryIntegration:
         mock_dict.return_value = None
         mock_wikt.return_value = None
         monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
-        monkeypatch.setattr(def_module.wiktdata, "lookup", lambda _w, _l: self._entry())
+        monkeypatch.setattr(
+            def_module.wiktdata, "lookup", lambda _w, _l, pos=None: self._entry()
+        )
 
         result = fetch_definition("maison", None, use_cache=False, language="fr")
         assert result is not None
@@ -1124,7 +1126,7 @@ class TestOfflineDictionaryIntegration:
         monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
         monkeypatch.setattr(
             def_module.wiktdata, "lookup",
-            lambda w, l: called.append(w) or self._entry(),
+            lambda w, l, pos=None: called.append(w) or self._entry(),
         )
         fetch_definition("contaminate", None, use_cache=False, language="en")
         assert called == []
@@ -1144,7 +1146,7 @@ class TestOfflineDictionaryIntegration:
         monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
         monkeypatch.setattr(
             def_module.wiktdata, "lookup",
-            lambda _w, _l: self._entry(synonyms=["index-synonym"]),
+            lambda _w, _l, pos=None: self._entry(synonyms=["index-synonym"]),
         )
         _r, _e, _e2, synonyms, _a = def_module._fetch_definition_or_fallback_example(
             "maison", None, "fr", None
@@ -1163,7 +1165,9 @@ class TestOfflineDictionaryIntegration:
         mock_wikt.return_value = None
         mock_wn.return_value = ([], [])
         monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
-        monkeypatch.setattr(def_module.wiktdata, "lookup", lambda _w, _l: self._entry())
+        monkeypatch.setattr(
+            def_module.wiktdata, "lookup", lambda _w, _l, pos=None: self._entry()
+        )
         _r, _e, _e2, _s, antonyms = def_module._fetch_definition_or_fallback_example(
             "maison", None, "fr", None
         )
@@ -1874,3 +1878,101 @@ class TestWordNetLanguageGuard:
             "language guard rather than passing vacuously."
         )
         mock_wn.assert_called_once_with("bonjour", "fr")
+
+# ── Cache key and part of speech ─────────────────────────────────────────────
+
+class TestCacheKeyCarriesPartOfSpeech:
+    """
+    ARCHITECTURE.md 8.29, and the trap 8.27 records twice: the cache stores
+    assembled fields, so a fix to which sense gets selected never reaches a
+    row that is already written. The part of speech now decides the sense,
+    so it has to be part of the identity of the row.
+    """
+
+    def test_different_pos_are_different_rows(self):
+        # "fait" as a noun and "fait" as an adjective are different cards.
+        # Sharing one row is exactly how a sense fix fails to land.
+        assert (
+            def_module._cache_key("fait", "fr", "NOUN")
+            != def_module._cache_key("fait", "fr", "ADJ")
+        )
+
+    def test_same_pos_is_the_same_row(self):
+        assert (
+            def_module._cache_key("fait", "fr", "NOUN")
+            == def_module._cache_key("fait", "fr", "NOUN")
+        )
+
+    def test_a_pos_that_cannot_narrow_does_not_split_the_cache(self):
+        # PROPN selects no row, so keying on it would create a second row
+        # holding the identical result. The partner to the test above:
+        # one pins that a meaningful POS splits, this pins that a
+        # meaningless one does not.
+        assert (
+            def_module._cache_key("fait", "fr", "PROPN")
+            == def_module._cache_key("fait", "fr")
+        )
+
+    def test_language_still_separates_rows(self):
+        # The pre-existing guarantee must survive: a German lemma cached
+        # under ::en once served false-friend English definitions back.
+        assert (
+            def_module._cache_key("gift", "de", "NOUN")
+            != def_module._cache_key("gift", "en", "NOUN")
+        )
+
+    def test_bare_lemma_is_recoverable_from_the_key(self):
+        # _cache_row_to_result splits on "::" to restore the lemma, and a
+        # third segment must not break that.
+        key = def_module._cache_key("maison", "fr", "NOUN")
+        assert key.split("::")[0] == "maison"
+
+    def test_batch_and_single_agree_on_the_key(self, sample_definition_result):
+        # SESSION.md 6.12: these two built the key separately once and
+        # drifted, so a row written by one was invisible to the other. Seed
+        # through the batch loop's key and read it back through the same
+        # helper fetch_definition() uses.
+        key = def_module._cache_key(sample_definition_result.lemma, "en", "VERB")
+        _cache_set_key(key, sample_definition_result)
+        with patch("pipeline.definition.fetch_definition") as mock_fetch:
+            result = fetch_definitions(
+                ["contaminate"],
+                parts_of_speech={"contaminate": "VERB"},
+            )
+            mock_fetch.assert_not_called()
+        assert "contaminate" in result.from_cache
+
+    def test_a_row_cached_under_another_pos_is_not_served(
+        self, sample_definition_result
+    ):
+        # The partner: the batch must MISS a row whose POS differs, rather
+        # than serving the sense chosen for a different reading of the word.
+        _cache_set_key(
+            def_module._cache_key(sample_definition_result.lemma, "en", "NOUN"),
+            sample_definition_result,
+        )
+        with patch("pipeline.definition.fetch_definition") as mock_fetch:
+            mock_fetch.return_value = None
+            result = fetch_definitions(
+                ["contaminate"],
+                parts_of_speech={"contaminate": "VERB"},
+            )
+        assert "contaminate" not in result.from_cache
+
+    def test_pos_reaches_the_index_lookup(self, monkeypatch):
+        # End to end through fetch_definitions: the tag nlp.py recorded has
+        # to arrive at wiktdata.lookup, not be dropped somewhere in between.
+        seen = {}
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(
+            def_module.wiktdata, "lookup",
+            lambda w, l, pos=None: seen.setdefault(w, pos),
+        )
+        with patch("pipeline.definition._fetch_from_mw", return_value=None), \
+             patch("pipeline.definition._fetch_from_dictapi", return_value=None), \
+             patch("pipeline.definition._fetch_from_wiktionary", return_value=None):
+            fetch_definitions(
+                ["marcher"], language="fr", max_workers=1,
+                parts_of_speech={"marcher": "VERB"},
+            )
+        assert seen["marcher"] == "VERB"

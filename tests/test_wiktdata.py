@@ -294,3 +294,106 @@ class TestDiscouraged:
         with pytest.raises(KeyboardInterrupt):
             build_index("fr")
         assert not (tmp_path / "d" / "fr-extract.jsonl.gz").exists()
+
+
+# -- Sense selection by part of speech ----------------------------------------
+
+class TestSenseSelection:
+    """
+    ARCHITECTURE.md 8.29. The index holds one row per (word, part of
+    speech), so an ambiguous word has several and the first is frequently
+    the wrong sense for the video it came from.
+
+    Every test here builds a word with more than one row and asserts which
+    one comes back, because a single-row fixture makes the whole bug class
+    inexpressible -- the same trap SESSION.md 6.11 records for
+    _make_token()'s identical text and lemma arguments.
+    """
+
+    @staticmethod
+    def _multi(tmp_path):
+        """'marche': noun first, then verb -- the real French row order."""
+        return _archive(tmp_path, [
+            _record("marche", gloss="Province frontiere.", pos="noun"),
+            _record("marche", gloss="Se deplacer a pied.", pos="verb"),
+            _record("marche", gloss="Ancien comte francais.", pos="name"),
+        ])
+
+    def test_verb_in_context_gets_the_verb_row(self, tmp_path):
+        build_index("fr", archive=self._multi(tmp_path))
+        entry = lookup("marche", "fr", pos="VERB")
+        assert entry.definition == "Se deplacer a pied."
+        assert entry.part_of_speech == "verb"
+
+    def test_noun_in_context_gets_the_noun_row(self, tmp_path):
+        # The pair to the test above. One alone can pass by accident -- the
+        # noun row is also the first row, so a POS filter that silently did
+        # nothing would satisfy this one and fail its partner.
+        build_index("fr", archive=self._multi(tmp_path))
+        entry = lookup("marche", "fr", pos="NOUN")
+        assert entry.definition == "Province frontiere."
+        assert entry.part_of_speech == "noun"
+
+    def test_no_pos_keeps_the_first_row(self, tmp_path):
+        # Review and backlog mode have no transcript to tag, so they pass
+        # nothing and must get exactly the previous behaviour.
+        build_index("fr", archive=self._multi(tmp_path))
+        assert lookup("marche", "fr").definition == "Province frontiere."
+
+    def test_unmatched_pos_keeps_the_first_row(self, tmp_path):
+        # A word whose part of speech has no row must keep its card rather
+        # than lose one. No ADV row exists here.
+        build_index("fr", archive=self._multi(tmp_path))
+        assert lookup("marche", "fr", pos="ADV").definition == "Province frontiere."
+
+    def test_a_name_row_is_never_selected(self, tmp_path):
+        # Russian "vid" led with a river in Germany and "blizkiy" with an
+        # island in the Kara Sea. Proper nouns are filtered upstream by
+        # nlp._is_valid_token, so a name row is never why a word is on a card.
+        build_index("fr", archive=_archive(tmp_path, [
+            _record("cote", gloss="Nom de famille.", pos="name"),
+            _record("cote", gloss="Region des cotes.", pos="noun"),
+        ]))
+        assert lookup("cote", "fr").definition == "Region des cotes."
+
+    def test_a_name_row_is_used_when_it_is_the_only_one(self, tmp_path):
+        # The partner to the test above: skipping name rows must not turn a
+        # word that has only one into a miss.
+        build_index("fr", archive=_archive(tmp_path, [
+            _record("cote", gloss="Nom de famille.", pos="name"),
+        ]))
+        assert lookup("cote", "fr").definition == "Nom de famille."
+
+    def test_pos_selection_survives_the_apostrophe_variant(self, tmp_path):
+        # _lookup_variants retries a typographic apostrophe. Sense selection
+        # has to apply to whichever spelling actually matched, not only the
+        # first one tried.
+        build_index("fr", archive=_archive(tmp_path, [
+            _record("aujourd’hui", gloss="Le jour ou l'on est.", pos="noun"),
+            _record("aujourd’hui", gloss="En ce jour.", pos="adv"),
+        ]))
+        assert lookup("aujourd'hui", "fr", pos="ADV").definition == "En ce jour."
+
+    def test_unknown_upos_does_not_narrow(self, tmp_path):
+        # PROPN and friends never reach here, but an unmapped tag must fall
+        # through to the previous behaviour rather than matching nothing.
+        build_index("fr", archive=self._multi(tmp_path))
+        assert lookup("marche", "fr", pos="PROPN").definition == "Province frontiere."
+
+
+class TestPosForUpos:
+    """
+    pos_for_upos is public because the definition cache keys on it: a tag
+    that cannot change which row is selected must not fragment the cache.
+    """
+
+    def test_maps_the_four_tags_nlp_keeps(self):
+        assert wiktdata.pos_for_upos("NOUN") == "noun"
+        assert wiktdata.pos_for_upos("VERB") == "verb"
+        assert wiktdata.pos_for_upos("ADJ") == "adj"
+        assert wiktdata.pos_for_upos("ADV") == "adv"
+
+    def test_unmappable_tags_return_none(self):
+        assert wiktdata.pos_for_upos("PROPN") is None
+        assert wiktdata.pos_for_upos("") is None
+        assert wiktdata.pos_for_upos(None) is None

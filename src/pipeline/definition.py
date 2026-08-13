@@ -426,6 +426,31 @@ def _get_db() -> sqlite3.Connection:
     return conn
 
 
+def _cache_key(lemma: str, language: str, pos: Optional[str] = None) -> str:
+    """
+    Build the cache key for one lemma.
+
+    Both the batch loop in fetch_definitions() and fetch_definition() itself
+    key the same rows, and they used to build the string separately -- they
+    drifted, and a cache seeded by one was invisible to the other. One
+    function so that cannot happen again.
+
+    The part of speech joins the key because it now decides which sense the
+    offline index returns (see wiktdata._select_row). Without it a cached
+    row would serve the sense chosen for whichever video happened to get
+    there first -- "fait" cached as an adjective, then read back for a video
+    using it as a noun. That is the failure ARCHITECTURE.md 8.27 records
+    twice: the cache stores assembled fields, so nothing about a
+    sense-selection fix reaches a row already written.
+
+    Only a POS the index can actually distinguish is included. One that
+    cannot change the selected row must not split the cache into rows that
+    differ in nothing.
+    """
+    resolved = wiktdata.pos_for_upos(pos)
+    return f"{lemma}::{language}::{resolved}" if resolved else f"{lemma}::{language}"
+
+
 def _cache_get(lemma: str) -> Optional[dict]:
     """Return cached definition row, or None on a cache miss or read failure."""
     try:
@@ -910,6 +935,7 @@ def fetch_definition(
     use_cache: bool = True,
     language: str = "en",
     def_language: Optional[str] = None,
+    pos: Optional[str] = None,
 ) -> Optional[DefinitionResult]:
     """
     Fetch a definition for one lemma using a dual-source strategy:
@@ -934,6 +960,11 @@ def fetch_definition(
         dictionaryapi.dev supplements the missing fields.
 
     All text fields are capped at 256 characters.
+
+    `pos` is the spaCy UPOS tag the lemma carried in the transcript, from
+    nlp.process_transcript()'s parts_of_speech output. It selects between
+    the offline index's senses (wiktdata._select_row) and joins the cache
+    key. Omit it and behaviour is as before.
     """
     target_language = def_language or language
     # The key names the language the definition will actually be IN, and that
@@ -943,7 +974,7 @@ def fetch_definition(
     # "haus::en", so a later run with translation working read German text
     # back believing it was English. The key is therefore rebuilt after the
     # fallback decision; this one is only for the read.
-    cache_key       = f"{lemma}::{target_language}"
+    cache_key       = _cache_key(lemma, target_language, pos)
 
     if use_cache:
         cached = _cache_get(cache_key)
@@ -1019,7 +1050,7 @@ def fetch_definition(
                 # Translation unavailable: the definition will be native, so
                 # the cache key has to say so too.
                 target_language = language
-                cache_key = f"{lemma}::{target_language}"
+                cache_key = _cache_key(lemma, target_language, pos)
         except TranslationUnavailableError:
             raise
 
@@ -1084,7 +1115,11 @@ def fetch_definition(
     # this fills in behind it, rather than trading away better data for a
     # single-source design.
     if not definition and wiktdata.is_available(target_language):
-        entry = wiktdata.lookup(query_lemma, target_language)
+        # The POS is the source word's, and query_lemma may be a translation
+        # of it. Carrying it over is still right far more often than not --
+        # a verb translates to a verb -- and when the translation shifts word
+        # class, no row matches and _select_row keeps the previous behaviour.
+        entry = wiktdata.lookup(query_lemma, target_language, pos=pos)
         if entry:
             definition     = entry.definition
             part_of_speech = part_of_speech or entry.part_of_speech
@@ -1132,7 +1167,7 @@ def fetch_definition(
     # so the mixture is visible rather than silent.
     if not definition and def_language and target_language != language:
         if wiktdata.is_available(language):
-            entry = wiktdata.lookup(lemma, language)
+            entry = wiktdata.lookup(lemma, language, pos=pos)
             if entry:
                 definition     = entry.definition
                 part_of_speech = part_of_speech or entry.part_of_speech
@@ -1226,6 +1261,7 @@ def _fetch_definition_or_fallback_example(
     snippets: Optional[dict],
     language: str,
     def_language: Optional[str],
+    pos: Optional[str] = None,
 ) -> tuple[Optional[DefinitionResult], Optional[str], Optional[str], list[str], list[str]]:
     """
     Fetch one lemma's definition, falling back to a bare Wiktionary example
@@ -1256,6 +1292,7 @@ def _fetch_definition_or_fallback_example(
     """
     result = fetch_definition(
         lemma, snippets, use_cache=False, language=language, def_language=def_language,
+        pos=pos,
     )
     if result:
         return result, None, None, [], []
@@ -1281,7 +1318,11 @@ def _fetch_definition_or_fallback_example(
     # no antonyms outside English at all, so without this the antonym field
     # is structurally empty rather than merely sparse.
     if not example or not antonyms:
-        entry = wiktdata.lookup(lemma, language) if wiktdata.is_available(language) else None
+        entry = (
+            wiktdata.lookup(lemma, language, pos=pos)
+            if wiktdata.is_available(language)
+            else None
+        )
         if entry:
             if not example:
                 example = entry.example1
@@ -1300,6 +1341,7 @@ def fetch_definitions(
     max_workers: int = DEFINITION_FETCH_WORKERS,
     language: str = "en",
     def_language: Optional[str] = None,
+    parts_of_speech: Optional[dict] = None,
 ) -> DefinitionBatchResult:
     """
     Fetch definitions for a list of lemmas, returned in first-appearance
@@ -1324,6 +1366,11 @@ def fetch_definitions(
         max_workers: Maximum concurrent live lookups. Default from
                      DEFINITION_FETCH_WORKERS env var (5). Set 1 in tests
                      that need strictly sequential, deterministic ordering.
+        parts_of_speech: Optional lemma -> spaCy UPOS map from
+                     nlp.process_transcript(). Selects which sense the
+                     offline index returns for an ambiguous word. Callers
+                     with no transcript to tag -- review and backlog mode --
+                     pass nothing and get the previous behaviour.
 
     Returns:
         DefinitionBatchResult with found, not_found, from_cache, and
@@ -1351,9 +1398,12 @@ def fetch_definitions(
 
     # Cache hits first, sequentially -- resolves most of the batch on a
     # cache-warm second run without ever touching the thread pool.
+    pos_map: dict = parts_of_speech or {}
     to_fetch: list[str] = []
     for lemma in lemmas:
-        cached = _cache_get(f"{lemma}::{def_language or language}")
+        cached = _cache_get(
+            _cache_key(lemma, def_language or language, pos_map.get(lemma))
+        )
         if cached:
             result = _cache_row_to_result(lemma, cached, snippets)
             batch.found.append(result)
@@ -1377,7 +1427,7 @@ def fetch_definitions(
             future_to_lemma = {
                 executor.submit(
                     _fetch_definition_or_fallback_example, lemma, snippets,
-                    language, def_language,
+                    language, def_language, pos_map.get(lemma),
                 ): lemma
                 for lemma in to_fetch
             }

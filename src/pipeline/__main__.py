@@ -357,9 +357,14 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
         # surface_forms records how each lemma actually appeared, so the
         # transcript-example search can match "sais" for the lemma "savoir".
         surface_forms: dict = {}
+        # parts_of_speech records how each lemma was actually used, so an
+        # ambiguous word gets the right sense: "marcher" the verb, not
+        # "marcher" the noun. See wiktdata._select_row.
+        parts_of_speech: dict = {}
         vocabulary = nlp_module.process_transcript(
             snippets["_full_text"], language=language_code,
             surface_forms=surface_forms,
+            parts_of_speech=parts_of_speech,
         )
     except Exception as exc:
         _err(f"NLP failed: {exc}")
@@ -407,6 +412,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
             words_to_define, snippets,
             language=language_code,
             def_language=def_language,
+            parts_of_speech=parts_of_speech,
         )
     _ok(
         f"Definitions: {len(batch.found)} found "

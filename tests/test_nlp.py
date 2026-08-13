@@ -659,3 +659,75 @@ class TestSurfaceFormCapture:
             mock_model.return_value = lambda _t: _make_doc(tokens)
             nlp_module.process_transcript("text", surface_forms=forms)
         assert len(forms["run"]) == nlp_module._MAX_SURFACE_FORMS
+
+
+# ── parts_of_speech out-parameter ─────────────────────────────────────────────
+
+class TestPartsOfSpeechOutParameter:
+    """
+    ARCHITECTURE.md 8.29. definition.py needs the POS spaCy assigned each
+    lemma *in its sentence* to pick the right dictionary sense, and the
+    out-parameter shape follows surface_forms (8.20) so existing callers are
+    untouched.
+    """
+
+    def test_records_the_pos_of_each_lemma(self, mock_spacy_model):
+        mock_spacy_model.return_value = _make_doc(SAMPLE_TOKENS)
+        pos: dict = {}
+        process_transcript("some transcript text", parts_of_speech=pos)
+        assert pos["run"] == "VERB"
+        assert pos["water"] == "NOUN"
+        assert pos["permanent"] == "ADJ"
+        assert pos["quickly"] == "ADV"
+
+    def test_filtered_tokens_are_absent(self, mock_spacy_model):
+        # "through" is ADP and "3" is NUM -- neither becomes a card, so
+        # neither may leave a POS entry behind for one.
+        mock_spacy_model.return_value = _make_doc(SAMPLE_TOKENS)
+        pos: dict = {}
+        process_transcript("some transcript text", parts_of_speech=pos)
+        assert "through" not in pos
+        assert "3" not in pos
+
+    def test_the_most_frequent_tag_wins_not_the_first(self, mock_spacy_model):
+        # The pair that pins the choice. A word tagged once as a noun and
+        # twice as a verb is a verb. Taking the first tag instead would
+        # return NOUN here and satisfy any test that only counted entries.
+        tokens = [
+            _make_token("marche", "marche", "NOUN"),
+            _make_token("marche", "marche", "VERB"),
+            _make_token("marche", "marche", "VERB"),
+        ]
+        mock_spacy_model.return_value = _make_doc(tokens)
+        pos: dict = {}
+        process_transcript("text", parts_of_speech=pos)
+        assert pos["marche"] == "VERB"
+
+    def test_a_tie_resolves_to_the_earlier_tag(self, mock_spacy_model):
+        # Partner to the test above: with no majority the answer must still
+        # be deterministic, because this feeds a cache key.
+        tokens = [
+            _make_token("marche", "marche", "NOUN"),
+            _make_token("marche", "marche", "VERB"),
+        ]
+        mock_spacy_model.return_value = _make_doc(tokens)
+        pos: dict = {}
+        process_transcript("text", parts_of_speech=pos)
+        assert pos["marche"] == "NOUN"
+
+    def test_omitting_it_changes_nothing(self, mock_spacy_model):
+        mock_spacy_model.return_value = _make_doc(SAMPLE_TOKENS)
+        with_out: dict = {}
+        a = process_transcript("text", parts_of_speech=with_out)
+        mock_spacy_model.return_value = _make_doc(SAMPLE_TOKENS)
+        b = process_transcript("text")
+        assert a == b
+
+    def test_records_alongside_surface_forms(self, mock_spacy_model):
+        # Both out-parameters at once, since the pipeline passes both.
+        mock_spacy_model.return_value = _make_doc(SAMPLE_TOKENS)
+        forms: dict = {}
+        pos: dict = {}
+        process_transcript("text", surface_forms=forms, parts_of_speech=pos)
+        assert forms["run"] == ["running", "run"]
+        assert pos["run"] == "VERB"

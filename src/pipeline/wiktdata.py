@@ -176,6 +176,68 @@ def _connection(language: str) -> Optional[sqlite3.Connection]:
     return conn
 
 
+# spaCy's UPOS tags mapped to the `pos` values wiktextract writes. Only the
+# four tags nlp.ACCEPTED_POS keeps are listed, because those are the only
+# ones that ever reach a lookup. wiktextract normalises pos across editions,
+# verified against all three built indexes: de, fr and ru all use exactly
+# these strings, plus "name" for proper nouns.
+_UPOS_TO_POS: dict[str, str] = {
+    "NOUN": "noun",
+    "VERB": "verb",
+    "ADJ": "adj",
+    "ADV": "adv",
+}
+
+
+def pos_for_upos(upos: Optional[str]) -> Optional[str]:
+    """
+    Return the index `pos` value a spaCy UPOS tag selects, or None.
+
+    None means the tag cannot narrow a lookup — either no tag was supplied
+    or it is one this index does not distinguish. Public because the
+    definition cache keys on it: a POS that cannot change which row is
+    selected must not fragment the cache into rows that differ in nothing.
+    """
+    return _UPOS_TO_POS.get((upos or "").upper())
+
+
+def _select_row(rows: list, pos: Optional[str]):
+    """
+    Choose which of a word's index rows to build the entry from.
+
+    The index holds one row per (word, part of speech), so an ambiguous word
+    has several and the first is frequently the wrong one — Russian "вид"
+    led with a river in Germany, "близкий" with an island in the Kara Sea,
+    and French "super" with "Supercarburant" for a video using it to mean
+    "very".
+
+    Two rules, in order:
+
+    1. Prefer a row whose part of speech matches the one spaCy assigned the
+       word *in its own sentence*. Measured across three real videos (fr,
+       de, ru) this changes 60 of 1209 picks, roughly 39 of them for the
+       better against 14 for the worse — the reverse of the word-overlap
+       heuristic tried before it, which went 1 better to 14 worse (8.28).
+
+    2. Never a `name` row while any other exists, with or without a POS to
+       go on. Proper nouns are filtered upstream by nlp._is_valid_token, so
+       a `name` row is never the sense that put the word on a card.
+
+    Falls back to the first row when neither rule finds anything, which is
+    what this function did before it existed. A word whose POS has no row
+    keeps its current card rather than losing one.
+    """
+    wanted = pos_for_upos(pos)
+    if wanted:
+        for row in rows:
+            if row["pos"] == wanted:
+                return row
+    for row in rows:
+        if row["pos"] != "name":
+            return row
+    return rows[0]
+
+
 def _lookup_variants(word: str) -> list[str]:
     """
     Return the spellings to try for one word, most likely first.
@@ -195,9 +257,18 @@ def _lookup_variants(word: str) -> list[str]:
     return variants
 
 
-def lookup(word: str, language: str) -> Optional[DictionaryEntry]:
+def lookup(word: str, language: str, pos: Optional[str] = None) -> Optional[DictionaryEntry]:
     """
     Return one word's dictionary entry, or None if absent.
+
+    Args:
+        word:     The lemma to look up.
+        language: Which language's index to read.
+        pos:      Optional spaCy UPOS tag for this word as it was used in
+                  the transcript, from nlp.process_transcript()'s
+                  parts_of_speech output. Used to pick between the word's
+                  senses — see _select_row. Omitting it keeps the previous
+                  behaviour apart from the proper-noun rule.
 
     Never raises: a missing, unreadable or corrupt index degrades to None
     so the pipeline falls back to its other sources, matching how every
@@ -208,10 +279,14 @@ def lookup(word: str, language: str) -> Optional[DictionaryEntry]:
         return None
     try:
         for variant in _lookup_variants(word):
-            row = conn.execute(
-                "SELECT * FROM entries WHERE word = ? LIMIT 1", (variant,)
-            ).fetchone()
-            if row:
+            # Every row, not the first: choosing between the senses is the
+            # point. Bounded in practice -- the most rows any word has is
+            # 14, measured across the fr, de and ru indexes.
+            rows = conn.execute(
+                "SELECT * FROM entries WHERE word = ?", (variant,)
+            ).fetchall()
+            if rows:
+                row = _select_row(rows, pos)
                 return DictionaryEntry(
                     word=row["word"],
                     part_of_speech=row["pos"] or "",
