@@ -274,16 +274,21 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 734 passing, 24 deselected. The count drifts as tests are added —
+Expected: 758 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
 make coverage      # unit tests plus a per-module line-coverage report
 ```
 
-Currently 88% overall, `__main__.py` at 82%. Every bug found by coverage
+Currently 87% overall, `__main__.py` at 82%. Every bug found by coverage
 work so far has been wiring between modules rather than logic inside one.
 See ARCHITECTURE.md section 10.
+
+The 88% recorded here until 13 August was measured once and never
+rechecked; it was 86% by the time anyone looked. Re-measure before quoting
+it — this file has carried a stale number four times now (TASKS.md's "411
+tests", the outlined-pill entry, the `omw-1.4` instruction, this).
 
 ### Quality
 

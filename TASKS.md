@@ -423,21 +423,44 @@ current state.
 Ordered by value. The first three are card quality, which is where the
 remaining user-visible value is; the rest is measurement and hygiene.
 
-- [ ] **Sense selection by part of speech.** The first index row is often the
-      wrong sense — 146 of 231 lemmas on a real French video have more than
-      one, so this is the majority of cards. Word-overlap scoring was
-      implemented, measured and rejected (ARCHITECTURE.md 8.28): net-negative,
-      and no threshold separates right picks from wrong ones because both
-      score 2.
+- [x] **Sense selection by part of speech.** Shipped. See ARCHITECTURE.md
+      8.29 for the full measurement; 8.28 is the word-overlap attempt this
+      replaces.
 
-      Build instead: filter candidates by the POS spaCy already assigned the
-      lemma *in its sentence*, and never select a row tagged `name` (proper
-      nouns are filtered upstream anyway). That separates `fait`
-      (adj/noun/verb) and `côté` (noun/name), and narrows `tapa` and `marche`
-      to the right POS. It does not solve `gens`, whose senses are all nouns.
+      Measured on three real videos before anything was written: of 1209
+      lemmas found in the index it changes 60 picks, roughly 39 better
+      against 14 worse (fr 13/3, de 18/9, ru 8/2) — the reverse of
+      word-overlap's 1 better to 14 worse. 404 of the 1209 have more than
+      one row, so ambiguity affects a third of all cards.
 
-      Note: POS is not currently threaded from `nlp.py` to `definition.py`.
-      Use the out-parameter pattern `surface_forms` established in 8.20.
+      `super` no longer defines "Supercarburant" for a video using it to
+      mean "very", `marcher` is the verb rather than "démarche", and the
+      `name` rule stopped Russian `вид` defining a river in Germany and
+      `близкий` an island in the Kara Sea. Verified in real generated cards,
+      not only in tests.
+
+      The cache key moved with it (`lemma::language::pos`), because 8.27's
+      lesson is that cached rows outlive the fix that corrected them.
+      Verified by mutation: five separate reversions each fail a test.
+
+- [ ] **Inflection-pointer glosses reach cards as definitions.** Found while
+      measuring 8.29, filed rather than folded into it. German Wiktionary
+      indexes every inflected form as its own entry, so a card can read
+      "1. Person Singular Indikativ Präsens Aktiv des Verbs haben" — a
+      pointer to another word, not a definition. Measured on real videos:
+      18 of 342 German cards, 10 of 663 Russian, 3 of 204 French.
+
+      Not caused by POS selection and not fixed by it — the count barely
+      moves either way (de 18→19, fr 3→2, ru 10→10), which is why it is a
+      separate concern. wiktextract tags these senses `form-of` and records
+      the word they point at, so the fix is robust and language-agnostic
+      rather than a per-language regex over gloss text: store the flag, then
+      prefer a real definition among the POS-matching rows.
+
+      Costs a schema bump plus a rebuild per language, so it pairs naturally
+      with ADR-009 phase 1 (IPA and audio), which needs the same. Better
+      still, `form_of` names the target word, so `glaube` could instead
+      resolve to `glauben`'s definition rather than being skipped.
 
 - [ ] **Antonyms, the weakest field everywhere.** Native German 59%, French
       23%, and cross-language collapses to 3% because 3.3 keeps them in the
@@ -545,22 +568,8 @@ remaining user-visible value is; the rest is measurement and hygiene.
       must be verified against a collection with real review history before
       shipping.
 
-- [ ] **Sense selection by part of speech.** The first index row is often the
-      wrong sense (the "tapa" card defined Polynesian bark cloth for a video
-      about tapas bars). Word-overlap scoring was implemented, measured and
-      rejected — net-negative on real vocabulary, and no threshold separates
-      the right picks from the wrong ones because both score 2. Full evidence
-      in ARCHITECTURE.md 8.28.
-
-      What the data says to build instead: filter candidate rows by the POS
-      spaCy already assigned the lemma in its sentence, and never select a
-      row tagged `name` (proper nouns are filtered upstream anyway). That
-      separates `fait` (adj/noun/verb), `côté` (noun/name) and narrows `tapa`
-      and `marche` to the right POS. It does not solve `gens`, whose senses
-      are all nouns, so it narrows rather than solves.
-
-      146 of 231 lemmas on a real French video have more than one sense, so
-      this affects the majority of cards, not an edge case.
+- [x] **Sense selection by part of speech.** Shipped; duplicate of the entry
+      under "High — next up" above. ARCHITECTURE.md 8.29.
 
 - [ ] **Add a --no-cache flag for measurement runs.** The sweep exists to tell
       the truth about the pipeline and a warm cache is what stops it: the

@@ -13,10 +13,12 @@ installed environment at the time of writing, not recalled from memory. See
 ## 1. Where the project is
 
 **Tagged release:** v0.4.5
-**HEAD:** `755bc67`, 12 commits past the tag, working tree clean, level with
+**HEAD:** 14 commits past the tag, working tree clean, level with
 `tango-origin/main`
-**Test state:** 734 passing, 0 failing, 24 integration deselected (`make test`)
-**Coverage:** 88% overall, `__main__.py` 82% (`make coverage`)
+**Test state:** 758 passing, 0 failing, 24 integration deselected (`make test`)
+**Coverage:** 87% overall, `__main__.py` 82% (`make coverage`). The 88%
+carried here before was stale — measured at 86% immediately before the
+8.29 work, 87% after it.
 **Overall completion estimate:** roughly 85 percent toward a v1.0.0 CLI tool,
 roughly 25 percent toward the full multi-surface product vision
 
@@ -90,6 +92,14 @@ convenience rather than a requirement.
 
 **`scripts/coverage_matrix.py`** sweeps every language combination and reads
 the card fields back out of the generated packages.
+
+**Sense selection by part of speech**, the item 8.28 was rejected in favour
+of. The index holds one row per (word, part of speech) and the pipeline took
+the first, so a video about walking defined `marcher` as a noun. Now filtered
+by the tag spaCy gave the word in its own sentence, and a `name` row is never
+selected. Measured on three real videos first: 60 of 1209 picks change,
+roughly 39 better to 14 worse, against word-overlap's 1 to 14. ARCHITECTURE
+8.29.
 
 ---
 
@@ -299,6 +309,42 @@ the way was a real bug, but none was the reported one.
 Lesson: reproduce through the same entry point the reporter used, before
 reasoning about the code. The failing command was in their first paste of
 actual terminal output.
+
+### 6.19 Lesson: check whether your change moved the number before owning it
+
+Reading the German output for the POS sense selection (8.29), the losses
+looked bad enough to reconsider shipping: six of nine regressions were cards
+whose definition became an inflection pointer, "1. Person Singular Indikativ
+Präsens Aktiv des Verbs haben" instead of a definition.
+
+Counting them before and after settled it in one run: de 18 -> 19, fr 3 -> 2,
+ru 10 -> 10. The change does not move that number. Those cards were already
+broken, and reading a changed pick alongside its old value made a standing
+defect look like a new one, because the old value was visible and its own
+badness was not being counted.
+
+The inverse of 6.16, and the same discipline: 6.16 is a number improving
+because the defect grew, this is a fix looking harmful because it made an
+existing defect legible. In both cases the answer was to measure the specific
+quantity rather than to reason from the diff. Filed the pointer glosses
+separately rather than folding a second fix into the first.
+
+### 6.20 Lesson: the rejected attempt paid for the one that worked
+
+8.28 rejected sense selection by word overlap and recorded, from the same
+measurement, that part of speech should separate the cases overlap got wrong.
+8.29 built exactly that and it landed 39 better to 14 worse, against
+overlap's 1 to 14.
+
+Two things made the second attempt cheap. The measurement script from the
+first run again unchanged against a different signal, so the decision took
+one run rather than a rebuild. And the failure table in 8.28 — `côté` picking
+"Nom de famille", `fait` picking a participle — was specific enough to point
+at the signal that separated them, which a bare "rejected, net-negative"
+note would not have been.
+
+Worth keeping in mind when recording a dead end: write down what the data
+said to try next, not only what failed.
 
 ---
 

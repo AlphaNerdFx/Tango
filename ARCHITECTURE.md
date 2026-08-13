@@ -1666,6 +1666,79 @@ does not depend on shared vocabulary between a definition and a sentence.
 `gens` stays unsolved -- all three of its senses are nouns -- so this is a
 narrowing, not a solution.
 
+### 8.29 Sense selection by part of speech: measured, and shipped
+
+What 8.28 said to build instead, built. Two rules in `wiktdata._select_row`:
+prefer a row whose `pos` matches the tag spaCy gave the word *in its own
+sentence*, and never take a `name` row while any other exists.
+
+**Measured before it was written, on three real videos rather than on the
+case that motivated it** -- the discipline 8.28 exists to enforce. Of 1209
+lemmas found in the index, it changes 60 picks:
+
+| language | lemmas in index | >1 row | picks changed | better | worse |
+|---|---|---|---|---|---|
+| fr | 204 | 130 | 16 | 13 | 3 |
+| de | 342 | 159 | 34 | 18 | 9 |
+| ru | 663 | 115 | 10 | 8 | 2 |
+
+The reverse of the word-overlap result, which went 1 better to 14 worse. A
+sample of what it fixes, all confirmed in real generated cards:
+
+```
+super      Supercarburant.              -> Très ; extrêmement.
+marcher    Déplacement ... ; démarche.  -> Se déplacer par un mouvement alternatif...
+portable   Que l'on peut porter         -> Téléphone portable ; téléphone cellulaire.
+mal (de)   Buch Maleachi                -> einmal, zu einem gewissen Zeitpunkt
+вид (ru)   река в Германии              -> внешний облик
+близкий    остров в Карском море        -> находящийся недалеко
+```
+
+The last two are the `name` rule: Russian led with a river in Germany and an
+island in the Kara Sea. Proper nouns are filtered upstream by
+`nlp._is_valid_token`, so a `name` row is never why a word is on a card.
+
+**Ambiguity is the norm, not an edge case.** 404 of those 1209 lemmas have
+more than one row, so this is reaching a third of all cards even though it
+changes 5% of them.
+
+**A word whose POS has no row keeps its current card.** Falling back to the
+first row rather than to nothing was deliberate: 11 French, 25 German and 6
+Russian lemmas match no row, mostly function words and interjections that
+spaCy tagged ADV. Dropping them would trade a wrong sense for no card.
+
+**What it does not fix.** German regressions cluster in two classes, both
+pre-existing limitations this exposes rather than creates:
+
+- *Inflection-pointer glosses.* German Wiktionary indexes every inflected
+  form, so `glaube` can resolve to "1. Person Singular Indikativ Präsens
+  Aktiv des Verbs haben" -- a pointer, not a definition. Counted before and
+  after: de 18 -> 19, fr 3 -> 2, ru 10 -> 10. The POS filter does not move
+  this number, so it is a separate problem. wiktextract tags these senses
+  `form-of`, which the index does not store, so fixing it is a schema change
+  plus a rebuild. Filed in TASKS.md.
+- *Archaic first senses.* `aber` -> "abermals", `egal` -> "fortwährend". The
+  index stores only the first sense per (word, pos), so choosing the right
+  POS cannot rescue a row whose own first sense is obsolete.
+
+`gens` stays unsolved as predicted -- all its senses are nouns.
+
+**The cache had to move with it.** ARCHITECTURE 8.27 records twice that a
+card-quality fix does not reach rows already written, because the cache
+stores assembled fields. The key is now `lemma::language::pos`, so the same
+lemma read as a noun and as a verb are different rows and the old
+two-segment rows are simply missed rather than served stale. Self-
+invalidating, so no delete step to forget. Only a POS the index can
+distinguish enters the key -- one that cannot change the selected row must
+not split the cache into rows differing in nothing. `_cache_key()` is a
+single function because `fetch_definitions()` and `fetch_definition()` built
+this string separately once and drifted (SESSION.md 6.12).
+
+The tag is the one the word carried *most* often, not first: spaCy tags per
+sentence, and a word used ten times as a verb and once as a noun is a verb.
+Ties resolve to the earlier tag, which keeps it deterministic -- it feeds a
+cache key.
+
 
 ---
 
