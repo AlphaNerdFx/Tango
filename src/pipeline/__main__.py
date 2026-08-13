@@ -413,6 +413,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
             language=language_code,
             def_language=def_language,
             parts_of_speech=parts_of_speech,
+            use_cache=not args.no_cache,
         )
     _ok(
         f"Definitions: {len(batch.found)} found "
@@ -538,6 +539,7 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
         to_add,
         language=language_code,
         def_language=def_language,
+        use_cache=not args.no_cache,
     )
     _ok(f"Definitions: {len(batch.found)} found / {len(batch.not_found)} not found")
 
@@ -607,6 +609,7 @@ def _run_backlog(args: argparse.Namespace, session: Session) -> None:
         words_to_define,
         language=language_code,
         def_language=def_language,
+        use_cache=not args.no_cache,
     )
     _ok(f"Definitions: {len(batch.found)} found / {len(batch.not_found)} not found")
 
@@ -827,6 +830,14 @@ examples:
         help="Reprocess a video even if pipeline.db has it marked as already "
              "processed. Words already in the target deck are still skipped "
              "by the normal deck duplicate check.",
+    )
+    parser.add_argument(
+        "--no-cache",
+        action="store_true",
+        help="Neither read nor write the definition cache. For measuring what "
+             "the pipeline currently produces: cached rows hold assembled "
+             "card fields, so a warm cache serves definitions chosen before "
+             "whatever you are trying to measure. Much slower.",
     )
 
     return parser

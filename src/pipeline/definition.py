@@ -936,6 +936,7 @@ def fetch_definition(
     language: str = "en",
     def_language: Optional[str] = None,
     pos: Optional[str] = None,
+    write_cache: bool = True,
 ) -> Optional[DefinitionResult]:
     """
     Fetch a definition for one lemma using a dual-source strategy:
@@ -965,6 +966,13 @@ def fetch_definition(
     nlp.process_transcript()'s parts_of_speech output. It selects between
     the offline index's senses (wiktdata._select_row) and joins the cache
     key. Omit it and behaviour is as before.
+
+    `use_cache` and `write_cache` are separate because the two callers want
+    different halves. fetch_definitions() resolves cache hits in its own
+    loop and then passes use_cache=False so the read is not repeated -- it
+    still wants the result written. A measurement run wants neither, and
+    conflating them would have turned --no-cache into "never cache
+    anything, ever", silently disabling the cache for the normal path too.
     """
     target_language = def_language or language
     # The key names the language the definition will actually be IN, and that
@@ -1252,7 +1260,12 @@ def fetch_definition(
         source=_actual_source,
     )
 
-    _cache_set_key(cache_key, result)
+    # Skipped for measurement runs. A sweep that writes is how 4532 rows of
+    # Russian examples ended up on German cards and survived the fix that
+    # corrected them (ARCHITECTURE.md 8.27, SESSION.md 6.15) -- the run that
+    # measures the pipeline must not also change what the next run sees.
+    if write_cache:
+        _cache_set_key(cache_key, result)
     return result
 
 
@@ -1262,6 +1275,7 @@ def _fetch_definition_or_fallback_example(
     language: str,
     def_language: Optional[str],
     pos: Optional[str] = None,
+    write_cache: bool = True,
 ) -> tuple[Optional[DefinitionResult], Optional[str], Optional[str], list[str], list[str]]:
     """
     Fetch one lemma's definition, falling back to a bare Wiktionary example
@@ -1292,7 +1306,7 @@ def _fetch_definition_or_fallback_example(
     """
     result = fetch_definition(
         lemma, snippets, use_cache=False, language=language, def_language=def_language,
-        pos=pos,
+        pos=pos, write_cache=write_cache,
     )
     if result:
         return result, None, None, [], []
@@ -1342,6 +1356,7 @@ def fetch_definitions(
     language: str = "en",
     def_language: Optional[str] = None,
     parts_of_speech: Optional[dict] = None,
+    use_cache: bool = True,
 ) -> DefinitionBatchResult:
     """
     Fetch definitions for a list of lemmas, returned in first-appearance
@@ -1371,6 +1386,12 @@ def fetch_definitions(
                      offline index returns for an ambiguous word. Callers
                      with no transcript to tag -- review and backlog mode --
                      pass nothing and get the previous behaviour.
+        use_cache:   False neither reads nor writes the definition cache.
+                     For measurement runs (--no-cache): a sweep exists to
+                     report what the pipeline currently produces, and a warm
+                     cache is what stops it -- a corrected sweep still showed
+                     Russian examples on German cards because it read rows
+                     written before the fix. See ARCHITECTURE.md 8.27.
 
     Returns:
         DefinitionBatchResult with found, not_found, from_cache, and
@@ -1403,7 +1424,7 @@ def fetch_definitions(
     for lemma in lemmas:
         cached = _cache_get(
             _cache_key(lemma, def_language or language, pos_map.get(lemma))
-        )
+        ) if use_cache else None
         if cached:
             result = _cache_row_to_result(lemma, cached, snippets)
             batch.found.append(result)
@@ -1427,7 +1448,7 @@ def fetch_definitions(
             future_to_lemma = {
                 executor.submit(
                     _fetch_definition_or_fallback_example, lemma, snippets,
-                    language, def_language, pos_map.get(lemma),
+                    language, def_language, pos_map.get(lemma), use_cache,
                 ): lemma
                 for lemma in to_fetch
             }

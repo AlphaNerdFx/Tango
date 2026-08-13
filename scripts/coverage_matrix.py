@@ -92,7 +92,27 @@ def indexed_languages() -> set[str]:
     }
 
 
-def run_pair(transcript: str, definition: str | None, timeout: int) -> dict:
+def anki_is_reachable() -> bool:
+    """
+    True if AnkiConnect answers.
+
+    The sweep never imports, but every run still goes through the deck
+    duplicate check, which needs AnkiConnect. With Anki closed the pipeline
+    writes the words to the backlog and exits 0 before building a package,
+    so all 16 rows fail identically with "no package produced" -- a whole
+    sweep spent to learn that an application was not open.
+    """
+    from pipeline.deck import is_anki_running
+
+    return is_anki_running()
+
+
+def run_pair(
+    transcript: str,
+    definition: str | None,
+    timeout: int,
+    no_cache: bool = False,
+) -> dict:
     """
     Run one combination and return its measured coverage.
 
@@ -100,6 +120,9 @@ def run_pair(transcript: str, definition: str | None, timeout: int) -> dict:
         transcript: Transcript language code.
         definition: Definition language, or None for native.
         timeout:    Seconds before the run is abandoned.
+        no_cache:   Pass --no-cache, so the run reports what the pipeline
+                    produces now rather than what it produced when the rows
+                    were cached.
 
     Returns:
         A result dict with per-field percentages, or an "error" key.
@@ -113,6 +136,8 @@ def run_pair(transcript: str, definition: str | None, timeout: int) -> dict:
         f"--language={transcript}",
         "--force",
     ]
+    if no_cache:
+        cmd.append("--no-cache")
     if definition and definition != transcript:
         cmd.append(f"--def-lang={definition}")
 
@@ -192,6 +217,12 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=1800,
                         help="seconds per run (default 1800)")
     parser.add_argument("--out", help="write results as JSON here")
+    parser.add_argument("--cache", action="store_true",
+                        help="allow the definition cache (default is --no-cache, "
+                             "since a warm cache reports what the pipeline used "
+                             "to produce, not what it produces now)")
+    parser.add_argument("--skip-anki-check", action="store_true",
+                        help="run even if AnkiConnect is unreachable")
     args = parser.parse_args()
 
     langs = args.langs.split(",") if args.langs else available_languages()
@@ -212,6 +243,7 @@ def main() -> int:
     print("'fellback' = share of definitions that came back in the transcript "
           "language\n             because the target-language lookup found "
           "nothing (0% on native rows).")
+    print(f"definition cache: {'ON (--cache)' if args.cache else 'OFF'}")
     print(f"offline index built for: {', '.join(sorted(indexed)) or 'none'}")
     missing = [c for c in langs if c not in indexed and c != "en"]
     if missing:
@@ -224,6 +256,15 @@ def main() -> int:
             print(f"  {t} -> {d or 'native'}   video {VIDEOS[t]}")
         return 0
 
+    # Up front, not per row. A closed Anki fails every combination the same
+    # way and only after each has spent its full runtime.
+    if not args.skip_anki_check and not anki_is_reachable():
+        print("AnkiConnect is unreachable, so every run would fail the deck check\n"
+              "and exit before building a package. The sweep never imports, but\n"
+              "the deck check still needs Anki.\n"
+              "  Start Anki, or pass --skip-anki-check to run anyway.")
+        return 1
+
     results: dict[str, dict] = {}
     header = (f"{'combination':<16}{'cards':>7}{'defs':>7}{'fellback':>9}{'class':>7}"
               f"{'ex1':>6}{'ex2':>6}{'video':>7}{'syn':>6}{'ant':>6}{'xlang':>8}{'secs':>7}")
@@ -232,7 +273,7 @@ def main() -> int:
 
     for transcript, defn in combos:
         label = f"{transcript} -> {defn or 'native'}"
-        res = run_pair(transcript, defn, args.timeout)
+        res = run_pair(transcript, defn, args.timeout, no_cache=not args.cache)
         results[label] = res
         if "error" in res:
             print(f"{label:<16}  ERROR: {res['error']}")

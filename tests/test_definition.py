@@ -1976,3 +1976,73 @@ class TestCacheKeyCarriesPartOfSpeech:
                 parts_of_speech={"marcher": "VERB"},
             )
         assert seen["marcher"] == "VERB"
+
+
+# ── --no-cache, for measurement runs ─────────────────────────────────────────
+
+class TestNoCache:
+    """
+    ARCHITECTURE.md 8.27. A sweep exists to report what the pipeline
+    produces now, and a warm cache is what stops it -- rows hold assembled
+    card fields, so they survive the fix that corrected them.
+    """
+
+    def test_cached_row_is_ignored(self, sample_definition_result):
+        _cache_set_key(
+            def_module._cache_key(sample_definition_result.lemma, "en"),
+            sample_definition_result,
+        )
+        with patch("pipeline.definition.fetch_definition") as mock_fetch:
+            mock_fetch.return_value = sample_definition_result
+            result = fetch_definitions(["contaminate"], use_cache=False)
+        assert result.from_cache == []
+
+    def test_cached_row_is_used_by_default(self, sample_definition_result):
+        # The partner. Without this, a --no-cache implementation that simply
+        # broke the cache read for everyone would still satisfy the test above.
+        _cache_set_key(
+            def_module._cache_key(sample_definition_result.lemma, "en"),
+            sample_definition_result,
+        )
+        with patch("pipeline.definition.fetch_definition"):
+            result = fetch_definitions(["contaminate"])
+        assert result.from_cache == ["contaminate"]
+
+    def test_nothing_is_written_back(self, monkeypatch, mw_response):
+        # A measurement run must not change what the next run sees. This is
+        # how 4532 rows of Russian examples reached German cards.
+        #
+        # MW must actually return something. The first version of this test
+        # mocked every source to None, so fetch_definition() returned before
+        # reaching the write at all and the test passed whatever write_cache
+        # did -- vacuous, and caught by mutation rather than by the suite
+        # (SESSION.md 6.11).
+        written = []
+        monkeypatch.setattr(
+            def_module, "_cache_set_key", lambda k, r: written.append(k)
+        )
+        with patch("pipeline.definition._fetch_from_mw", return_value=mw_response), \
+             patch("pipeline.definition._fetch_from_dictapi", return_value=None), \
+             patch("pipeline.definition._fetch_from_wiktionary", return_value=None), \
+             patch("pipeline.definition._wordnet_synonyms_antonyms",
+                   return_value=([], [])):
+            batch = fetch_definitions(["contaminate"], max_workers=1, use_cache=False)
+        assert batch.found, "a definition must be found, or this proves nothing"
+        assert written == []
+
+    def test_writes_happen_by_default(self, monkeypatch, mw_response):
+        # The partner to the test above, and the one that matters most:
+        # use_cache and write_cache are separate parameters precisely so
+        # that fetch_definitions()'s own use_cache=False (it already
+        # resolved the read) does not disable caching for the normal path.
+        written = []
+        monkeypatch.setattr(
+            def_module, "_cache_set_key", lambda k, r: written.append(k)
+        )
+        with patch("pipeline.definition._fetch_from_mw", return_value=mw_response), \
+             patch("pipeline.definition._fetch_from_dictapi", return_value=None), \
+             patch("pipeline.definition._fetch_from_wiktionary", return_value=None), \
+             patch("pipeline.definition._wordnet_synonyms_antonyms",
+                   return_value=([], [])):
+            fetch_definitions(["contaminate"], max_workers=1)
+        assert written == ["contaminate::en"]
