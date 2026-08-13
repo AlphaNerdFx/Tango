@@ -420,6 +420,83 @@ current state.
 
 ## High — next up
 
+Ordered by value. The first three are card quality, which is where the
+remaining user-visible value is; the rest is measurement and hygiene.
+
+- [ ] **Sense selection by part of speech.** The first index row is often the
+      wrong sense — 146 of 231 lemmas on a real French video have more than
+      one, so this is the majority of cards. Word-overlap scoring was
+      implemented, measured and rejected (ARCHITECTURE.md 8.28): net-negative,
+      and no threshold separates right picks from wrong ones because both
+      score 2.
+
+      Build instead: filter candidates by the POS spaCy already assigned the
+      lemma *in its sentence*, and never select a row tagged `name` (proper
+      nouns are filtered upstream anyway). That separates `fait`
+      (adj/noun/verb) and `côté` (noun/name), and narrows `tapa` and `marche`
+      to the right POS. It does not solve `gens`, whose senses are all nouns.
+
+      Note: POS is not currently threaded from `nlp.py` to `definition.py`.
+      Use the out-parameter pattern `surface_forms` established in 8.20.
+
+- [ ] **Antonyms, the weakest field everywhere.** Native German 59%, French
+      23%, and cross-language collapses to 3% because 3.3 keeps them in the
+      transcript language. ConceptNet's bulk dump is the evaluated candidate:
+      free, no key, CC BY-SA, one 475 MB download covering every language,
+      real French antonyms for `grand` (petit, court, faible, minime...), and
+      9 of 12 languages sampled returned data. Its live API is 502 on every
+      endpoint, so bulk is the only route — which is what the rate-limit
+      constraint required anyway. Needs the OMW-style filtering: drop
+      self-references, cross-language leakage and junk.
+
+- [ ] **Filler-word cards.** `Ah`, `Bah`, `Ouai`, `Euh`, `Tss` — 3.4% of
+      cards, and the ones that look broken to a user. Needs a per-language
+      stoplist of filler sounds, not a POS rule: `Bonsoir` is also `INTJ` and
+      is worth learning.
+
+- [ ] **ADR-009 phase 1: IPA and Commons pronunciation audio.** 91.5% of
+      German entries carry IPA and 65.7% carry a Wikimedia Commons audio URL,
+      in data `wiktdata.py` already downloads. The index stores neither, so
+      it is a schema change plus a rebuild rather than a new source. Highest
+      value per unit of work in the whole media proposal. Fields must be
+      APPENDED at index 10+ (3.2 is positional), and keeping MODEL_ID while
+      changing the field list is a notetype schema change that must be tested
+      against a collection with real review history.
+
+- [ ] **The sweep needs Anki, and does not say so.** All 16 rows failed with
+      "Anki is not running. All words written to backlog" because Anki was
+      closed. The deck check needs AnkiConnect even though the sweep never
+      imports. Either check up front and fail with a clear message, or bypass
+      the deck check for measurement runs.
+
+- [ ] **Add a `--no-cache` flag for measurement runs.** The sweep exists to
+      tell the truth about the pipeline and a warm cache is what stops it: a
+      corrected sweep still showed Russian examples on German cards because
+      it read rows written before the fix. `fetch_definition` already takes
+      `use_cache`; nothing exposes it. ARCHITECTURE.md 8.27.
+
+- [ ] **Consider a cache key carrying both languages.** Today it is
+      `lemma::target_language`, so a row contaminated by a cross-language run
+      cannot be identified from the key — invalidation had to reconstruct it
+      by joining the vocabulary table back to each video's language. Both
+      cache-poisoning incidents would have been a one-line delete.
+
+- [ ] **Build the missing dictionary indexes.** `make doctor` reports es, ja,
+      ko, pt and zh as having a spaCy model but no index, which is exactly
+      the state that yields definition-less cards. `make dictionary
+      LANGUAGE=es` each. Cheapest large win available per language.
+
+- [ ] **A test per hard constraint.** The 3.3 violation shipped because
+      nothing pinned it, and it was caught by a coverage sweep noticing an
+      impossible number. 3.1 (MODEL_ID/DECK_ID), 3.2 (field order) and 3.3
+      (field language) should each fail loudly rather than rely on review.
+
+- [ ] **Re-run the sweep and record the corrected baseline.** Blocked on the
+      two items above it; the numbers in SESSION.md section 5 predate the 3.3
+      fix and overstate cross-language example and synonym coverage.
+
+
+
 - [x] **Cross-language mode violated CLAUDE.md 3.3.** Examples, synonyms and
       antonyms were taken from the target-language entry, so a German video
       with `--def-lang ru` shipped Russian example sentences. Found by the

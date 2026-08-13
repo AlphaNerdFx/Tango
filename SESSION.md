@@ -1,7 +1,7 @@
 # SESSION.md — Current working state
 
-Last updated: 7 August 2026, after the multi-language dictionary verification
-session.
+Last updated: 13 August 2026, at the close of the v0.4.5 release and
+post-release development session.
 
 Read this to understand exactly where development stands and what was learned.
 Everything here was checked against `git log`, the working tree, and the
@@ -12,372 +12,215 @@ installed environment at the time of writing, not recalled from memory. See
 
 ## 1. Where the project is
 
-**Tagged release:** v0.4.4
-**HEAD:** `002c01e`, 40 commits past the v0.4.4 tag, working tree clean.
-The last five commits are local only — `tango-origin/main` is at `b6a59eb`.
-**Working toward:** v0.4.5, untagged — the commits since v0.4.4 are shipped
-and verified but have not been cut as a release
-**Test state:** 670 passing, 0 failing, 24 integration deselected (`make test`,
-84s). CLAUDE.md and ARCHITECTURE.md both said 524/22 before this session, which
-was 116 tests out of date.
-**Overall completion estimate:** roughly 80 percent toward a v1.0.0 CLI tool,
+**Tagged release:** v0.4.5
+**HEAD:** `755bc67`, 12 commits past the tag, working tree clean, level with
+`tango-origin/main`
+**Test state:** 734 passing, 0 failing, 24 integration deselected (`make test`)
+**Coverage:** 88% overall, `__main__.py` 82% (`make coverage`)
+**Overall completion estimate:** roughly 85 percent toward a v1.0.0 CLI tool,
 roughly 25 percent toward the full multi-surface product vision
 
-The estimate moved from 65 percent because the thing that made it 65 percent is
-fixed. Non-English runs used to produce cards with empty definition, example,
-synonym, and antonym fields. With a built dictionary index they now produce
-real ones — French measured at 95 percent definition coverage, German and
-Russian at 91 percent. What remains before v1.0.0 is packaging and interface
-work (Typer CLI, Dockerfile, dependency size), not correctness.
+The pipeline works end to end for English with no setup beyond the spaCy
+model, and for any language with a built dictionary index. Cross-language
+mode (`--def-lang`) works for all 12 pairs among de/fr/en/ru, with
+translation models installed.
 
-The pipeline works end to end for English with no setup beyond the spaCy model.
-For non-English it needs one extra step, `make dictionary LANGUAGE=<code>`,
-documented in CLAUDE.md section 6 and the README. Without an index a
-non-English run still works but produces no definitions — it falls back to OMW
-synonyms, Wiktionary REST examples, and transcript examples.
+Start any session with:
 
----
-
-## 1a. The most recent session, 7 August
-
-Five commits, all local. Started as a documentation sync and turned into two
-real bugs, one of them the most damaging found in this project so far.
-
-**Configured paths resolved against the working directory.** `DB_PATH`,
-`DICT_DIR`, `REVIEW_FILE`, and `OUTPUT_DIR` are now anchored to the project
-root. Running from another directory used a second empty database, an unbuilt
-index directory, and a different `review.json`, all silently. Anchoring the
-defaults alone would have fixed nothing, because `.env.example` ships relative
-overrides that every documented install inherits. ARCHITECTURE 8.21.
-
-**The deck duplicate check could not see the deck.** `get_card_fronts()` read
-the note field named `Front`; the generated model's first field is named
-`Word`, so a deck built by this pipeline returned zero fronts and every word
-from a previous run came back NEW. Measured against the running Anki
-collection, it was worse than that — the hand-built `French` deck showed 305
-of 2172 notes, because most real decks are not on the stock Basic type.
-Reprocessing an already-imported video went from 1054 NEW to 1050 SKIP /
-4 QUEUE / 0 NEW. ARCHITECTURE 8.22.
-
-**Hyphenated compounds in the fuzzy matcher.** Tested and closed without a
-fix: the matcher handles them. `semi-relevé` scores 100 against its own front
-in the real deck. Only testable after the fix above, since the matcher had
-been receiving an empty list.
-
-**Live end-to-end verification, in a purpose-made deck.**
-`Tango_Verify_20260807` was created empty and both runs went into it, so no
-existing deck was touched — confirmed by snapshotting all 64 decks before and
-after: only the test deck changed, 0 → 207.
-
-```
-run 1, empty deck        0 skip / 0 queue / 207 new    → imported 207 notes
-run 2, --force, same     207 skip / 0 queue / 0 new    → created nothing
+```bash
+make doctor       # or: python -m pipeline --doctor
 ```
 
-French definitions came back 204 of 207 (98.6%) from the offline index, on a
-video that produced zero definitions before the index existed.
-
-**Measured card quality, read back out of Anki** (207 French cards): Word,
-transcript example, VideoID, Source 100%; Class and Definition 98.6%; 1st
-example 97.1%; 2nd example 74.9%; synonyms 85.0%; antonyms 23.2%. Antonyms
-are the one visibly thin field, and it is a data problem — OMW has none for
-any non-English language, so the index is the only source.
-
-**Test coverage measured for the first time:** 83% overall via a new
-`make coverage`. `__main__.py` is 55%, with the three run modes essentially
-untested. Both bugs found today were wiring rather than logic, and the
-modules they sat in report 92% and 100% — the gap and the bugs are the same
-fact.
-
-Method note worth keeping: both fixes were verified by mutation, not by the
-new tests passing. Reverting each to its old behaviour fails five of the new
-tests in one case and four in the other. Given 6.11 — this codebase has
-shipped three separate bugs that its own tests could not express — a passing
-test is not evidence that it tests anything.
+It reports spaCy models, dictionary indexes and their sizes, translation
+pairs, the MW key and AnkiConnect reachability, and prints the command that
+fixes anything missing. It was written because nearly every failure
+investigated in this project turned out to be setup rather than logic, and
+none of it was visible from the failure itself.
 
 ---
 
-## 2. What has shipped since the v0.4.4 tag
+## 2. What shipped in v0.4.5
 
-Thirty-five commits. Grouped by what they changed rather than listed
-individually; `git log v0.4.4..HEAD` has the full sequence, and TASKS.md
-records the measured result of each.
+67 commits. The release is a correctness release; the tag message carries the
+full list. The four that mattered most:
 
-### 2.1 The non-English definition gap, closed
+**The deck duplicate check could not see most cards.** It read the note field
+named `Front`, while the generated model's first field is named `Word`. A
+deck built by this pipeline returned zero fronts, so every previously added
+word came back NEW. Measured: 0 of 1036 notes visible in one deck, 305 of
+2172 in a hand-built one across 12 note types. Now reads the lowest-`order`
+field, which is what Anki itself treats as a note's identity.
 
-**Offline Wiktionary index (`73139d5`, `wiktdata.py`).** Built from
-wiktextract output published per language by kaikki.org, taken from *that
-language's own* Wiktionary edition so the glosses are native rather than the
-English glosses the REST endpoint returns. This is why the earlier REST-based
-fix improved examples but never touched definitions.
+**Cross-language definitions were broken four ways at once**, each hiding the
+next: `ARGOS_PACKAGES_DIR` in `.env` pointed at an empty directory and
+argostranslate reads that variable itself, so the pipeline saw no models
+while any shell that skipped `.env` saw them all; the failure was a bare
+`pass`; untranslated words then reached English sources, so German "je"
+matched the English letter J; and the first translation of a run takes 43.5s
+against a 15s per-word timeout.
 
-Bulk download, not the live API. Wikimedia 429s after roughly 8-10 anonymous
-requests regardless of pacing, and a video needs 100-1000+ lookups. A proposal
-to route around that with rotating proxies was rejected as circumventing a
-rate limit rather than complying with it.
+**importPackage shared the 5-second timeout** meant for quick queries. Anki
+rebuilds indexes before answering and that scales with the collection, so
+imports that worked at 40k notes failed at 57k.
 
-Layered with OMW rather than replacing it: measured on a real 958-lemma French
-deck, the index covers synonyms at 49 percent against OMW's 76 percent, so OMW
-keeps first claim and the index fills in behind. The index does supply
-antonyms, which OMW cannot for any non-English language.
-
-Optional by design. With no index, behaviour is exactly as before — pinned by
-a test fixture, because the index lives on disk and would otherwise make tests
-pass in CI and fail locally.
-
-**Multi-language verification and the English exception (`3f02c04`,
-`84d0eae`).** Measured against real deck vocabulary from previously generated
-videos, not sampled words. German and Russian matter most: OMW covers neither,
-so they had no synonyms at all before, and both carry far richer antonyms than
-French. English is the exception and should not be built —
-`--build-dictionary en` now warns and asks for confirmation rather than
-silently downloading 475 MB to change nothing.
-
-**Interrupted builds no longer orphan partial archives (`84d0eae`).** Found by
-killing a French rebuild mid-download. `KeyboardInterrupt` is handled
-separately from `OSError`, since Ctrl-C during a multi-minute download is
-ordinary usage rather than an error.
-
-### 2.2 Card content fixes
-
-- **Second Wiktionary example was fetched then discarded (`5efd90b`).** The
-  card model has two example fields but the fallback path kept only
-  `examples[0]`. Now populated on 27 percent of cards, up from 0.
-- **Transcript examples were searched by lemma, not surface form
-  (`0ebdc79`).** A French video says "sais", the lemma is "savoir", and
-  "savoir" appears nowhere in the text — so a word extracted *from* the
-  transcript failed to find the sentence it came from. 137 of 1036 cards, all
-  infinitives. 87 percent to 100 percent.
-- **Verb lemmas spaCy's POS-blind lookup gets wrong (`7c50a72`).** Per-language
-  fallback table that fires only when the model returned the surface form for a
-  VERB, and validates the candidate against the model's own vocabulary so
-  "être" cannot become "êtrer". French is the only verified entry.
-
-### 2.3 Earlier in the same stream
-
-OMW synonym supplementation for 18 languages and its three follow-up defects
-(alphabetical ranking, nltk's non-thread-safe WordNet reader, mixed senses);
-the per-word "No definition found" log flood; SQLite cache lock contention
-discarding successful lookups; Chinese vocabulary extraction returning zero
-words; `--force`; language folded into the card GUID; the guided `--setup`
-wizard; the CI Python matrix and the removal of never-working 3.9 support.
+**A pasted YouTube URL aborted `make run` before the pipeline started.** The
+video id was interpolated into printf's *format string*, and a URL ending in
+`%3D` made printf fail the recipe.
 
 ---
 
-## 3. Verification results from the last real runs
+## 3. What shipped after v0.4.5
 
-French video `2yHn8uc5_-4`, before and after the offline index:
+**Merriam-Webster examples were parsed and then discarded** at the call site.
+English example coverage went from 14% to 72% on a full video. Third instance
+of the fetched-parsed-dropped shape.
 
-| Field | Before | After |
-|---|---|---|
-| Definition | 0% | 95% |
-| Class / POS | 0% | 95% |
-| 1st example | 41% | 93% |
-| 2nd example | 27% | 71% |
-| Synonyms | 76% | 83% |
-| Antonyms | 0% | 20% |
-| Cards generated | 958 | 1036 |
-| Words dropped with nothing to show | 83 | 5 |
+**Cross-language runs violated CLAUDE.md 3.3.** Examples, synonyms and
+antonyms were taken from the target-language entry, so a German video with
+`--def-lang ru` shipped Russian sentences. Gated at all three call sites.
+ARCHITECTURE 8.25.
 
-The residual ~5 percent are transcription noise and proper nouns, near the
-practical ceiling for this source.
+**Cross-language runs now fall back to a native definition** rather than
+giving up. 46 of 459 cards on a German deck said "No definition found" while
+the German index had the word. ARCHITECTURE 8.26.
 
-Index coverage measured against real deck vocabulary, per language:
+**`--doctor`, `--install-model`, `--install-translation`**, and `make help`
+now prints the CLI equivalent of every user-facing target, so `make` is a
+convenience rather than a requirement.
 
-| Language | Lemmas | Definitions | Examples | Synonyms | Antonyms |
-|---|---|---|---|---|---|
-| German | 384 | 91% | 84% | 60% | 51% |
-| Russian | 420 | 91% | 72% | 72% | 46% |
-| English | 274 | 100% | 91% | 43% | 31% |
-
-English's numbers are the reason not to build its index: a live run produced
-273 of 274 definitions from Merriam-Webster and consulted the index zero times.
-Its first-sense glosses are also often archaic, since English Wiktionary orders
-senses historically — "may" resolves to "To be strong; to have power (over)".
+**`scripts/coverage_matrix.py`** sweeps every language combination and reads
+the card fields back out of the generated packages.
 
 ---
 
 ## 4. Uncommitted state
 
-None. The working tree is clean. `main` is five commits ahead of
-`tango-origin/main`, which has not been pushed — the 7 August work is local.
-
-Every item the previous revision of this file listed as uncommitted —
-the `DICT_API_BASE` fix, the WordNet language guard, the lemma validation
-regex, the relaxed `requirements.txt` pins — has long since shipped. That list
-was five days and thirty-five commits out of date, which is the specific
-failure 6.9 warns about, recurring in the document that warns about it.
+None. The working tree is clean and `main` is level with `tango-origin/main`.
 
 ---
 
-## 5. Environment specifics
+## 5. The coverage matrix, and what it is for
 
-```
-OS:              Windows 11 with WSL2 (Ubuntu)
-Python:          3.10.12
-Virtual env:     .tangovenv  (NOT .venv)
-Project path:    /mnt/c/DSC/Career/Projects/Tango
-Git remotes:     tango-origin -> https://github.com/AlphaNerdFx/Tango  (current)
-                 origin       -> .../Youtube-Anki-Flashcards.git       (renamed, dead)
-gh CLI:          authenticated as AlphaNerdFx
-Anki:            running on Windows, AnkiConnect bound to 0.0.0.0
-ANKI_HOST:       http://172.28.144.1:8765 (WSL gateway, may change on restart)
-ARGOS_PACKAGES_DIR: /mnt/c/Users/youssef/.argos-translate
+```bash
+python scripts/coverage_matrix.py --dry-run     # plan only
+python scripts/coverage_matrix.py               # all 16 combinations
+python scripts/coverage_matrix.py --langs de,fr
 ```
 
-Installed spaCy models:
+16 combinations for 4 languages: 4 native plus 4×3 cross-language. It does
+not import into Anki; each run generates a package and the fields are counted
+from it.
 
-```
-de_core_news_sm  en_core_web_sm  es_core_news_sm  es_core_news_md
-fr_core_news_sm  fr_core_news_md  ja_core_news_sm  ko_core_news_sm
-pt_core_news_sm  ru_core_news_sm  zh_core_web_sm
-```
+It has already paid for itself twice. It found that 10 of 12 cross-language
+pairs were silently producing native output for want of a translation model,
+and it found the 3.3 violation above — because cross-language rows scored
+*higher* on examples than native ones, which is impossible if the fields are
+constrained to the transcript language.
 
-French resolves to `md`, not `sm` — pinned in `language.SPACY_MODELS` after
-`sm` was measured getting 2 of 3 of issue #13's reproduction sentences wrong.
+**Last good numbers** (10 August, after all models were installed but before
+the 3.3 fix, so cross-language example and synonym figures are overstated):
 
-NLTK data present: `wordnet`, `omw-2.0`, `omw-1.4`, `extended_omw`. Only
-`omw-2.0` matters; this NLTK version silently ignores `omw-1.4`.
+| combination | cards | defs | ex1 | ex2 | syn | ant |
+|---|---|---|---|---|---|---|
+| de → native | 362 | 94% | 91% | 73% | 65% | 59% |
+| fr → native | 207 | 99% | 97% | 75% | 85% | 23% |
+| en → native | 271 | 100% | 72% | 52% | 94% | 30% |
+| ru → native | 701 | 95% | 76% | 40% | 73% | 48% |
+| de → en | 362 | 99% | 45% | 36% | 24% | 3% |
+| fr → en | 207 | 99% | 44% | 31% | 73% | 3% |
+| ru → en | 701 | 100% | 35% | 21% | 24% | 0% |
+| en → de | 271 | 97% | 98% | 83% | 95% | 59% |
 
-Built dictionary indexes (gitignored, rebuild with `make dictionary`):
+The consistent finding across every language: **cross-language mode costs
+most of the synonyms and antonyms**, because 3.3 requires those to stay in
+the transcript language while the definition may change. Native definitions
+produce materially better cards for anyone who can read the target language.
 
-```
-dictionaries/wiktionary_fr.sqlite   309M
-dictionaries/wiktionary_de.sqlite   152M
-dictionaries/wiktionary_ru.sqlite   111M
-```
+**A corrected baseline is still outstanding.** Two attempts failed:
 
-Known environment issues:
-
-- `gh issue list` fails with "Could not resolve to a Repository" because it
-  resolves `origin`, which points at the pre-rename URL. Pass
-  `--repo AlphaNerdFx/Tango` explicitly, or reorder the remotes.
-- `numpy==2.4.4` requires Python 3.11+, incompatible with this 3.10 venv. All
-  pins in `requirements.txt` are ranges rather than exact versions.
-- `libretranslate 1.9.6` pins `requests==2.31.0` while a newer version is
-  installed. Pre-existing warning, not blocking.
-- WSL gateway IP for `ANKI_HOST` changes between WSL restarts. Re-check with
-  `ip route | grep default` if AnkiConnect stops responding.
-- `make test` matches CLAUDE.md's ~90s once the filesystem cache is warm
-  (79-81s measured across four runs). The first run after a cold boot took
-  roughly four minutes; the repository lives on `/mnt/c`, and WSL2's
-  filesystem bridge is the cost.
-- `pip install tango` installs an unrelated PyPI package. Never run it.
+1. The first read stale cache rows written before the 3.3 fix (see 6.15).
+2. The second failed all 16 rows with "Anki is not running. All words written
+   to backlog" — Anki was closed while it ran. The sweep needs AnkiConnect
+   for the deck check even though it never imports, and it does not check
+   for that up front. Filed.
 
 ---
 
 ## 6. Reasoning history, dead ends, and mistakes
 
-This section is deliberately unflattering. Everything here was a real error made
-during development, and the reasoning is recorded so it is not repeated.
+This section is deliberately unflattering. Everything here was a real error
+made during development, and the reasoning is recorded so it is not repeated.
 
 ### 6.1 Rejected: Merriam-Webster as the only definition source
 
-Considered and rejected because the free tier caps at 1000 requests per day and
-covers English only. Kept as primary for English specifically, with
-dictionaryapi.dev as fallback.
+Free tier caps at 1000 requests per day and covers English only. Kept as
+primary for English specifically, with dictionaryapi.dev as fallback.
 
 ### 6.2 Rejected: PONS API for multilingual definitions
 
-Investigated as a solution for non-English coverage. Rejected because the free
-tier is 1000 requests per *month*, it requires registration, and it provides
-bilingual translation pairs rather than monolingual definitions — which breaks
-the "definition in the same language by default" design. Japanese has no direct
-English pair at all. Recorded in ADR-005.
+Free tier is 1000 requests per *month*, requires registration, and provides
+bilingual translation pairs rather than monolingual definitions. Recorded in
+ADR-005.
 
 ### 6.3 Rejected: Helsinki-NLP transformers for translation
 
-Rejected because PyTorch plus transformers would add roughly 2GB. argostranslate
-was chosen instead, which ironically also pulls in PyTorch. The size problem was
-not actually avoided, only deferred to an optional dependency group.
+Would add roughly 2GB. argostranslate was chosen instead, which ironically
+also pulls in PyTorch. The size problem was deferred, not avoided.
 
 ### 6.4 Rejected: cloud translation APIs
 
-Google Translate and DeepL rejected because both require paid keys at
-production volumes. LibreTranslate community mirrors plus local argostranslate
-chosen instead, accepting the uptime and latency costs.
+Google Translate and DeepL both require paid keys at production volumes.
 
 ### 6.5 Failed experiment: Webshare free-tier proxy
 
-A Webshare free account was set up to work around YouTube IP rate limiting.
-Result: the proxy made things worse. Transcript extraction failed with
-`too many 429 error responses` through the proxy but succeeded without it. The
-free tier provides datacenter IPs, which YouTube blocks more aggressively than
-residential IPs. Proxy support remains in the code as optional but is not
-currently used.
+Transcript extraction failed with repeated 429s through the proxy and
+succeeded without it. Free-tier datacenter IPs are blocked more aggressively
+than residential ones.
 
 ### 6.6 Rejected: rotating proxies for the Wikimedia rate limit
 
-Proposed while designing the non-English definition source, since Wikimedia
-429s after roughly 8-10 anonymous requests. Rejected: it circumvents a rate
-limit rather than complying with it, it is against Wikimedia's bot policy, and
-it reverses the reasoning already recorded in issue #8 and ADR-008 for
-rejecting scraping sources. Downloading the data once makes the question moot,
-and additionally skips recursive template stripping and garbage detection
-because wiktextract resolved both upstream.
+Circumvents a rate limit rather than complying with it, and reverses the
+reasoning already recorded in issue #8 and ADR-008. Downloading the data once
+makes the question moot.
 
 ### 6.7 Mistake: misattributing English lemmatization to caption quality
 
-Garbled lemmas — `toujour`, `allon`, `venon`, `transpi`, `dedan`, `longtemp`,
-`ête` — were repeatedly explained during development as YouTube auto-caption
-noise. They were not. They were an English spaCy model applying English
-morphology rules to French text. This was only discovered when an agent with
-filesystem access checked which spaCy models were actually installed.
+Garbled lemmas were repeatedly explained as YouTube auto-caption noise. They
+were an English spaCy model applying English morphology to French text.
 
-Lesson: a plausible explanation that requires no verification is more dangerous
-than no explanation at all.
+Lesson: a plausible explanation that requires no verification is more
+dangerous than no explanation at all.
 
 ### 6.8 Mistake: claiming dictionaryapi.dev had multilingual coverage
 
-The dual-source definition architecture in ADR-005 was designed on the premise
-that dictionaryapi.dev supports native-language queries via the path parameter.
-This was based on reading the API documentation, not testing it. Direct curl
-tests later showed French returns 404 for words as common as `eau`, `chat`, and
-`maison`. A later multi-language pass confirmed it: 9 of 9 non-English
-languages at 0 percent coverage, against English's 98 percent.
-
-The architecture is internally correct and structurally useless for
-non-English. Recorded in issue #1.
-
-Lesson: verify an external dependency's actual behaviour before building
-architecture on top of it.
+ADR-005 was designed on documentation rather than testing. 9 of 9 non-English
+languages measured at 0% coverage.
 
 ### 6.9 Mistake: an unverified handoff document
 
-A session handoff document asserted that `cards.py` and `translation.py`
-contained specific changes and that `MODEL_ID` had changed. Neither was true —
-the changes existed only as generated files that had never been copied into the
-repository. The document also instructed deleting `pipeline.db` on the basis of
-the non-existent model ID change, which would have destroyed a valid cache.
+A session handoff asserted changes existed that did not, and instructed
+deleting `pipeline.db` on the basis of a model-ID change that had not
+happened.
 
-Lesson: a handoff document must be built from `git diff`, not from memory of
-what was written.
+Lesson: a handoff document must be built from `git diff`, not memory.
 
 ### 6.10 Mistake: recommending the wrong resolution for the is_alpha conflict
 
-When `token.is_alpha` was found to make the new lemma regex's hyphen branches
-unreachable, the recommendation given was to keep `is_alpha` and simplify the
-regex, on the grounds that removing a filter was an unmeasured behaviour
-change.
-
-That reasoning was wrong. `is_alpha` and `_is_valid_lemma` check the same
-property on two different strings, and only the lemma is used downstream.
-Keeping `is_alpha` was the identical mistake as the `len(token.text)` bug fixed
-an hour earlier.
-
-Lesson: a "conservative" recommendation that preserves a known-wrong pattern is
-not conservative.
+A "conservative" recommendation that preserved a known-wrong pattern is not
+conservative.
 
 ### 6.11 Lesson: fixtures can make bugs inexpressible
 
-The mock helper `_make_token()` was called with identical `text` and `lemma`
-values in every early test. That pattern meant no test could express the
-surface-form-versus-lemma distinction, so the bug class was invisible to the
-suite. Two separate bugs of that exact shape shipped.
+`_make_token()` was called with identical `text` and `lemma` in every early
+test, so the surface-form-versus-lemma bug class was invisible to the suite.
+Two separate bugs of that shape shipped.
 
-The same shape appeared again in `TestWordNetLanguageGuard`: 3 of its 4 tests
-mocked both definition sources dead, so they never reached the code they
-claimed to guard and passed vacuously.
+**Six vacuous tests have now been found and rewritten**, all the same family:
+two asserted `x is True or True`, which cannot fail; four patched a name the
+test module had imported directly, so the patch missed and the real function
+ran against this machine's state. One of those passed in full runs and failed
+alone, because the result depended on whether an unrelated test had perturbed
+the import first.
 
 ### 6.12 Lesson: the recurring bug shape in this codebase
 
@@ -388,39 +231,136 @@ Two values that should be the same, with nothing enforcing that they are:
 - `_is_valid_token` guarded `token.text` where `token.lemma_` was used
 - The batch loop built a cache key differently from `fetch_definition`
 - The transcript search used the lemma where the surface form was needed
-- The deck check read a field named `Front` where the generated model's
-  first field is named `Word`
-- Configured paths were resolved against the working directory where the
-  project root was meant
+- The deck check read a field named `Front` where the model's first field is
+  named `Word`
+- Configured paths resolved against the working directory where the project
+  root was meant
+- The cache key was built from `target_language` before the native fallback
+  could change it
 
-None produced a crash. All produced valid-looking wrong output. This is the
-failure mode to watch for in this codebase specifically.
-
-The last two are worth noting for a second reason: both had been sitting in
-the code for the project's whole life, both were found by reading a module
-rather than by any test or any run failing, and both were invisible in
-`pipeline.db` and in the generated `.apkg` files. The output of a duplicated
-run looks exactly like the output of a correct one.
+None produced a crash. All produced valid-looking wrong output.
 
 ### 6.13 Lesson: fixing only the path you were looking at
 
-A second recurring shape, distinct from 6.12. Three times now, a fix was
-written into the found-definition code path when the path that actually
-executes for the affected languages is the not-found fallback:
-
-- The Wiktionary example fix on issue #1
-- OMW synonym supplementation (ADR-008 Option A)
-- The second Wiktionary example, kept in one path and discarded in the other
-
-Each shipped looking correct and changed almost nothing in a real run, because
-a language dictionaryapi.dev cannot find anything for almost never reaches the
-found path. When touching definition assembly, check both paths.
+A fix written into the found-definition path when the path that actually
+executes is the not-found fallback. Now four occurrences: the Wiktionary
+example fix, OMW synonyms, the second Wiktionary example, and the
+`not_found_*` channels that review and backlog modes were dropping entirely.
 
 ### 6.14 Lesson: measure per language before generalising
 
-An early claim that antonym coverage was "at the data ceiling" was measured on
-French alone (20 percent). German and Russian came in at 51 and 46 percent
-against the same source. Similarly, pinning French to `fr_core_news_md` fixed
-its verb tagging, but the same upgrade for Spanish traded one wrong POS for a
-different one. The size/accuracy tradeoff is a per-language-model
-training-data question; one global rule does not answer it for 24 languages.
+An early claim that antonym coverage was "at the data ceiling" was measured
+on French alone. German and Russian came in far higher.
+
+### 6.15 Lesson: cached cards outlive the fix that corrected them
+
+Twice a fix was verified in the code and then measured as still broken,
+because the definition cache served the old assembled fields.
+
+- 349 rows of German lemmas cached under `::en` kept returning false-friend
+  English definitions after the cause was fixed
+- 4532 rows written by a pre-fix sweep kept putting Russian examples on
+  German cards after 8.25 gated them
+
+The cache stores assembled fields, not inputs, so nothing about a fetch-path
+fix invalidates them. **Clearing the affected rows is part of such a fix, not
+a follow-up.** ARCHITECTURE 8.27.
+
+### 6.16 Lesson: a coverage metric can reward the bug it should expose
+
+Cross-language rows scored *higher* on examples than native ones — 87%
+against 45%. That is impossible if examples are constrained to the transcript
+language, and the impossibility is what exposed the 3.3 violation. The number
+went up because the field was being filled with content in the wrong
+language.
+
+When a fix makes a coverage number fall, check whether the number was
+measuring the defect before concluding the fix regressed something.
+
+### 6.17 Dead end: sense selection by word overlap
+
+Implemented, measured, reverted. It fixed the case it was written for — the
+`tapa` card defining Polynesian bark cloth for a video about tapas bars — and
+was net-negative on real vocabulary. 146 of 231 lemmas have more than one
+sense; of the 15 picks it changed, one improved and the rest degraded
+(`côté` → "Nom de famille", `gens` → "Clan familial", `fait` → a participle).
+
+No threshold separates them: the correct `tapa` sense wins with an overlap of
+2, and so does every bad pick. Full evidence in ARCHITECTURE 8.28, including
+what the data says to build instead (POS filtering).
+
+### 6.18 Mistake: verifying in the one context where the bug cannot reproduce
+
+The `--def-lang` failure was reported four times and "fixed" three times
+before the cause was found, because every check was a `python -c` invocation
+that never loads `.env` — and the cause was a `.env` variable. Each fix along
+the way was a real bug, but none was the reported one.
+
+Lesson: reproduce through the same entry point the reporter used, before
+reasoning about the code. The failing command was in their first paste of
+actual terminal output.
+
+---
+
+## 7. Environment specifics
+
+```
+OS:              Windows 11 with WSL2 (Ubuntu)
+Python:          3.10.12
+Virtual env:     .tangovenv  (NOT .venv)
+Project path:    /mnt/c/DSC/Career/Projects/Tango
+Git remotes:     tango-origin -> https://github.com/AlphaNerdFx/Tango  (current)
+                 origin       -> .../Youtube-Anki-Flashcards.git       (renamed, dead)
+Anki:            running on Windows, AnkiConnect bound to 0.0.0.0
+ANKI_HOST:       http://172.28.144.1:8765 (WSL gateway, changes on WSL restart)
+```
+
+Run `make doctor` for the live picture. At the time of writing:
+
+- spaCy models for de, en, es, fr, ja, ko, pt, ru, zh
+- Dictionary indexes for **de (159 MB), fr (323 MB), ru (116 MB) only**.
+  es, ja, ko, pt and zh have a spaCy model but no index, which is exactly the
+  state that produces cards with no definitions. `make dictionary LANGUAGE=es`
+- Translation models: de→en, en→de, fr→en, en→fr, ru→en, en→ru. Those six
+  cover all 12 pairs, because argostranslate pivots through English
+- `MW_API_KEY` set, AnkiConnect reachable
+
+Known environment issues:
+
+- **`ARGOS_PACKAGES_DIR` in `.env` points at an empty directory.** The
+  pipeline now detects this and ignores the setting for the run, with a
+  warning. Unsetting it in `.env` silences that. argostranslate reads the
+  variable itself, which is why it broke translation invisibly.
+- `gh issue list` fails because it resolves `origin`, which points at the
+  pre-rename URL. Pass `--repo AlphaNerdFx/Tango`.
+- `make test` takes ~80s warm; the first run after a cold boot is ~4 minutes,
+  because the repository lives on `/mnt/c`.
+- `pip install tango` installs an unrelated PyPI package. Never run it.
+
+---
+
+## 8. How to work on this project
+
+Beyond CLAUDE.md and OPERATING_RULES.md, the habits this session proved
+necessary:
+
+**Reproduce through the user's entry point first.** See 6.18. Four rounds
+were lost to verifying via `python -c` a bug that only existed under `make`
+and `.env`.
+
+**Ask for the actual terminal output early.** Every long investigation here
+ended the moment real output appeared. The `printf: %3D: invalid directive`
+line settled a five-round hunt instantly.
+
+**Measure on real vocabulary, not on the case that motivated the fix.** 6.17
+is the clearest example: a change that fixed the known-broken card and
+degraded a dozen others.
+
+**Verify by mutation, not by tests passing.** Revert the fix and confirm the
+new tests fail. Six vacuous tests have been found in this suite; a green run
+is not evidence that anything is checked.
+
+**Clear the cache when changing what goes in a field.** 6.15.
+
+**A hard constraint (CLAUDE.md 3.1, 3.2, 3.3) is worth a test that fails
+loudly.** The 3.3 violation shipped because nothing pinned it.

@@ -98,7 +98,15 @@ Definitions and grammatical class may be in a different language when
 the original transcript language. This is the core pedagogical decision —
 learners need to see words in native context.
 
-This constraint has been violated once already. See `SESSION.md`, WordNet bug.
+This constraint has been violated twice. The WordNet bug (see `SESSION.md`),
+and cross-language mode taking examples, synonyms and antonyms from the
+target-language index entry, so a German video with `--def-lang ru` shipped
+Russian sentences. The second shipped and was caught by a coverage sweep
+noticing an impossible number, not by a test. See ARCHITECTURE.md 8.25.
+
+Three call sites populate these fields and each needs the same gate:
+Merriam-Webster, the target-language index, and the transcript-language
+index. Only the last may fill them unconditionally.
 
 ### 3.4 Validate the lemma, not the surface form
 
@@ -208,6 +216,18 @@ must pass different values for the two arguments.
 
 ### Setup
 
+Run this first in any new environment, and whenever something behaves oddly —
+nearly every failure investigated in this project has been setup rather than
+logic, and none of it was visible from the failure itself:
+
+```bash
+make doctor                   # or: python -m pipeline --doctor
+```
+
+It reports spaCy models, dictionary indexes, translation pairs, the MW key
+and AnkiConnect reachability, and prints the command that fixes anything
+missing.
+
 ```bash
 make all                      # venv + install + spaCy model + NLTK data
 pip install -r requirements.txt
@@ -254,7 +274,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 725 passing, 24 deselected. The count drifts as tests are added —
+Expected: 734 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash

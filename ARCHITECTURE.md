@@ -1718,7 +1718,7 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-692 unit tests across eleven test files, 24 more marked integration and
+734 unit tests across eleven test files, 24 more marked integration and
 deselected by default. All run without network, Anki, or installed models.
 Integration tests use `@pytest.mark.integration` and are excluded by the
 default `addopts` in `pyproject.toml`.
