@@ -144,6 +144,26 @@ hr {
     margin-bottom: 6px;
 }
 
+/* Pronunciation (ADR-009 phase 1). Uses the same Anki CSS variables with
+   literal fallbacks as everything above, so it reads correctly in both the
+   light and dark card themes rather than only the one it was written in. */
+.ipa {
+    font-size: 15px;
+    color: var(--fg, #0f3460);
+    font-family: "Charis SIL", "Doulos SIL", "Gentium Plus", serif;
+    margin-bottom: 6px;
+}
+
+.audio-link {
+    font-size: 12px;
+    color: var(--new-count, #00b4d8);
+    text-decoration: none;
+    border: 1px solid var(--new-count, #00b4d8);
+    border-radius: 10px;
+    padding: 2px 9px;
+    display: inline-block;
+}
+
 .vocab-pill {
     background: transparent;
     color: var(--fg, #0f3460);
@@ -214,26 +234,102 @@ BACK_TEMPLATE = """
 <div class="vocab-row">{{Antonyms}}</div>
 {{/Antonyms}}
 
+{{#IPA}}
+<div class="section-label">Pronunciation</div>
+<div class="ipa">{{IPA}}</div>
+{{/IPA}}
+
+{{#Pronunciation}}
+<div class="pronunciation">{{Pronunciation}}</div>
+{{/Pronunciation}}
+
 """
+
+# -- Field identity -----------------------------------------------------------
+
+# The single source of truth for what fields exist and in what order.
+#
+# This tuple exists to retire a hard constraint rather than to restate it.
+# genanki maps a note's values to model fields by INDEX, so for most of this
+# project's life the model's field list and the two note builders were three
+# separate hand-maintained sequences that had to agree. When they disagreed,
+# content was written into the wrong card section silently: no error, no
+# warning, and a perfectly valid .apkg. CLAUDE.md 3.2 asked reviewers to
+# catch that by reading carefully, which is not a mechanism.
+#
+# Now the model is generated from this tuple and both builders address
+# fields BY NAME through _note_fields(), so:
+#   - reordering is a one-line change that cannot desync anything,
+#   - appending is safe by construction,
+#   - a misspelled field name raises instead of shifting every later field,
+#   - an omitted field is empty instead of shifting every later field.
+#
+# The payload dicts the builders construct are also the natural seam for the
+# planned web app and Chrome extension: they are already the card's content
+# keyed by name, independent of genanki. Serializing one to JSON instead of
+# to this tuple is what lets another surface consume pipeline output without
+# reimplementing any of it.
+FIELDS: tuple[str, ...] = (
+    "Word",
+    "Class",
+    "Definition",
+    "1st Example Sentence",
+    "2nd Example Sentence",
+    "Example from Youtube Video",
+    "Synonyms",
+    "Antonyms",
+    "VideoID",
+    "Source",
+    "IPA",             # ADR-009 phase 1
+    "Pronunciation",   # ADR-009 phase 1
+)
+
+# Anki treats a note's FIRST field as its identity: it is what deduplication
+# and the deck duplicate check read (see deck.py and ARCHITECTURE.md 8.22).
+# Pinned by a test so it cannot drift to the front of the tuple by accident.
+IDENTITY_FIELD = "Word"
+
+# The notetype's name in the collection. A module constant rather than a
+# literal in _build_model() because the pre-import field alignment has to
+# address the same notetype by name (deck.ensure_model_fields, called from
+# __main__ before importPackage). Two copies of this string is the recurring
+# bug shape in this codebase -- see SESSION.md 6.12.
+MODEL_NAME = "YT Anki Pipeline — Recognition"
+
+
+def _note_fields(payload: dict[str, str]) -> list[str]:
+    """
+    Turn a name-keyed payload into the positional list genanki expects.
+
+    Args:
+        payload: Field name -> value. Omitted fields become empty strings,
+                 which is what a card with no synonyms or no audio wants.
+
+    Returns:
+        Values ordered to match FIELDS exactly.
+
+    Raises:
+        ValueError: The payload names a field the model does not have.
+            Loud on purpose. A typo used to be the worst case here -- it
+            silently produced a card with everything after it shifted by
+            one -- and this converts that into an immediate failure.
+    """
+    unknown = sorted(set(payload) - set(FIELDS))
+    if unknown:
+        raise ValueError(
+            f"Unknown card field(s): {', '.join(unknown)}. "
+            f"Valid fields are: {', '.join(FIELDS)}."
+        )
+    return [payload.get(name, "") for name in FIELDS]
+
 
 # -- Model --------------------------------------------------------------------
 
 def _build_model() -> genanki.Model:
     return genanki.Model(
         MODEL_ID,
-        "YT Anki Pipeline — Recognition",
-        fields=[
-            {"name": "Word"},
-            {"name": "Class"},
-            {"name": "Definition"},
-            {"name": "1st Example Sentence"},
-            {"name": "2nd Example Sentence"},
-            {"name": "Example from Youtube Video"},
-            {"name": "Synonyms"},
-            {"name": "Antonyms"},
-            {"name": "VideoID"},
-            {"name": "Source"},
-        ],
+        MODEL_NAME,
+        fields=[{"name": name} for name in FIELDS],
         templates=[
             {
                 "name": "Recognition",
@@ -276,30 +372,65 @@ def _format_pills(words: list[str], css_class: str, max_chars: int = 256) -> str
     return " ".join(pills)
 
 
+def _audio_field(audio_url: Optional[str]) -> str:
+    """
+    Render the Pronunciation field from a Wikimedia Commons audio URL.
+
+    A link, not an embedded `[sound:...]` file, and that is the whole
+    decision worth recording here.
+
+    Embedding would mean downloading one audio file per card at build time.
+    ADR-009 costed that: a 400-card deck goes from a few hundred kilobytes
+    to tens of megabytes, every build acquires a network fetch per card
+    against a service with its own rate expectations, and the deck may stop
+    being shareable at all. Coverage makes it worse rather than better --
+    95% of German index rows carry audio, so almost every card would pay.
+
+    A link costs nothing, ships today, and keeps the URL in the field so
+    embedding later is a rendering change rather than a re-fetch. Attribution
+    stays intact because the link points at Commons, which ADR-009 flags as
+    an obligation rather than a courtesy for CC BY-SA material.
+    """
+    if not audio_url:
+        return ""
+    return f'<a class="audio-link" href="{audio_url}">&#9654; Listen</a>'
+
+
 def _build_note(
     result: DefinitionResult,
     model: genanki.Model,
     video_id: str,
     language: str = "en",
+    ipa: Optional[str] = None,
+    audio_url: Optional[str] = None,
 ) -> genanki.Note:
-    """Build a recognition card. Fields match renamed Anki model fields."""
+    """
+    Build a recognition card. Fields match renamed Anki model fields.
+
+    ipa and audio_url come from the offline index (wiktdata schema v2) and
+    are optional: a language with no index, or a word the index has no
+    `sounds` block for, simply leaves both fields empty. Measured on the
+    real German index, 341 of 342 card words carry IPA and 339 an audio URL.
+    """
     synonyms_html = _format_pills(result.synonyms, "vocab-pill")
     antonyms_html = _format_pills(result.antonyms, "antonym-pill")
 
     return genanki.Note(
         model=model,
-        fields=[
-            result.lemma.capitalize(),                   # Word
-            result.part_of_speech,                       # Class
-            result.definition,                           # Definition
-            result.example_dict             or "",       # 1st Example Sentence
-            getattr(result, "example_dict2", None) or "", # 2nd Example Sentence
-            result.example_transcript       or "",       # Example from Youtube Video
-            synonyms_html,                               # Synonyms
-            antonyms_html,                               # Antonyms
-            video_id,                                    # VideoID
-            result.source,                               # Source
-        ],
+        fields=_note_fields({
+            "Word":                       result.lemma.capitalize(),
+            "Class":                      result.part_of_speech,
+            "Definition":                 result.definition,
+            "1st Example Sentence":       result.example_dict or "",
+            "2nd Example Sentence":       getattr(result, "example_dict2", None) or "",
+            "Example from Youtube Video": result.example_transcript or "",
+            "Synonyms":                   synonyms_html,
+            "Antonyms":                   antonyms_html,
+            "VideoID":                    video_id,
+            "Source":                     result.source,
+            "IPA":                        ipa or "",
+            "Pronunciation":              _audio_field(audio_url),
+        }),
         # language is part of the GUID (issue #14) so the same video
         # reprocessed in a second language doesn't collide on a cognate
         # lemma ("train" in English and French both hash the same way
@@ -319,6 +450,8 @@ def _build_fallback_note(
     dict_example2: Optional[str] = None,
     synonyms: Optional[list[str]] = None,
     antonyms: Optional[list[str]] = None,
+    ipa: Optional[str] = None,
+    audio_url: Optional[str] = None,
 ) -> genanki.Note:
     """
     Build a fallback card for a lemma with no definition from any source.
@@ -340,18 +473,20 @@ def _build_fallback_note(
     """
     return genanki.Note(
         model=model,
-        fields=[
-            lemma.capitalize(),                               # Word
-            "",                                              # Class
-            "No definition found",                           # Definition
-            dict_example or "",                               # 1st Example Sentence
-            dict_example2 or "",                              # 2nd Example Sentence
-            example_transcript or "",                        # Example from Youtube Video
-            _format_pills(synonyms or [], "vocab-pill"),      # Synonyms
-            _format_pills(antonyms or [], "antonym-pill"),    # Antonyms
-            video_id,                                        # VideoID
-            "not_found",                                     # Source
-        ],
+        fields=_note_fields({
+            "Word":                       lemma.capitalize(),
+            "Class":                      "",
+            "Definition":                 "No definition found",
+            "1st Example Sentence":       dict_example or "",
+            "2nd Example Sentence":       dict_example2 or "",
+            "Example from Youtube Video": example_transcript or "",
+            "Synonyms":                   _format_pills(synonyms or [], "vocab-pill"),
+            "Antonyms":                   _format_pills(antonyms or [], "antonym-pill"),
+            "VideoID":                    video_id,
+            "Source":                     "not_found",
+            "IPA":                        ipa or "",
+            "Pronunciation":              _audio_field(audio_url),
+        }),
         guid=genanki.guid_for(lemma, video_id, language),
         tags=["yt-anki", video_id, "no-definition"],
     )
@@ -511,7 +646,10 @@ def build_package(
             result.example_transcript = _find_in_snippets(
                 result.lemma, snippets, (surface_forms or {}).get(key)
             )
-        deck.add_note(_build_note(result, model, video_id, language))
+        deck.add_note(_build_note(
+            result, model, video_id, language,
+            ipa=result.ipa, audio_url=result.audio_url,
+        ))
         standard_count += 1
         logger.debug("Card built: '%s' (%s)", result.lemma, result.source)
 

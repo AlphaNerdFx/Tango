@@ -143,7 +143,21 @@ ANKI_IMPORT_TIMEOUT: int = int(os.getenv("ANKI_IMPORT_TIMEOUT", "300"))
 # genanki model ID — NEVER change after first use.
 # Changing this causes Anki to treat all existing cards as belonging
 # to a new model, breaking review history.
-MODEL_ID: int = int(os.getenv("ANKI_MODEL_ID", "1607392319"))
+#
+# Changed ONCE, on 14 August 2026, because the previous value never held
+# any of this pipeline's cards. 1607392319 is the model ID in genanki's
+# README example, copied along with the tutorial and paired there with a
+# notetype named "Simple Model". Any collection that ever imported a deck
+# built from that tutorial already has the ID taken, and Anki then refuses
+# to reuse it: it forks a new notetype with a bumped ID and a suffixed
+# name. Measured on a real collection — 1607392319 held a 7-field "Simple
+# Model" with zero notes, while this pipeline's 2135 cards sat on
+# 1607392321, the ID Anki assigned when it forked.
+#
+# The new value is that fork's ID, so packages now match the notetype the
+# cards are actually on and imports merge instead of forking again. See
+# ARCHITECTURE.md 8.31. Do not change it again.
+MODEL_ID: int = int(os.getenv("ANKI_MODEL_ID", "1607392321"))
 
 # genanki deck ID — NEVER change after first use.
 # Same constraint as MODEL_ID.

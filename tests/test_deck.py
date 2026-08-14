@@ -26,6 +26,7 @@ from pipeline.deck import (
     _write_backlog,
     check_vocabulary,
     clear_backlog,
+    ensure_model_fields,
     get_backlog,
     get_card_fronts,
     get_deck_names,
@@ -105,6 +106,88 @@ class TestGetDeckNames:
     def test_raises_when_anki_not_running(self, _):
         with pytest.raises(AnkiNotRunningError):
             get_deck_names()
+
+
+# ── ensure_model_fields ───────────────────────────────────────────────────────
+
+class TestEnsureModelFields:
+    """
+    Aligning the collection's notetype with cards.FIELDS before an import.
+
+    Without it, importing a package whose model carries fields the notetype
+    lacks makes Anki FORK the notetype at a bumped ID instead of merging:
+    measured on a real collection, the 12-field package produced
+    "YT Anki Pipeline — Recognition-da2c0" at 1607392322 and left all 207
+    existing notes behind on 1607392321. ARCHITECTURE.md 8.32.
+    """
+
+    CANON = ("Word", "Class", "Definition", "IPA", "Pronunciation")
+
+    @patch("pipeline.deck._anki_request")
+    def test_adds_only_the_missing_fields(self, mock_req):
+        mock_req.side_effect = [
+            ["YT Model"],                        # modelNames
+            ["Word", "Class", "Definition"],     # modelFieldNames
+            None, None,                          # two modelFieldAdd calls
+        ]
+        added = ensure_model_fields("YT Model", self.CANON)
+        assert added == ["IPA", "Pronunciation"]
+
+        adds = [c for c in mock_req.call_args_list if c[0][0] == "modelFieldAdd"]
+        assert [c[1]["fieldName"] for c in adds] == ["IPA", "Pronunciation"]
+
+    @patch("pipeline.deck._anki_request")
+    def test_missing_fields_go_to_their_canonical_index(self, mock_req):
+        # The mutation this pins: using len(existing) or a running counter
+        # instead of the index within FIELDS. Both missing fields would then
+        # be requested at 3, and the notetype would end up with IPA and
+        # Pronunciation transposed relative to every generated package --
+        # the exact silent field-shift 3.2 exists to prevent.
+        mock_req.side_effect = [
+            ["YT Model"],
+            ["Word", "Class", "Definition"],
+            None, None,
+        ]
+        ensure_model_fields("YT Model", self.CANON)
+
+        adds = [c for c in mock_req.call_args_list if c[0][0] == "modelFieldAdd"]
+        assert [c[1]["index"] for c in adds] == [3, 4]
+
+    @patch("pipeline.deck._anki_request")
+    def test_a_gap_in_the_middle_is_filled_at_its_own_index(self, mock_req):
+        # Guards the same thing from the other side: a notetype missing an
+        # EARLY field must receive it at that position, not appended at the
+        # end where it would shift nothing into place.
+        mock_req.side_effect = [
+            ["YT Model"],
+            ["Word", "Definition", "IPA", "Pronunciation"],   # no "Class"
+            None,
+        ]
+        added = ensure_model_fields("YT Model", self.CANON)
+        assert added == ["Class"]
+
+        adds = [c for c in mock_req.call_args_list if c[0][0] == "modelFieldAdd"]
+        assert adds[0][1]["index"] == 1
+
+    @patch("pipeline.deck._anki_request")
+    def test_matching_notetype_is_left_alone(self, mock_req):
+        mock_req.side_effect = [["YT Model"], list(self.CANON)]
+        assert ensure_model_fields("YT Model", self.CANON) == []
+        assert not [c for c in mock_req.call_args_list if c[0][0] == "modelFieldAdd"]
+
+    @patch("pipeline.deck._anki_request")
+    def test_absent_notetype_is_not_created_here(self, mock_req):
+        # A first import creates the notetype whole and correct, so there is
+        # nothing to align. Calling modelFieldAdd against a notetype that
+        # does not exist would raise instead.
+        mock_req.side_effect = [["Some Other Model"]]
+        assert ensure_model_fields("YT Model", self.CANON) == []
+        assert mock_req.call_count == 1
+
+    @patch("pipeline.deck._anki_request", side_effect=AnkiNotRunningError("down"))
+    def test_raises_when_anki_not_running(self, _):
+        with pytest.raises(AnkiNotRunningError):
+            ensure_model_fields("YT Model", self.CANON)
 
 
 # ── get_card_fronts ───────────────────────────────────────────────────────────

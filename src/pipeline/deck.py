@@ -34,7 +34,7 @@ import sqlite3
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 import requests
 from rapidfuzz import fuzz, process as fuzz_process
@@ -172,6 +172,61 @@ def get_deck_names() -> list[str]:
     """
     result = _anki_request("deckNames")
     return sorted(result)
+
+
+def ensure_model_fields(model_name: str, fields: Sequence[str]) -> list[str]:
+    """
+    Add any field the collection's notetype is missing, before an import.
+
+    Anki matches an incoming notetype by ID, and when the ID already exists
+    with a DIFFERENT field list it does not merge -- it forks a new notetype
+    with the ID bumped by one and the name suffixed. Measured: importing the
+    12-field package into a collection holding the 10-field notetype at
+    1607392321 produced "YT Anki Pipeline — Recognition-da2c0" at 1607392322,
+    left all 207 existing notes on the old notetype, and put the new card on
+    the fork. That is the same mechanism that moved this project's own ID
+    from genanki's 1607392319 to 1607392321 -- twice, hence the +2. See
+    ARCHITECTURE.md 8.32.
+
+    Adding the fields first makes the schemas match, so the import merges.
+    This is the safe direction: adding a field preserves every note, its
+    content and its scheduling. Verified on a real collection -- all 207
+    notes came through with byte-identical field values and two new empty
+    fields.
+
+    Args:
+        model_name: The notetype's name in the collection (cards.MODEL_NAME).
+        fields:     The full ordered field list (cards.FIELDS). Missing names
+                    are added at their index in this sequence.
+
+    Returns:
+        The field names added, in the order added. Empty when the notetype
+        already matched, and empty when it does not exist at all -- a first
+        import creates it whole and correct, so there is nothing to align.
+
+    Raises:
+        AnkiNotRunningError: Anki not running.
+        AnkiConnectError:    AnkiConnect returned an error.
+    """
+    if model_name not in _anki_request("modelNames"):
+        return []
+
+    existing = _anki_request("modelFieldNames", modelName=model_name)
+    missing = [name for name in fields if name not in existing]
+
+    for name in missing:
+        # Index within the canonical order, not len(existing): a notetype
+        # missing two fields must still receive them at 10 and 11 rather
+        # than in whatever order the loop happens to reach them.
+        _anki_request(
+            "modelFieldAdd",
+            modelName=model_name,
+            fieldName=name,
+            index=list(fields).index(name),
+        )
+        logger.info("Added field '%s' to notetype '%s'.", name, model_name)
+
+    return missing
 
 
 # Field names tried when a note carries no usable "order" key. "Front" is

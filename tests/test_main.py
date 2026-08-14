@@ -14,6 +14,7 @@ from unittest.mock import DEFAULT, MagicMock, patch, call
 import pytest
 
 import pipeline.__main__ as main_module
+from pipeline import cards as cards_module
 from pipeline.__main__ import (
     _build_parser,
     _prompt_import,
@@ -271,6 +272,27 @@ class TestRunSetupWizard:
 
 class TestPromptImport:
 
+    @pytest.fixture(autouse=True)
+    def _aligned_notetype(self):
+        """
+        Stub the pre-import notetype alignment for this class.
+
+        Every test here patches `requests.post` with a single mock, which
+        cannot represent two different AnkiConnect actions. Once
+        _prompt_import() started aligning the notetype first, that one mock
+        answered `modelNames` instead, and the assertions below read the
+        wrong call -- test_import_on_y_answer still passed, but on the
+        alignment POST rather than the import it names.
+
+        Patched on the module object, not re-imported into this test module:
+        _prompt_import() resolves it as deck_module.ensure_model_fields at
+        call time, and patching a directly-imported name is how six vacuous
+        tests in this suite silently stopped patching anything (SESSION.md
+        6.11). The alignment itself is covered in test_deck.py.
+        """
+        with patch("pipeline.deck.ensure_model_fields", return_value=[]) as stub:
+            yield stub
+
     def test_skip_on_n_answer(self, tmp_apkg):
         with patch("builtins.input", return_value="n"):
             with patch("requests.post") as mock_post:
@@ -331,6 +353,48 @@ class TestPromptImport:
             _prompt_import(apkg_path)
             path_sent = mock_post.call_args[1]["json"]["params"]["path"]
         assert path_sent == "C:\\fake\\output\\video_20260101_000000.apkg"
+
+    def test_notetype_is_aligned_before_the_package_is_imported(
+        self, tmp_apkg, _aligned_notetype
+    ):
+        # Order is the whole point: aligning AFTER the import is aligning
+        # after Anki has already forked the notetype. Measured on a real
+        # collection -- a 12-field package against a 10-field notetype
+        # produced a second notetype at a bumped ID and left 207 notes
+        # behind on the old one (ARCHITECTURE.md 8.32).
+        calls = []
+        _aligned_notetype.side_effect = lambda *a, **k: calls.append("align") or []
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"result": True, "error": None}
+        with patch("builtins.input", return_value="y"), \
+             patch("requests.post", side_effect=lambda *a, **k: (
+                 calls.append("import"), mock_response)[1]):
+            _prompt_import(tmp_apkg)
+        assert calls == ["align", "import"]
+
+    def test_the_real_field_list_is_what_gets_aligned(
+        self, tmp_apkg, _aligned_notetype
+    ):
+        # Pins the arguments, not just the call. Passing a stale literal
+        # here instead of cards.FIELDS would leave any future field out of
+        # the alignment and fork the notetype on the import that adds it.
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"result": True, "error": None}
+        with patch("builtins.input", return_value="y"), \
+             patch("requests.post", return_value=mock_response):
+            _prompt_import(tmp_apkg)
+        name, fields = _aligned_notetype.call_args[0]
+        assert name == cards_module.MODEL_NAME
+        assert tuple(fields) == cards_module.FIELDS
+
+    def test_a_failed_alignment_blocks_the_import(self, tmp_apkg, _aligned_notetype):
+        # The fail-safe. If we could not confirm the notetype's shape,
+        # importing is what splits the collection, so it must not happen.
+        _aligned_notetype.side_effect = RuntimeError("anki went away")
+        with patch("builtins.input", return_value="y"), \
+             patch("requests.post") as mock_post:
+            _prompt_import(tmp_apkg)
+            mock_post.assert_not_called()
 
 
 # ── WSL path translation (issue #5) ──────────────────────────────────────────

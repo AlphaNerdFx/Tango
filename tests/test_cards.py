@@ -501,9 +501,17 @@ class TestBuildPackage:
     def test_language_passed_to_build_note(self, sample_result):
         # Verifies build_package() actually forwards its language argument
         # rather than always defaulting to "en" at the call site.
+        #
+        # Asserts on the language argument alone, not the whole call. This
+        # used to use assert_called_once_with() on the full signature, which
+        # coupled it to every unrelated parameter _build_note ever gains --
+        # ADR-009's ipa/audio_url broke it while the behaviour it checks was
+        # untouched. The sibling test below was already narrowed for exactly
+        # this reason when issue #1 added dict_example.
         with patch.object(cards_module, "_build_note", wraps=cards_module._build_note) as spy:
             build_package(VIDEO_ID, DECK_NAME, [sample_result], [], language="fr")
-            spy.assert_called_once_with(sample_result, spy.call_args[0][1], VIDEO_ID, "fr")
+            assert spy.call_count == 1
+            assert spy.call_args[0][3] == "fr"
 
     def test_language_passed_to_build_fallback_note(self, sample_snippets):
         with patch.object(

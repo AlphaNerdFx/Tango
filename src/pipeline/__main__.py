@@ -149,6 +149,29 @@ def _prompt_import(apkg_path: Path) -> None:
         _info(f"Skipped. Import manually: File → Import in Anki.")
         return
 
+    # Align the collection's notetype with cards.FIELDS BEFORE importing.
+    # Without this, an import whose model carries fields the collection's
+    # notetype lacks does not merge -- Anki forks the notetype at a bumped
+    # ID and the new cards land there, split off from every card the user
+    # already has. ARCHITECTURE.md 8.32.
+    #
+    # Deliberately outside the import's try block, and deliberately fatal to
+    # the import: if the alignment failed we do not know the notetype's
+    # shape, and importing anyway is what causes the fork. Better to leave
+    # the .apkg on disk than to split the user's collection.
+    try:
+        added = deck_module.ensure_model_fields(cards.MODEL_NAME, cards.FIELDS)
+    except Exception as exc:
+        _warn(f"Could not align the Anki notetype: {exc}")
+        _info("Import skipped — importing now could fork the notetype and")
+        _info("separate new cards from your existing ones. Retry once Anki")
+        _info("is reachable, or import manually after adding the fields.")
+        return
+
+    if added:
+        _info(f"Added {len(added)} field(s) to the Anki notetype: {', '.join(added)}")
+        _info("This is a schema change — Anki will ask for a full sync next time.")
+
     try:
         import requests as req
         absolute_path = _translate_wsl_path(str(apkg_path.resolve()))

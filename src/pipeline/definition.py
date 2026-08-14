@@ -235,6 +235,14 @@ class DefinitionResult:
         antonyms:             List of antonyms. May be empty.
         part_of_speech:       e.g. "verb", "noun", "adjective".
         source:               Which API provided the data.
+        ipa:                  Pronunciation transcription, e.g. "[haˈloː]".
+        audio_url:            Wikimedia Commons recording of the word.
+
+    ipa and audio_url default to None and come only from the offline index
+    (wiktdata schema v2, ADR-009 phase 1). A language with no index, or a
+    word whose entry has no `sounds` block, leaves both empty and the card
+    simply omits the section. They are last so every existing positional
+    construction of this dataclass keeps working.
     """
     lemma:                str
     definition:           str
@@ -245,6 +253,8 @@ class DefinitionResult:
     antonyms:             list[str]
     part_of_speech:       str
     source:               str
+    ipa:                  Optional[str] = None
+    audio_url:            Optional[str] = None
 
 
 @dataclass
@@ -408,6 +418,14 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE definitions ADD COLUMN example_dict2 TEXT")
     except Exception:
         pass  # Column already exists — safe to ignore
+    # Same pattern for the ADR-009 phase 1 columns. The cache stores
+    # assembled card fields (8.27), so pronunciation has to live here too or
+    # every cache hit would ship a card with the section missing.
+    for column in ("ipa", "audio_url"):
+        try:
+            conn.execute(f"ALTER TABLE definitions ADD COLUMN {column} TEXT")
+        except Exception:
+            pass  # Column already exists — safe to ignore
     conn.commit()
 
 
@@ -472,8 +490,8 @@ def _cache_set(result: DefinitionResult) -> None:
             """
             INSERT OR REPLACE INTO definitions
                 (lemma, definition, example_dict, example_dict2, synonyms, antonyms,
-                 part_of_speech, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 part_of_speech, source, ipa, audio_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 result.lemma,
@@ -484,6 +502,8 @@ def _cache_set(result: DefinitionResult) -> None:
                 json.dumps(result.antonyms),
                 result.part_of_speech,
                 result.source,
+                result.ipa,
+                result.audio_url,
             ),
         )
 
@@ -505,8 +525,8 @@ def _cache_set_key(key: str, result: DefinitionResult) -> None:
                 """
                 INSERT OR REPLACE INTO definitions
                     (lemma, definition, example_dict, example_dict2, synonyms, antonyms,
-                     part_of_speech, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                     part_of_speech, source, ipa, audio_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     key,
@@ -517,6 +537,8 @@ def _cache_set_key(key: str, result: DefinitionResult) -> None:
                     json.dumps(result.antonyms),
                     result.part_of_speech,
                     result.source,
+                    result.ipa,
+                    result.audio_url,
                 ),
             )
     except sqlite3.Error as exc:
@@ -548,6 +570,8 @@ def _cache_row_to_result(
         antonyms=json.loads(row.get("antonyms") or "[]"),
         part_of_speech=row.get("part_of_speech", ""),
         source=row["source"],
+        ipa=row.get("ipa") or None,
+        audio_url=row.get("audio_url") or None,
     )
 
 
@@ -1065,6 +1089,11 @@ def fetch_definition(
     # ── Step 3: Fetch definition in target language ───────────────────────────
     definition:    Optional[str] = None
     part_of_speech: str          = ""
+    # ADR-009 phase 1. Only the offline index carries these, so they stay
+    # empty for a language with no index -- the card omits the section
+    # rather than showing a blank one.
+    ipa:           Optional[str] = None
+    audio_url:     Optional[str] = None
 
     # Try MW first for English definitions
     _actual_source = "dictionaryapi"
@@ -1132,6 +1161,8 @@ def fetch_definition(
             definition     = entry.definition
             part_of_speech = part_of_speech or entry.part_of_speech
             _actual_source = "wiktionary"
+            ipa            = ipa or entry.ipa
+            audio_url      = audio_url or entry.audio_url
             # Examples, synonyms and antonyms only when this entry is in the
             # transcript language. CLAUDE.md 3.3 requires those three fields
             # to stay in the language the learner is hearing; the definition
@@ -1180,6 +1211,8 @@ def fetch_definition(
                 definition     = entry.definition
                 part_of_speech = part_of_speech or entry.part_of_speech
                 _actual_source = "wiktionary-native"
+                ipa            = ipa or entry.ipa
+                audio_url      = audio_url or entry.audio_url
                 if not native_ex1:
                     native_ex1 = entry.example1
                     native_ex2 = entry.example2
@@ -1258,6 +1291,8 @@ def fetch_definition(
         antonyms=[s for s in native_ants[:5] if s],
         part_of_speech=part_of_speech,
         source=_actual_source,
+        ipa=ipa,
+        audio_url=audio_url,
     )
 
     # Skipped for measurement runs. A sweep that writes is how 4532 rows of
