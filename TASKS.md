@@ -486,17 +486,19 @@ remaining user-visible value is; the rest is measurement and hygiene.
       changing the field list is a notetype schema change that must be tested
       against a collection with real review history.
 
-- [ ] **The sweep needs Anki, and does not say so.** All 16 rows failed with
-      "Anki is not running. All words written to backlog" because Anki was
-      closed. The deck check needs AnkiConnect even though the sweep never
-      imports. Either check up front and fail with a clear message, or bypass
-      the deck check for measurement runs.
+- [x] **The sweep needs Anki, and does not say so.** Checks AnkiConnect up
+      front now and fails with a message naming the cause, instead of
+      spending every row's full runtime to produce 16 identical failures.
+      `--skip-anki-check` overrides.
 
-- [ ] **Add a `--no-cache` flag for measurement runs.** The sweep exists to
-      tell the truth about the pipeline and a warm cache is what stops it: a
-      corrected sweep still showed Russian examples on German cards because
-      it read rows written before the fix. `fetch_definition` already takes
-      `use_cache`; nothing exposes it. ARCHITECTURE.md 8.27.
+- [x] **Add a `--no-cache` flag for measurement runs.** Shipped, and the
+      sweep defaults to it. Neither reads nor writes the cache — writing
+      mattered too, since a sweep that writes is how 4532 rows of Russian
+      examples reached German cards. `use_cache` and `write_cache` are
+      deliberately separate on `fetch_definition`: the batch path already
+      passes `use_cache=False` after resolving the read itself, so one
+      combined parameter would have disabled caching for the normal path
+      while looking correct.
 
 - [ ] **Consider a cache key carrying both languages.** Today it is
       `lemma::target_language`, so a row contaminated by a cross-language run
@@ -514,9 +516,12 @@ remaining user-visible value is; the rest is measurement and hygiene.
       impossible number. 3.1 (MODEL_ID/DECK_ID), 3.2 (field order) and 3.3
       (field language) should each fail loudly rather than rely on review.
 
-- [ ] **Re-run the sweep and record the corrected baseline.** Blocked on the
-      two items above it; the numbers in SESSION.md section 5 predate the 3.3
-      fix and overstate cross-language example and synonym coverage.
+- [x] **Re-run the sweep and record the corrected baseline.** Done, 13
+      August, all 16 rows, cache off. SESSION.md section 5. English examples
+      72% → 97% (the Merriam-Webster fix), en → de antonyms 59% → 24% (the
+      3.3 fix, and the fall is the point — those were German antonyms on
+      English cards). All 12 cross-language pairs translated; definitions
+      94-100% everywhere.
 
 
 
@@ -571,11 +576,8 @@ remaining user-visible value is; the rest is measurement and hygiene.
 - [x] **Sense selection by part of speech.** Shipped; duplicate of the entry
       under "High — next up" above. ARCHITECTURE.md 8.29.
 
-- [ ] **Add a --no-cache flag for measurement runs.** The sweep exists to tell
-      the truth about the pipeline and a warm cache is what stops it: the
-      first corrected sweep still showed Russian examples on German cards
-      because it read rows written before the fix. `fetch_definition` already
-      takes `use_cache`; nothing exposes it. See ARCHITECTURE.md 8.27.
+- [x] **Add a --no-cache flag for measurement runs.** Shipped; duplicate of
+      the entry above.
 
 - [ ] **Consider a cache key carrying both languages.** Today it is
       `lemma::target_language`, so a row contaminated by a cross-language run
@@ -583,9 +585,8 @@ remaining user-visible value is; the rest is measurement and hygiene.
       by joining the vocabulary table back to each video's language. Both
       cache-poisoning incidents would have been a one-line delete.
 
-- [ ] **Re-run the sweep and record the corrected baseline.** The numbers in
-      hand were taken before the 3.3 fix and overstate cross-language example
-      and synonym coverage.
+- [x] **Re-run the sweep and record the corrected baseline.** Done;
+      duplicate of the entry above. SESSION.md section 5.
 
 
 

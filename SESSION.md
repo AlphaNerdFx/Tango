@@ -113,9 +113,14 @@ None. The working tree is clean and `main` is level with `tango-origin/main`.
 
 ```bash
 python scripts/coverage_matrix.py --dry-run     # plan only
-python scripts/coverage_matrix.py               # all 16 combinations
+python scripts/coverage_matrix.py               # all 16 combinations, uncached
 python scripts/coverage_matrix.py --langs de,fr
+python scripts/coverage_matrix.py --cache       # faster, and lies (see below)
 ```
+
+It runs `--no-cache` by default and refuses to start if AnkiConnect is
+unreachable. Both defaults are scar tissue: the two failed attempts below
+were a warm cache and a closed Anki.
 
 16 combinations for 4 languages: 4 native plus 4×3 cross-language. It does
 not import into Anki; each run generates a package and the fields are counted
@@ -127,32 +132,74 @@ and it found the 3.3 violation above — because cross-language rows scored
 *higher* on examples than native ones, which is impossible if the fields are
 constrained to the transcript language.
 
-**Last good numbers** (10 August, after all models were installed but before
-the 3.3 fix, so cross-language example and synonym figures are overstated):
+**CORRECTED BASELINE — 13 August**, all 16 rows, cache off, after the 3.3
+fix, the Merriam-Webster example fix and POS sense selection (8.29). This is
+the number to compare against; the two earlier attempts are recorded below
+because they failed in instructive ways.
 
-| combination | cards | defs | ex1 | ex2 | syn | ant |
-|---|---|---|---|---|---|---|
-| de → native | 362 | 94% | 91% | 73% | 65% | 59% |
-| fr → native | 207 | 99% | 97% | 75% | 85% | 23% |
-| en → native | 271 | 100% | 72% | 52% | 94% | 30% |
-| ru → native | 701 | 95% | 76% | 40% | 73% | 48% |
-| de → en | 362 | 99% | 45% | 36% | 24% | 3% |
-| fr → en | 207 | 99% | 44% | 31% | 73% | 3% |
-| ru → en | 701 | 100% | 35% | 21% | 24% | 0% |
-| en → de | 271 | 97% | 98% | 83% | 95% | 59% |
+`fell` is the share of definitions that came back in the transcript language
+because the target lookup found nothing (8.26). 0% on native rows by
+definition.
 
-The consistent finding across every language: **cross-language mode costs
-most of the synonyms and antonyms**, because 3.3 requires those to stay in
-the transcript language while the definition may change. Native definitions
-produce materially better cards for anyone who can read the target language.
+| combination | cards | defs | fell | ex1 | ex2 | syn | ant |
+|---|---|---|---|---|---|---|---|
+| de → native | 362 | 94% | – | 90% | 72% | 62% | 57% |
+| fr → native | 207 | 99% | – | 97% | 75% | 85% | 23% |
+| en → native | 271 | 100% | – | 97% | 92% | 92% | 26% |
+| ru → native | 701 | 95% | – | 75% | 38% | 73% | 48% |
+| de → en | 362 | 99% | 4% | 44% | 35% | 23% | 3% |
+| de → fr | 362 | 98% | 14% | 49% | 39% | 9% | 7% |
+| de → ru | 362 | 97% | 22% | 53% | 41% | 13% | 13% |
+| fr → en | 207 | 99% | 1% | 57% | 41% | 81% | 0% |
+| fr → de | 207 | 99% | 12% | 61% | 44% | 80% | 1% |
+| fr → ru | 207 | 99% | 16% | 63% | 46% | 81% | 4% |
+| en → de | 271 | 97% | 0% | 93% | 82% | 91% | 24% |
+| en → fr | 271 | 94% | 0% | 94% | 83% | 90% | 24% |
+| en → ru | 271 | 95% | 0% | 94% | 84% | 90% | 24% |
+| ru → en | 701 | 100% | 0% | 35% | 21% | 24% | 0% |
+| ru → de | 701 | 99% | 4% | 19% | 11% | 3% | 2% |
+| ru → fr | 701 | 99% | 4% | 16% | 10% | 3% | 2% |
 
-**A corrected baseline is still outstanding.** Two attempts failed:
+All 12 cross-language pairs translated. Definitions are now 94-100%
+everywhere, native or not.
+
+**What moved, and why:**
+
+*English examples 72% → 97%, second example 52% → 92%.* The Merriam-Webster
+fix: examples were being parsed and dropped at the call site. Largest single
+gain in the table.
+
+*en → de antonyms 59% → 24%, synonyms 95% → 90%, examples 98% → 93%.* The
+3.3 fix, and **the drop is the point**. Those fields were being filled from
+the German entry, so an English video was shipping German content. English
+native antonyms measure 26%, so 24% is now consistent with the language the
+fields are required to be in; 59% was German's rate (57%), which is what
+gave the violation away. TASKS.md predicted this exact fall.
+
+*Native rows otherwise flat* — de 91→90 / 65→62 / 59→57, ru 76→75, fr
+identical. POS selection changes which row is read, so a word's synonyms can
+come from a different sense. Within noise, and the sense is more often right.
+
+**The standing finding, now measured on all 12 pairs rather than 3:
+cross-language mode costs most of the synonyms and antonyms.** 3.3 keeps
+those in the transcript language while the definition may change, so they
+can only come from sources that cover the transcript language. German loses
+62% → 9-23%, Russian 73% → 3-24%. French holds up (85% → 80-81%) because
+OMW covers it; English holds up for the same reason. **Native definitions
+still produce materially better cards for anyone who can read the target
+language.**
+
+*Russian is the weakest row and worth a look:* ru → de/fr examples collapse
+to 16-19% against 75% native, the largest gap in the table.
+
+**Two earlier attempts failed**, and both defaults above exist because of
+them:
 
 1. The first read stale cache rows written before the 3.3 fix (see 6.15).
+   Fixed by `--no-cache`, now the default.
 2. The second failed all 16 rows with "Anki is not running. All words written
    to backlog" — Anki was closed while it ran. The sweep needs AnkiConnect
-   for the deck check even though it never imports, and it does not check
-   for that up front. Filed.
+   for the deck check even though it never imports. It now checks up front.
 
 ---
 
