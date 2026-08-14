@@ -357,3 +357,18 @@ ARCHITECTURE.md                  This repo, full system detail
 SESSION.md                       Current working state
 TASKS.md                         Prioritised remaining work
 ```
+
+## 10. Pre-commit gate
+Never commit unless `make check` exits 0. Run it as a bare command (`make check`) — do NOT pipe to `tail`, `head`, or any filter, since pipes mask the real exit code. If output is long, redirect to a file and grep it: `make check > /tmp/check.log 2>&1; echo "exit=$?"; tail -50 /tmp/check.log`.
+
+## 11. Destructive git commands
+Never run `git checkout -- <file>`, `git restore`, `git reset --hard`, or `git clean` on a dirty working tree without first showing me `git status` + `git diff` and getting explicit confirmation. If a revert is needed, prefer `git stash push -m "<reason>"` so the work is recoverable.
+
+## 12. Test quality bar
+Every new test must fail if the code under test is broken. After writing tests, verify by mutating the target function (flip a condition, return a wrong constant) and confirming the test fails, then revert the mutation. Vacuous tests (asserting on constants, no-op assertions, tests that pass on an empty implementation) are not acceptable.
+
+## 13. Autonomous/long-running sessions
+When working autonomously: commit in small, verified increments; keep a running HANDOVER.md at the repo root with current state, what's in flight, background jobs (PID/log path), and open decisions for me. Pause and use AskUserQuestion for any irreversible or architectural choice rather than guessing.
+
+## 14. Docs edits
+Before inserting a new section into a Markdown doc, print the existing heading outline (`grep -n '^#' <file>`) and state which heading the new section goes after. Match the surrounding heading level and ordering convention.

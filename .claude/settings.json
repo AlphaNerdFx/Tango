@@ -2,5 +2,20 @@
   "attribution": {
     "commit": "",
     "pr": ""
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cmd=$(jq -r '.tool_input.command // empty'); if printf '%s' \"$cmd\" | grep -qE 'git +(checkout +--|restore|reset +--hard|clean +-[a-z]*f)'; then echo 'Blocked: destructive git on a dirty tree discards unrecoverable work. Use `git stash push -m \"<reason>\"` instead, then report the stash name.' >&2; exit 2; fi; if printf '%s' \"$cmd\" | grep -q 'git commit'; then cd \"${CLAUDE_PROJECT_DIR:-.}\" || exit 0; if ! make check >/tmp/tango-check.log 2>&1; then echo 'Blocked: make check is failing, so this commit would land on a red build. See /tmp/tango-check.log' >&2; exit 2; fi; fi; exit 0",
+            "timeout": 300,
+            "statusMessage": "Checking commit gate / destructive git"
+          }
+        ]
+      }
+    ]
   }
 }

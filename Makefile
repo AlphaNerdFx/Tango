@@ -238,6 +238,27 @@ test: check-os
 		-q
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Unit tests passed.\n"
 
+# -- check --------------------------------------------------------------------
+# The pre-commit gate (CLAUDE.md 10). Runs the unit suite and exits non-zero
+# if anything fails, with no pipe to swallow the status.
+#
+# Deliberately NOT gated on lint or typecheck. Both are red on code that
+# predates this target -- 176 ruff findings, 70 of them the house Optional[X]
+# idiom, and 19 mypy errors -- so requiring them would block every commit
+# rather than catch anything. They run here as advisory output, and the
+# counts are printed so a change that makes either worse is visible. Tighten
+# this to a hard gate once the existing debt is cleared.
+
+check: check-os
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Pre-commit check: unit tests...\n"
+	@PYTHONPATH=src $(VENV_PYTHON) -m pytest tests/ -m "not integration" --tb=short -q
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Advisory (not gating):\n"
+	@printf "    ruff  "; $(VENV_PYTHON) -m ruff check src/pipeline/ tests/ 2>/dev/null \
+		| tail -2 | head -1 || true
+	@printf "    mypy  "; $(VENV_PYTHON) -m mypy src/pipeline/ --ignore-missing-imports 2>/dev/null \
+		| tail -1 || true
+	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Check passed.\n"
+
 # -- test-all -----------------------------------------------------------------
 
 test-all: check-os
