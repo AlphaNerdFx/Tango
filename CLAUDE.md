@@ -51,14 +51,42 @@ Full detail in `ARCHITECTURE.md`.
 
 ## 3. Hard constraints — never violate these
 
+> **Enforced, not just documented.** Constraints 3.1, 3.2 and 3.3 now have
+> tests in `tests/test_hard_constraints.py` that fail on the specific
+> mistake each one describes, and every one of those tests has been
+> mutation-verified. Prose asked reviewers to notice; the tests notice. If
+> you change something here, change the test with it and re-run the mutation.
+>
+> 3.4 is covered by the paired lemma/surface-form tests in `test_nlp.py`.
+> **3.5 and 3.6 are still prose only** — no test fails if you add a
+> network-dependent test to the default run or a heavy dependency to the
+> base install. Do not read this box as blanket coverage.
+
 ### 3.1 ANKI_MODEL_ID and ANKI_DECK_ID must not change
 
 Current values, verified against the actual repository:
 
 ```
-MODEL_ID = 1607392319
+MODEL_ID = 1607392321
 DECK_ID  = 2059400110
 ```
+
+`MODEL_ID` was changed once, on 14 August 2026, and this is the only time it
+may ever move. The previous value, `1607392319`, is the model ID in
+**genanki's README example**, copied along with the tutorial and paired
+there with a notetype named `Simple Model`. Any collection that ever
+imported a deck built from that tutorial already has the ID taken, and Anki
+will not reuse it — it forks a new notetype with a bumped ID and a suffixed
+name. Measured on a real collection: `1607392319` held a 7-field
+`Simple Model` with **zero** notes, while this pipeline's 2135 cards sat on
+`1607392321`, the ID Anki assigned when it forked. Five separate forked
+notetypes had accumulated that way. The constraint was real; it was
+protecting an ID that held none of our cards. See ARCHITECTURE.md 8.31.
+
+Note the ID resolves through `ANKI_MODEL_ID`, so `.env` overrides the
+default. Pinning only the resolved value is not enough — a test doing that
+passes on any machine with a `.env` while the source default drifts. That
+gap was found by mutation and the tests now pin the source literal too.
 
 genanki uses these integers to identify the card model and deck across Anki
 imports. Changing either makes Anki treat every existing user card as belonging
@@ -67,29 +95,65 @@ undo.
 
 If a task appears to require changing them, stop and ask.
 
-### 3.2 Card field order is positional and must match exactly
+### 3.2 Card fields have one source of truth: `cards.FIELDS`
 
-genanki maps note fields to model fields by index, not by name. A mismatch
-between the field list in `_build_model()` and the values list in
-`_build_note()` silently writes content into the wrong card section with no
-error, no warning, and a valid `.apkg` file.
+genanki still maps note fields to model fields by index, and a mismatch
+still writes content into the wrong card section with no error, no warning,
+and a valid `.apkg`. What changed on 14 August 2026 is that there is no
+longer anything to keep in sync by hand.
 
-The canonical order, ten fields:
+`cards.FIELDS` is the single ordered tuple of field names. `_build_model()`
+generates its field list from it, and both note builders pass a **name-keyed
+dict** through `_note_fields()`, which does the positional mapping once:
 
 ```
-0  Word
-1  Class
-2  Definition
-3  1st Example Sentence
-4  2nd Example Sentence
-5  Example from Youtube Video
-6  Synonyms
-7  Antonyms
-8  VideoID
-9  Source
+0  Word                         6  Synonyms
+1  Class                        7  Antonyms
+2  Definition                   8  VideoID
+3  1st Example Sentence         9  Source
+4  2nd Example Sentence        10  IPA             (ADR-009 phase 1)
+5  Example from Youtube Video  11  Pronunciation   (ADR-009 phase 1)
 ```
 
-`_build_fallback_note()` must produce the same ten values in the same order.
+What this buys, and why the old rule is retired:
+
+- A **misspelled** field name raises `ValueError` instead of silently
+  shifting every later field.
+- An **omitted** field becomes `""` instead of shifting every later field.
+- Reordering is one edit in one place and cannot desync the builders.
+- The model can never disagree with the builders, because it is derived
+  from the same tuple.
+
+Two things that still hold. `Word` must stay at index 0 — Anki treats a
+note's first field as its identity, and `deck.py`'s duplicate check reads
+the lowest-`order` field (ARCHITECTURE.md 8.22). And new fields are still
+**appended**: indices 0-9 are what every already-imported card in every
+user's collection is bound to.
+
+**Appending is safe for the indices. It is not, by itself, safe for the
+notetype.** Anki matches an incoming notetype by ID, and when that ID
+already exists with a *different* field list it does not merge — it forks
+a new notetype at a bumped ID with a suffixed name, leaves every existing
+note behind on the old one, and puts the new cards on the fork. Measured,
+not reasoned: importing the 12-field package into a collection holding the
+10-field notetype at `1607392321` produced `YT Anki Pipeline —
+Recognition-da2c0` at `1607392322` and stranded all 207 existing notes.
+That is the same mechanism that moved this project's ID off genanki's
+`1607392319` in the first place — twice, which is why the gap is +2.
+
+So adding a field is a **two-part** change: append it to `cards.FIELDS`,
+and let `deck.ensure_model_fields()` add it to the collection's notetype
+before the import. `__main__._prompt_import()` already calls that, and a
+failed alignment deliberately cancels the import rather than risking the
+fork. Adding a field to a live notetype is the safe direction — verified,
+all 207 notes kept byte-identical values and gained two empty fields — but
+it is a schema change, so Anki will want a full sync afterwards.
+ARCHITECTURE.md 8.32.
+
+The payload dicts the builders construct are also the intended seam for the
+planned web app and Chrome extension — card content keyed by name and
+independent of genanki, so another surface can consume pipeline output
+without reimplementing it.
 
 ### 3.3 Examples, synonyms, and antonyms stay in the transcript language
 
@@ -274,7 +338,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 758 passing, 24 deselected. The count drifts as tests are added —
+Expected: 803 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash

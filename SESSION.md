@@ -15,7 +15,7 @@ installed environment at the time of writing, not recalled from memory. See
 **Tagged release:** v0.4.5
 **HEAD:** 14 commits past the tag, working tree clean, level with
 `tango-origin/main`
-**Test state:** 758 passing, 0 failing, 24 integration deselected (`make test`)
+**Test state:** 803 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 87% overall, `__main__.py` 82% (`make coverage`). The 88%
 carried here before was stale — measured at 86% immediately before the
 8.29 work, 87% after it.
@@ -105,7 +105,21 @@ roughly 39 better to 14 worse, against word-overlap's 1 to 14. ARCHITECTURE
 
 ## 4. Uncommitted state
 
-None. The working tree is clean and `main` is level with `tango-origin/main`.
+None. `ADR-009 phase 1` is committed in full — the index half (8.30), the
+model-ID correction (8.31), and the card half with the notetype alignment
+that keeps imports merging (8.32).
+
+**Anki housekeeping, one item.** Verifying 8.32 was done in the `AI Tester`
+profile, not `User 1`, and it left one artefact behind: an empty forked
+notetype, `YT Anki Pipeline — Recognition-da2c0` at `1607392322`. AnkiConnect
+has no `deleteModel` action, so it needs Tools → Manage Note Types → Delete
+in the Anki UI. Harmless where it is. That profile's notetype now carries the
+12 fields and its 207 notes are intact.
+
+`User 1` has not been opened or touched. Its notetype is still the 10-field
+one, and `ensure_model_fields()` will add IPA and Pronunciation on the first
+auto-import — which is a schema change, so expect Anki to ask for a full
+sync that once.
 
 ---
 
@@ -392,6 +406,35 @@ note would not have been.
 
 Worth keeping in mind when recording a dead end: write down what the data
 said to try next, not only what failed.
+
+### 6.21 Lesson: the number in the constraint was evidence nobody read
+
+CLAUDE.md 3.1 has carried `1607392319` and `1607392321` side by side for
+most of this project's life. The gap is **+2**. Nobody asked what the 2 was.
+
+It was two forks. Anki bumps a notetype ID by one each time an import
+arrives whose field list disagrees with the notetype already sitting at that
+ID. The constraint text described the *consequence* of that mechanism
+accurately enough to be frightening, and never once described the mechanism
+— so the pair of numbers recording exactly how many times it had already
+happened read as arbitrary constants.
+
+Two things followed from finally testing it (8.32). The one-time ID
+correction in 8.31 was correct but incomplete: shipping it alongside two new
+card fields would have forked straight to `1607392322`, and the "never change
+MODEL_ID" rule would have been broken by an import rather than by an edit —
+which no amount of care about the constant would have caught. And the
+mitigation turned out to be ordinary: add the fields to the notetype first.
+
+Lesson: when a constraint carries specific numbers, the numbers are data.
+Ask what would have to be true for them to hold. Here the answer was a
+mechanism the constraint never mentioned, and reproducing it took one import
+into a scratch profile.
+
+The inverse of 6.9's failure. There the risk was trusting a document that
+recorded something untrue; here it was trusting a document that recorded
+something true without recording *why*, so the only actionable part had been
+lost.
 
 ---
 

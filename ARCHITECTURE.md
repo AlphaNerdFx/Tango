@@ -1739,6 +1739,124 @@ sentence, and a word used ten times as a verb and once as a noun is a verb.
 Ties resolve to the earlier tag, which keeps it deterministic -- it feeds a
 cache key.
 
+### 8.30 Index schema v2: pronunciation, and following inflection pointers
+
+ADR-009 phase 1's index half. Two changes in one schema bump, because a bump
+costs a full re-download per language (288 MB de, 682 MB fr, 278 MB ru) and
+both sets of columns were already sitting in the same source records.
+
+**Pronunciation.** `ipa` and `audio_url` are extracted from each entry's
+`sounds` block. The ADR's coverage estimates were verified rather than
+trusted, and the real German build beats them: IPA on **99.7%** of rows
+against a claimed 91.5%, audio on **95.0%** against 65.7%.
+
+**Inflection pointers turned out to be the larger finding.** German indexes
+every case, number and tense form as its own entry -- **81.4%** of the real
+index -- so a card could read "1. Person Singular Indikativ Präsens Aktiv des
+Verbs glauben", which is a pointer, not a definition.
+
+A 20 000-entry sample had put this at 4%. The sample was drawn from the head
+of the file and landed in a cluster of Latin taxonomy lemmas. *A sample from
+an ordered file is not a random sample* -- the same lesson as 8.14, arrived
+at from the opposite direction.
+
+Fixed at two levels. Within a record, a real gloss now beats a pointer
+sitting in front of it. Across records, v2 stores the word the pointer names
+(`form_of`), so it can be followed: `glaube` resolves to `glauben` and the
+card gets a real definition. **One hop only** -- a chain, or a missing
+target, keeps the original row, because losing the card is worse than a poor
+definition.
+
+Pronunciation deliberately does **not** follow the pointer. The learner sees
+`glaube`, so the card carries glaube's own IPA while borrowing glauben's
+meaning. A mutation that takes the whole row from the pointer target fails a
+test.
+
+Measured on the real German video, 342 lemmas:
+
+| | before | after |
+|---|---|---|
+| pointer definitions | 18 | 1 |
+| IPA | 0 | 341 |
+| audio | 0 | 339 |
+
+with no change in how many lemmas resolve at all.
+
+### 8.31 The model ID was protecting the wrong integer
+
+`MODEL_ID` moved from `1607392319` to `1607392321` on 14 August 2026, the
+only time it may ever move.
+
+`1607392319` is the model ID in **genanki's README example**, copied along
+with the tutorial and paired there with a notetype named `Simple Model`. Any
+collection that ever imported a deck built from that tutorial already has the
+ID taken, and Anki will not reuse it -- it forks a new notetype with a bumped
+ID and a suffixed name.
+
+Measured on the real collection (the `User 1` profile): `1607392319` held a
+7-field `Simple Model` with **zero** notes, while this pipeline's **2135**
+cards sat on `1607392321`, the ID Anki assigned when it forked. Five separate
+forked notetypes had accumulated that way.
+
+So the constraint was real, and for most of this project's life it was
+guarding an integer that held none of our cards. Packages now declare the
+notetype the cards are actually on, and imports merge into it instead of
+forking again.
+
+Note the ID resolves through `ANKI_MODEL_ID`, so `.env` overrides the
+default. **Pinning only the resolved value is not enough** -- a test that
+does so passes on any machine with a `.env` while the source default drifts.
+That gap was found by mutation, and the tests now pin the literal in
+`config.py`'s source too. Same shape as 8.21 (a documented install always
+takes the override branch and never reaches the default) and SESSION.md 6.18.
+
+### 8.32 Appending a field forks the notetype unless the collection is aligned first
+
+8.31 explains why the ID had already moved twice. This is the mechanism that
+moved it, met head-on while shipping ADR-009 phase 1's two new card fields.
+
+**Anki matches an incoming notetype by ID. When that ID already exists with a
+different field list, it does not merge -- it forks.** New notetype, ID bumped
+by one, name suffixed, existing notes left behind on the old one, new cards
+written to the fork.
+
+Measured against a real collection holding the 10-field notetype at
+`1607392321`, importing the 12-field package:
+
+| | result |
+|---|---|
+| notetype created | `YT Anki Pipeline — Recognition-da2c0` at **1607392322** |
+| notes on `1607392321` | 207, untouched, still 10 fields |
+| notes on the fork | 1 — the new card, with IPA and Pronunciation |
+
+That is `+1` from `1607392321`, exactly as `1607392321` is `+2` from
+genanki's `1607392319`. The gap in 8.31 was never a mystery; it was two prior
+runs of this same event.
+
+**The fix is to make the schemas match before the import.**
+`deck.ensure_model_fields()` reads the collection's field list and adds any
+name in `cards.FIELDS` that is missing, at its canonical index.
+`__main__._prompt_import()` calls it before `importPackage`.
+
+Adding a field to a live notetype is the safe direction, and this was
+verified rather than assumed -- all **207** notes came through with
+**byte-identical field values** and two new empty fields. Re-importing then
+produced no fork, and a genuinely new word landed on `1607392321` carrying
+both fields. It is still a schema change, so Anki asks for a full sync
+afterwards; the CLI says so when it adds anything.
+
+A failed alignment **cancels the import**. If we could not confirm the
+notetype's shape, importing is the thing that splits the collection, and
+leaving an `.apkg` on disk is the cheaper failure.
+
+**Two limits worth knowing.** The alignment runs on the AnkiConnect
+auto-import path only -- importing by hand via File → Import still forks,
+because nothing has aligned the notetype first. And the import never updates
+an existing note: across two imports where three GUIDs matched existing
+notes, not one field value changed. Pronunciation therefore reaches new cards
+only, which is consistent with the pipeline shipping just the words the deck
+check called NEW, but it does mean already-imported cards will not gain these
+fields without a separate back-fill.
 
 ---
 
