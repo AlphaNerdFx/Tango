@@ -289,6 +289,18 @@ class DefinitionBatchResult:
         not_found_antonyms: Same as not_found_synonyms, but antonyms. Rarely
                              populated for non-English lemmas since OMW only
                              carries antonym data for English synsets.
+        not_found_ipa:      IPA transcription for a not_found lemma, keyed by
+                             lemma (ADR-009 phase 1). Same reasoning as the
+                             four above: the offline index entry that supplies
+                             a fallback card's example carries `ipa` and
+                             `audio_url` in schema v2, and a card with no
+                             definition is exactly the card that benefits most
+                             from still showing the learner how to say the
+                             word. Dropping them here was the fifth instance
+                             of the fetched-parsed-discarded shape (SESSION.md
+                             6.13).
+        not_found_audio:    Wikimedia Commons recording URL for a not_found
+                             lemma, keyed by lemma. Partner of not_found_ipa.
     """
     found:              list[DefinitionResult] = field(default_factory=list)
     not_found:          list[str]              = field(default_factory=list)
@@ -297,6 +309,37 @@ class DefinitionBatchResult:
     not_found_examples2: dict[str, str]        = field(default_factory=dict)
     not_found_synonyms: dict[str, list[str]]   = field(default_factory=dict)
     not_found_antonyms: dict[str, list[str]]   = field(default_factory=dict)
+    not_found_ipa:      dict[str, str]         = field(default_factory=dict)
+    not_found_audio:    dict[str, str]         = field(default_factory=dict)
+
+
+@dataclass
+class FallbackExtras:
+    """
+    What a lemma with no definition anywhere can still put on a card.
+
+    Returned alongside `None` by _fetch_definition_or_fallback_example().
+    A dataclass rather than the tuple this used to be: it carried five
+    positional values, ADR-009 needed a sixth and seventh, and every caller
+    unpacked it by position. That is the exact shape of the recurring bug in
+    this codebase (SESSION.md 6.12) -- two sequences that must agree with
+    nothing enforcing it -- and the same argument that made cards.FIELDS a
+    single source of truth applies here.
+
+    Attributes:
+        example:   First dictionary example sentence, if any source had one.
+        example2:  Second example. Wiktionary commonly supplies two.
+        synonyms:  OMW/WordNet or index synonyms. May be empty.
+        antonyms:  Same, for antonyms. Usually empty outside English.
+        ipa:       IPA transcription from the offline index (schema v2).
+        audio_url: Wikimedia Commons recording from the same index entry.
+    """
+    example:   Optional[str] = None
+    example2:  Optional[str] = None
+    synonyms:  list[str]     = field(default_factory=list)
+    antonyms:  list[str]     = field(default_factory=list)
+    ipa:       Optional[str] = None
+    audio_url: Optional[str] = None
 
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
@@ -1311,7 +1354,7 @@ def _fetch_definition_or_fallback_example(
     def_language: Optional[str],
     pos: Optional[str] = None,
     write_cache: bool = True,
-) -> tuple[Optional[DefinitionResult], Optional[str], Optional[str], list[str], list[str]]:
+) -> tuple[Optional[DefinitionResult], FallbackExtras]:
     """
     Fetch one lemma's definition, falling back to a bare Wiktionary example
     and OMW/WordNet synonyms/antonyms when no definition exists anywhere.
@@ -1329,10 +1372,10 @@ def _fetch_definition_or_fallback_example(
     already given up, is what lets a French video's fallback cards carry a
     real dictionary example and real synonyms instead of empty fields.
 
-    Returns (result, None, None, [], []) when a definition was found -- the
-    examples/synonyms/antonyms are already inside `result` in that case.
-    Otherwise returns (None, example, example2, synonyms, antonyms), where
-    each may still be empty/None if no source had anything.
+    Returns (result, empty FallbackExtras) when a definition was found --
+    the examples/synonyms/antonyms are already inside `result` in that case.
+    Otherwise returns (None, extras), where every field of extras may still
+    be empty if no source had anything.
 
     Both examples are returned, not just the first. The card model has two
     dedicated example fields and Wiktionary commonly supplies two (25 of 45
@@ -1344,7 +1387,7 @@ def _fetch_definition_or_fallback_example(
         pos=pos, write_cache=write_cache,
     )
     if result:
-        return result, None, None, [], []
+        return result, FallbackExtras()
 
     example: Optional[str] = None
     example2: Optional[str] = None
@@ -1366,22 +1409,38 @@ def _fetch_definition_or_fallback_example(
     # card's examples and antonyms, which nothing else fills -- OMW carries
     # no antonyms outside English at all, so without this the antonym field
     # is structurally empty rather than merely sparse.
-    if not example or not antonyms:
-        entry = (
-            wiktdata.lookup(lemma, language, pos=pos)
-            if wiktdata.is_available(language)
-            else None
-        )
-        if entry:
-            if not example:
-                example = entry.example1
-                example2 = example2 or entry.example2
-            if not synonyms:
-                synonyms = entry.synonyms
-            if not antonyms:
-                antonyms = entry.antonyms
+    #
+    # Looked up unconditionally since ADR-009 phase 1. It used to be gated on
+    # `not example or not antonyms`, which is nearly always true on this path
+    # and so cost almost nothing to drop -- but "nearly" is not "always", and
+    # pronunciation is exactly the field a lemma with a complete example and
+    # a complete antonym list would have silently gone without.
+    entry = (
+        wiktdata.lookup(lemma, language, pos=pos)
+        if wiktdata.is_available(language)
+        else None
+    )
+    ipa: Optional[str] = None
+    audio_url: Optional[str] = None
+    if entry:
+        if not example:
+            example = entry.example1
+            example2 = example2 or entry.example2
+        if not synonyms:
+            synonyms = entry.synonyms
+        if not antonyms:
+            antonyms = entry.antonyms
+        ipa = entry.ipa
+        audio_url = entry.audio_url
 
-    return None, example, example2, synonyms, antonyms
+    return None, FallbackExtras(
+        example=example,
+        example2=example2,
+        synonyms=synonyms,
+        antonyms=antonyms,
+        ipa=ipa,
+        audio_url=audio_url,
+    )
 
 
 def fetch_definitions(
@@ -1472,13 +1531,7 @@ def fetch_definitions(
     # task also tries a Wiktionary fallback example when the lemma has no
     # definition at all -- see _fetch_definition_or_fallback_example().
     if to_fetch:
-        results: dict[
-            str,
-            tuple[
-                Optional[DefinitionResult], Optional[str], Optional[str],
-                list[str], list[str],
-            ],
-        ] = {}
+        results: dict[str, tuple[Optional[DefinitionResult], FallbackExtras]] = {}
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_lemma = {
                 executor.submit(
@@ -1493,25 +1546,26 @@ def fetch_definitions(
                     results[lemma] = future.result()
                 except Exception:
                     logger.exception("Unexpected error fetching '%s'.", lemma)
-                    results[lemma] = (None, None, None, [], [])
+                    results[lemma] = (None, FallbackExtras())
 
         for lemma in to_fetch:
-            (
-                result, fallback_example, fallback_example2,
-                fallback_synonyms, fallback_antonyms,
-            ) = results[lemma]
+            result, extras = results[lemma]
             if result:
                 batch.found.append(result)
             else:
                 batch.not_found.append(lemma)
-                if fallback_example:
-                    batch.not_found_examples[lemma] = fallback_example
-                if fallback_example2:
-                    batch.not_found_examples2[lemma] = fallback_example2
-                if fallback_synonyms:
-                    batch.not_found_synonyms[lemma] = fallback_synonyms
-                if fallback_antonyms:
-                    batch.not_found_antonyms[lemma] = fallback_antonyms
+                if extras.example:
+                    batch.not_found_examples[lemma] = extras.example
+                if extras.example2:
+                    batch.not_found_examples2[lemma] = extras.example2
+                if extras.synonyms:
+                    batch.not_found_synonyms[lemma] = extras.synonyms
+                if extras.antonyms:
+                    batch.not_found_antonyms[lemma] = extras.antonyms
+                if extras.ipa:
+                    batch.not_found_ipa[lemma] = extras.ipa
+                if extras.audio_url:
+                    batch.not_found_audio[lemma] = extras.audio_url
 
     logger.info(
         "Batch complete: %d found (%d cached) / %d not found (%d with a "

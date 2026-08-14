@@ -77,6 +77,12 @@ dev = [
 
     # Type stubs for requests (used by mypy)
     "types-requests>=2.28",
+
+    # Reads pyproject.toml back in tests/test_hard_constraints.py, which is
+    # how constraints 3.5 and 3.6 are enforced. stdlib tomllib only exists
+    # from 3.11 and this project runs on 3.10, so the test imports tomllib
+    # first and falls back to this.
+    "tomli>=2.0; python_version < '3.11'",
 ]
 
 # =============================================================================

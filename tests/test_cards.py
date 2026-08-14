@@ -496,6 +496,42 @@ class TestBuildPackage:
         result = build_package(VIDEO_ID, DECK_NAME, [], ["develop"], sample_snippets)
         assert result.fallback_count == 1
 
+    # -- Pronunciation on fallback cards (ADR-009 phase 1) -------------------
+
+    def test_fallback_pronunciation_reaches_the_real_exported_card(self, tmp_path):
+        # _build_fallback_note grew ipa/audio_url parameters that no call
+        # site passed, so a card with no definition -- the one that needs
+        # pronunciation most -- shipped without it while the index entry
+        # supplying its example carried both. Reads the exported package
+        # rather than the note object, so it also pins that the values land
+        # at field indices 10 and 11 and not somewhere else.
+        result = build_package(
+            VIDEO_ID, DECK_NAME, [], ["philosophie"], {},
+            not_found_examples={"philosophie": "Une phrase en français."},
+            not_found_ipa={"philosophie": "\\fi.lɔ.zɔ.fi\\"},
+            not_found_audio={"philosophie": "https://example.invalid/philo.ogg"},
+        )
+        extract_dir = tmp_path / "extracted"
+        with zipfile.ZipFile(result.path) as z:
+            z.extractall(extract_dir)
+        conn = sqlite3.connect(extract_dir / "collection.anki2")
+        fields = conn.execute("SELECT flds FROM notes").fetchone()[0].split("\x1f")
+        assert fields[10] == "\\fi.lɔ.zɔ.fi\\"                  # IPA
+        assert "example.invalid/philo.ogg" in fields[11]        # Pronunciation
+        assert fields[2] == "No definition found"               # still a fallback card
+
+    def test_fallback_without_pronunciation_leaves_both_fields_empty(self):
+        # The partner. A language with no index must produce exactly the old
+        # card -- empty, not the string "None", which is what a bare
+        # f-string interpolation of the absent URL would have produced.
+        model = cards_module._build_model()
+        note = cards_module._build_fallback_note(
+            "develop", "A transcript sentence.", model, VIDEO_ID, "en",
+        )
+        at = dict(zip(cards_module.FIELDS, note.fields, strict=True))
+        assert at["IPA"] == ""
+        assert at["Pronunciation"] == ""
+
     # -- Language threaded into GUIDs (issue #14) --------------------------
 
     def test_language_passed_to_build_note(self, sample_result):

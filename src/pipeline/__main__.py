@@ -458,6 +458,8 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
             surface_forms=surface_forms,
             not_found_synonyms=batch.not_found_synonyms,
             not_found_antonyms=batch.not_found_antonyms,
+            not_found_ipa=batch.not_found_ipa,
+            not_found_audio=batch.not_found_audio,
         )
     except ValueError as exc:
         _err(str(exc))
@@ -578,6 +580,8 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
             not_found_examples2=batch.not_found_examples2,
             not_found_synonyms=batch.not_found_synonyms,
             not_found_antonyms=batch.not_found_antonyms,
+            not_found_ipa=batch.not_found_ipa,
+            not_found_audio=batch.not_found_audio,
         )
     except ValueError as exc:
         _err(str(exc))
@@ -648,6 +652,8 @@ def _run_backlog(args: argparse.Namespace, session: Session) -> None:
             not_found_examples2=batch.not_found_examples2,
             not_found_synonyms=batch.not_found_synonyms,
             not_found_antonyms=batch.not_found_antonyms,
+            not_found_ipa=batch.not_found_ipa,
+            not_found_audio=batch.not_found_audio,
         )
     except ValueError as exc:
         _err(str(exc))

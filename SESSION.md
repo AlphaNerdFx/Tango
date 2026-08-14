@@ -15,7 +15,7 @@ installed environment at the time of writing, not recalled from memory. See
 **Tagged release:** v0.4.5
 **HEAD:** 14 commits past the tag, working tree clean, level with
 `tango-origin/main`
-**Test state:** 803 passing, 0 failing, 24 integration deselected (`make test`)
+**Test state:** 815 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 87% overall, `__main__.py` 82% (`make coverage`). The 88%
 carried here before was stale — measured at 86% immediately before the
 8.29 work, 87% after it.

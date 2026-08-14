@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import inspect
 import re
+from pathlib import Path
 
 import pytest
 
@@ -209,3 +210,169 @@ class TestConstraint33FieldLanguage:
         assert call.startswith("lemma"), (
             f"CLAUDE.md 3.3: expected the original lemma, got {call!r}"
         )
+
+
+# ── 3.4 Validate the lemma, not the surface form ─────────────────────────────
+
+class TestConstraint34ValidateTheLemma:
+    """
+    The vocabulary dict is keyed by `token.lemma_.lower()`, so every filter
+    in _is_valid_token() must inspect the lemma. Violated twice: a length
+    check on token.text produced single-letter cards, and an is_alpha check
+    on token.text blocked hyphenated compounds.
+
+    test_nlp.py pins the *behaviour* with the matched pair CLAUDE.md 5
+    describes (a long surface form with a short lemma must be rejected; a
+    short surface form with a real lemma must pass). This pins the
+    *constraint* at the source, which is what catches the check being
+    reintroduced somewhere the fixture pair happens not to reach.
+    """
+
+    @staticmethod
+    def _source() -> str:
+        """
+        The function's CODE, with the docstring and comments stripped.
+
+        Necessary, not fastidious: _is_valid_token's docstring explains at
+        length why token.is_alpha is the wrong thing to check, so a plain
+        source scan matches the prose warning against the mistake and
+        reports the mistake. Round-tripping through ast drops docstrings
+        and comments and leaves only what actually executes.
+        """
+        import ast
+        import textwrap
+        from pipeline import nlp
+        fn = ast.parse(textwrap.dedent(inspect.getsource(nlp._is_valid_token))).body[0]
+        if ast.get_docstring(fn):
+            fn.body = fn.body[1:]
+        return ast.unparse(fn)
+
+    def test_no_length_check_on_the_surface_form(self):
+        src = self._source()
+        assert not re.search(r"len\(\s*token\.text", src), (
+            "CLAUDE.md 3.4/8: a length check on token.text is the bug that "
+            "produced single-letter cards. Check the lemma."
+        )
+
+    def test_no_alphabetic_check_on_the_surface_form(self):
+        src = self._source()
+        assert not re.search(r"token\.(is_alpha|text\.isalpha)", src), (
+            "CLAUDE.md 3.4/8: an is_alpha check on the surface form rejects "
+            "legitimate hyphenated compounds. Check the lemma."
+        )
+
+    def test_validity_is_actually_decided_on_the_lemma(self):
+        # The partner. The two above pass trivially on a function that
+        # checks nothing at all, so one of them has to assert the positive.
+        src = self._source()
+        assert "_effective_lemma(token)" in src, (
+            "CLAUDE.md 3.4: _is_valid_token must decide validity on the "
+            "lemma the vocabulary dict is keyed by."
+        )
+
+
+# ── 3.5 Unit tests must not require external services ────────────────────────
+
+class TestConstraint35NoExternalServicesByDefault:
+    """
+    Nothing in the default run may need network, a running Anki, or an
+    installed spaCy/translation model. The mechanism is the `integration`
+    marker plus the default deselection in pyproject.toml -- so these test
+    the mechanism, not the individual tests.
+    """
+
+    @staticmethod
+    def _pytest_config() -> dict:
+        try:
+            import tomllib
+        except ModuleNotFoundError:            # Python 3.10, this project
+            import tomli as tomllib
+        root = Path(__file__).resolve().parent.parent
+        with open(root / "pyproject.toml", "rb") as fh:
+            return tomllib.load(fh)["tool"]["pytest"]["ini_options"]
+
+    def test_the_default_run_deselects_integration_tests(self):
+        addopts = self._pytest_config()["addopts"]
+        assert re.search(r"-m\s+['\"]?not integration", addopts), (
+            "CLAUDE.md 3.5: pyproject's addopts is what keeps network- and "
+            f"Anki-dependent tests out of the default run. Got: {addopts!r}"
+        )
+
+    def test_the_integration_marker_is_registered(self):
+        markers = self._pytest_config()["markers"]
+        assert any(m.startswith("integration:") for m in markers)
+
+    def test_every_marker_used_in_the_suite_is_a_real_one(self):
+        # The failure this exists for: the integration marker misspelled
+        # with a letter dropped. pytest accepts an unknown marker silently,
+        # the deselection expression never matches it, and a test that needs
+        # the network joins the default run looking exactly like a unit test.
+        #
+        # The misspelling is described rather than written out, because this
+        # scan reads the test files as text and would find its own example.
+        # It did, on the first run.
+        registered = {m.split(":")[0] for m in self._pytest_config()["markers"]}
+        builtin = {
+            "parametrize", "skip", "skipif", "xfail",
+            "usefixtures", "filterwarnings",
+        }
+        allowed = registered | builtin
+
+        used: dict[str, set[str]] = {}
+        for path in Path(__file__).resolve().parent.glob("test_*.py"):
+            for name in re.findall(r"@pytest\.mark\.(\w+)", path.read_text(encoding="utf-8")):
+                used.setdefault(name, set()).add(path.name)
+
+        unknown = {n: sorted(f) for n, f in used.items() if n not in allowed}
+        assert not unknown, (
+            f"CLAUDE.md 3.5: unregistered pytest marker(s) {unknown}. A typo "
+            "here silently puts the test into the default run."
+        )
+
+
+# ── 3.6 No new heavy runtime dependencies in the base install ────────────────
+
+class TestConstraint36NoHeavyBaseDependencies:
+    """
+    PyTorch already costs roughly 1.5GB through argostranslate. Anything of
+    that weight belongs in an optional group, so `pip install -e .` stays
+    something a new contributor can run.
+    """
+
+    # Packages that pull in a multi-hundred-MB tree, by name. Deliberately a
+    # denylist of known offenders rather than an install-size measurement:
+    # this has to fail in a unit run with no network and nothing installed.
+    HEAVY = {
+        "torch", "pytorch", "tensorflow", "jax", "transformers",
+        "argostranslate", "libretranslate", "ctranslate2", "sentencepiece",
+        "onnxruntime", "scipy", "sklearn", "scikit-learn", "pandas",
+    }
+
+    @staticmethod
+    def _project() -> dict:
+        try:
+            import tomllib
+        except ModuleNotFoundError:
+            import tomli as tomllib
+        root = Path(__file__).resolve().parent.parent
+        with open(root / "pyproject.toml", "rb") as fh:
+            return tomllib.load(fh)["project"]
+
+    @staticmethod
+    def _names(specs: list[str]) -> set[str]:
+        return {re.split(r"[><=!~\[; ]", s.strip())[0].lower() for s in specs}
+
+    def test_base_install_carries_nothing_heavy(self):
+        base = self._names(self._project()["dependencies"])
+        offenders = sorted(base & self.HEAVY)
+        assert not offenders, (
+            f"CLAUDE.md 3.6: {offenders} in the base dependencies. Heavy "
+            "packages belong in [project.optional-dependencies]."
+        )
+
+    def test_translation_stack_is_still_optional(self):
+        # The concrete case the constraint was written about. argostranslate
+        # is the 1.5GB, and it must stay in the optional group it lives in.
+        optional = self._project()["optional-dependencies"]
+        assert "argostranslate" in self._names(optional["translation"])
+        assert "argostranslate" not in self._names(self._project()["dependencies"])

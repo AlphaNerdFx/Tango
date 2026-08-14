@@ -569,6 +569,8 @@ def build_package(
     surface_forms: Optional[dict] = None,
     not_found_synonyms: Optional[dict] = None,
     not_found_antonyms: Optional[dict] = None,
+    not_found_ipa: Optional[dict] = None,
+    not_found_audio: Optional[dict] = None,
 ) -> PackageResult:
     """
     Build an Anki .apkg package from definition results.
@@ -605,6 +607,12 @@ def build_package(
                     the Synonyms field.
         not_found_antonyms: definition.DefinitionBatchResult.not_found_antonyms
                     -- same as not_found_synonyms, for the Antonyms field.
+        not_found_ipa: definition.DefinitionBatchResult.not_found_ipa -- IPA
+                    for a lemma with no definition, keyed by lemma (ADR-009
+                    phase 1). A card with no definition is the one that
+                    benefits most from still showing how the word is said.
+        not_found_audio: definition.DefinitionBatchResult.not_found_audio --
+                    the Commons recording URL, same keying.
 
     Returns:
         PackageResult with the output path and accurate card counts.
@@ -679,6 +687,8 @@ def build_package(
             _build_fallback_note(
                 lemma, transcript_example, model, video_id, language, dict_example,
                 dict_example2, fallback_synonyms, fallback_antonyms,
+                ipa=(not_found_ipa or {}).get(lemma),
+                audio_url=(not_found_audio or {}).get(lemma),
             )
         )
         fallback_count += 1

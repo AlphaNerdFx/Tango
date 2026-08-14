@@ -51,16 +51,18 @@ Full detail in `ARCHITECTURE.md`.
 
 ## 3. Hard constraints — never violate these
 
-> **Enforced, not just documented.** Constraints 3.1, 3.2 and 3.3 now have
-> tests in `tests/test_hard_constraints.py` that fail on the specific
+> **Enforced, not just documented.** All six constraints in this section now
+> have tests in `tests/test_hard_constraints.py` that fail on the specific
 > mistake each one describes, and every one of those tests has been
 > mutation-verified. Prose asked reviewers to notice; the tests notice. If
 > you change something here, change the test with it and re-run the mutation.
 >
-> 3.4 is covered by the paired lemma/surface-form tests in `test_nlp.py`.
-> **3.5 and 3.6 are still prose only** — no test fails if you add a
-> network-dependent test to the default run or a heavy dependency to the
-> base install. Do not read this box as blanket coverage.
+> 3.4 is pinned twice over: `test_nlp.py` pins the *behaviour* with the
+> matched pair described in section 5, and `test_hard_constraints.py` pins
+> the *constraint* by reading `_is_valid_token`'s source. 3.5 and 3.6 test
+> the mechanism rather than each test or package — the marker deselection in
+> `pyproject.toml`, that no marker in the suite is misspelled into the
+> default run, and that nothing heavy sits in the base dependency list.
 
 ### 3.1 ANKI_MODEL_ID and ANKI_DECK_ID must not change
 
@@ -338,7 +340,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 803 passing, 24 deselected. The count drifts as tests are added —
+Expected: 815 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash

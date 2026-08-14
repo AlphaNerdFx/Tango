@@ -981,13 +981,13 @@ class TestFetchDefinitionOrFallbackExample:
     @patch("pipeline.definition.fetch_definition")
     def test_returns_result_when_definition_found(self, mock_fetch, sample_definition_result):
         mock_fetch.return_value = sample_definition_result
-        result, example, _e2, synonyms, antonyms = def_module._fetch_definition_or_fallback_example(
+        result, extras = def_module._fetch_definition_or_fallback_example(
             "contaminate", None, "en", None
         )
         assert result is sample_definition_result
-        assert example is None
-        assert synonyms == []
-        assert antonyms == []
+        assert extras.example is None
+        assert extras.synonyms == []
+        assert extras.antonyms == []
 
     @pytest.mark.parametrize("language", ["fr", "de", "ja", "es"])
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
@@ -1001,11 +1001,11 @@ class TestFetchDefinitionOrFallbackExample:
             {"definition": "d", "examples": ["Some native sentence."]},
         ]}]
         mock_wn.return_value = ([], [])
-        result, example, _e2, _, _ = def_module._fetch_definition_or_fallback_example(
+        result, extras = def_module._fetch_definition_or_fallback_example(
             "word", None, language, None
         )
         assert result is None
-        assert example == "Some native sentence."
+        assert extras.example == "Some native sentence."
         mock_wikt.assert_called_once_with("word", language)
 
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
@@ -1022,7 +1022,7 @@ class TestFetchDefinitionOrFallbackExample:
         mock_wn.return_value = ([], [])
         mock_wikt.return_value = [{"language": "English",
                                    "definitions": [{"examples": ["a real example"]}]}]
-        result, example, _e2, _, _ = def_module._fetch_definition_or_fallback_example(
+        result, extras = def_module._fetch_definition_or_fallback_example(
             "word", None, "en", None
         )
         assert result is None
@@ -1038,11 +1038,11 @@ class TestFetchDefinitionOrFallbackExample:
         mock_fetch.return_value = None
         mock_wikt.return_value = None
         mock_wn.return_value = ([], [])
-        result, example, _e2, _, _ = def_module._fetch_definition_or_fallback_example(
+        result, extras = def_module._fetch_definition_or_fallback_example(
             "xyzqwerty", None, language, None
         )
         assert result is None
-        assert example is None
+        assert extras.example is None
 
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
@@ -1053,12 +1053,12 @@ class TestFetchDefinitionOrFallbackExample:
         mock_fetch.return_value = None
         mock_wikt.return_value = None
         mock_wn.return_value = (["bonheur", "joie"], [])
-        result, example, _e2, synonyms, antonyms = def_module._fetch_definition_or_fallback_example(
+        result, extras = def_module._fetch_definition_or_fallback_example(
             "content", None, "fr", None
         )
         assert result is None
-        assert synonyms == ["bonheur", "joie"]
-        assert antonyms == []
+        assert extras.synonyms == ["bonheur", "joie"]
+        assert extras.antonyms == []
         mock_wn.assert_called_once_with("content", "fr")
 
     @patch("pipeline.definition.fetch_definition")
@@ -1148,10 +1148,10 @@ class TestOfflineDictionaryIntegration:
             def_module.wiktdata, "lookup",
             lambda _w, _l, pos=None: self._entry(synonyms=["index-synonym"]),
         )
-        _r, _e, _e2, synonyms, _a = def_module._fetch_definition_or_fallback_example(
+        _r, extras = def_module._fetch_definition_or_fallback_example(
             "maison", None, "fr", None
         )
-        assert synonyms == ["omw-synonym"]
+        assert extras.synonyms == ["omw-synonym"]
 
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
@@ -1168,10 +1168,10 @@ class TestOfflineDictionaryIntegration:
         monkeypatch.setattr(
             def_module.wiktdata, "lookup", lambda _w, _l, pos=None: self._entry()
         )
-        _r, _e, _e2, _s, antonyms = def_module._fetch_definition_or_fallback_example(
+        _r, extras = def_module._fetch_definition_or_fallback_example(
             "maison", None, "fr", None
         )
-        assert antonyms == ["dehors"]
+        assert extras.antonyms == ["dehors"]
 
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
@@ -1184,12 +1184,65 @@ class TestOfflineDictionaryIntegration:
         mock_fetch.return_value = None
         mock_wikt.return_value = None
         mock_wn.return_value = (["bonheur"], [])
-        _r, example, _e2, synonyms, antonyms = (
+        _r, extras = (
             def_module._fetch_definition_or_fallback_example("maison", None, "fr", None)
         )
-        assert example is None
-        assert synonyms == ["bonheur"]
-        assert antonyms == []
+        assert extras.example is None
+        assert extras.synonyms == ["bonheur"]
+        assert extras.antonyms == []
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_index_supplies_pronunciation_for_a_lemma_with_no_definition(
+        self, mock_fetch, mock_wikt, mock_wn, monkeypatch
+    ):
+        # ADR-009 phase 1. The entry that already supplies this card's
+        # example carries ipa and audio_url in schema v2, and both were
+        # being read and dropped -- the fallback card is precisely the one
+        # that benefits most from still showing how the word is said.
+        mock_fetch.return_value = None
+        mock_wikt.return_value = None
+        mock_wn.return_value = ([], [])
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(
+            def_module.wiktdata, "lookup",
+            lambda _w, _l, pos=None: self._entry(
+                ipa="\\mɛ.zɔ̃\\", audio_url="https://example.invalid/maison.ogg"
+            ),
+        )
+        _r, extras = def_module._fetch_definition_or_fallback_example(
+            "maison", None, "fr", None
+        )
+        assert extras.ipa == "\\mɛ.zɔ̃\\"
+        assert extras.audio_url == "https://example.invalid/maison.ogg"
+
+    @patch("pipeline.definition._wordnet_synonyms_antonyms")
+    @patch("pipeline.definition._fetch_from_wiktionary")
+    @patch("pipeline.definition.fetch_definition")
+    def test_pronunciation_survives_a_lemma_that_needs_nothing_else(
+        self, mock_fetch, mock_wikt, mock_wn, monkeypatch
+    ):
+        # The partner, and the reason the index lookup is no longer gated on
+        # `not example or not antonyms`: a lemma whose example and antonyms
+        # both came from elsewhere used to skip the lookup entirely and so
+        # lost its pronunciation, while a sparser lemma kept it.
+        mock_fetch.return_value = None
+        mock_wikt.return_value = [{"partOfSpeech": "Noun", "definitions": [
+            {"definition": "d", "examples": ["Deja une phrase."]},
+        ]}]
+        mock_wn.return_value = (["demeure"], ["dehors"])
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(
+            def_module.wiktdata, "lookup",
+            lambda _w, _l, pos=None: self._entry(ipa="\\mɛ.zɔ̃\\"),
+        )
+        _r, extras = def_module._fetch_definition_or_fallback_example(
+            "maison", None, "fr", None
+        )
+        assert extras.example == "Deja une phrase."   # not taken from the index
+        assert extras.antonyms == ["dehors"]          # nor these
+        assert extras.ipa == "\\mɛ.zɔ̃\\"              # but the IPA still arrives
 
 
 # ── fetch_definitions (batch) ─────────────────────────────────────────────────
