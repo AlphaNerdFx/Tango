@@ -105,7 +105,13 @@ def is_discouraged(language: str) -> Optional[str]:
 
 # Schema version, bumped when the table layout changes so a stale index is
 # rebuilt rather than silently queried with the wrong columns.
-_SCHEMA_VERSION = 1
+#
+# v2 added ipa, audio_url and form_of. Two changes were deliberately landed
+# in one bump because the cost of a bump is a full re-download per language
+# -- 288 MB for de, 682 MB for fr, 278 MB for ru -- and asking for that twice
+# to add columns that were both already sitting in the same records would be
+# hard to justify. See ADR-009 phase 1 and ARCHITECTURE.md 8.30.
+_SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -118,6 +124,15 @@ class DictionaryEntry:
     example2:    Optional[str]
     synonyms:    list[str]
     antonyms:    list[str]
+    # v2. ipa is a transcription like "[haˈloː]"; audio_url points at a real
+    # human recording on Wikimedia Commons. Measured on 20000 German entries:
+    # 93% carry IPA and 91% an audio URL.
+    ipa:         Optional[str] = None
+    audio_url:   Optional[str] = None
+    # Set when this row's gloss is an inflection pointer rather than a
+    # definition ("Dativ Plural des Substantivs Krieg"), and names the word
+    # it points at. Lets a caller follow the pointer instead of showing it.
+    form_of:     Optional[str] = None
 
 
 # ── Paths and availability ────────────────────────────────────────────────────
@@ -238,6 +253,40 @@ def _select_row(rows: list, pos: Optional[str]):
     return rows[0]
 
 
+def _follow_form_of(conn: sqlite3.Connection, row, pos: Optional[str]):
+    """
+    Resolve an inflection pointer to the entry it points at.
+
+    Wiktionary indexes every inflected form as its own entry -- 81.4% of the
+    German index, measured on the real build -- so a selected row's whole
+    gloss can be "1. Person Singular Indikativ Präsens Aktiv des Verbs
+    glauben". That is a pointer, not a definition, and it is useless on a
+    card.
+
+    Since v2 stores the word it points at, the pointer can be followed
+    rather than printed: "glaube" resolves to "glauben" and the card gets
+    "geistig tätig sein, im Kopf formulieren".
+
+    One hop only. A pointer whose target is itself a pointer keeps the
+    original row rather than chasing a chain that may not terminate, and a
+    target that is missing does the same -- a mediocre definition beats
+    losing the card, which is the rule everywhere else in this module.
+    """
+    target = (row["form_of"] or "").strip()
+    if not target:
+        return row
+    try:
+        candidates = conn.execute(
+            "SELECT * FROM entries WHERE word = ?", (target.lower(),)
+        ).fetchall()
+    except sqlite3.Error:
+        return row
+    real = [r for r in candidates if not (r["form_of"] or "").strip()]
+    if not real:
+        return row
+    return _select_row(real, pos)
+
+
 def _lookup_variants(word: str) -> list[str]:
     """
     Return the spellings to try for one word, most likely first.
@@ -287,14 +336,22 @@ def lookup(word: str, language: str, pos: Optional[str] = None) -> Optional[Dict
             ).fetchall()
             if rows:
                 row = _select_row(rows, pos)
+                # Meaning comes from whatever the row ultimately points at;
+                # pronunciation stays with the word the learner actually saw.
+                # "glaube" is pronounced [ˈɡlaʊ̯bə] even when its definition
+                # is borrowed from "glauben".
+                sense = _follow_form_of(conn, row, pos)
                 return DictionaryEntry(
                     word=row["word"],
-                    part_of_speech=row["pos"] or "",
-                    definition=row["definition"] or "",
-                    example1=row["example1"] or None,
-                    example2=row["example2"] or None,
-                    synonyms=[s for s in (row["synonyms"] or "").split("|") if s],
-                    antonyms=[a for a in (row["antonyms"] or "").split("|") if a],
+                    part_of_speech=sense["pos"] or "",
+                    definition=sense["definition"] or "",
+                    example1=sense["example1"] or None,
+                    example2=sense["example2"] or None,
+                    synonyms=[s for s in (sense["synonyms"] or "").split("|") if s],
+                    antonyms=[a for a in (sense["antonyms"] or "").split("|") if a],
+                    ipa=row["ipa"] or None,
+                    audio_url=row["audio_url"] or None,
+                    form_of=row["form_of"] or None,
                 )
     except sqlite3.Error as exc:
         logger.warning("Dictionary lookup failed for '%s' (%s): %s", word, language, exc)
@@ -312,6 +369,13 @@ def _extract_record(raw: dict, language: str) -> Optional[tuple]:
     French edition describes German, Occitan and so on in French), so the
     language filter is what keeps the index to real target-language words:
     it discards roughly 70% of the file.
+
+    A real definition is preferred over an inflection pointer within the
+    same record. Wiktionary indexes every inflected form as its own entry,
+    so taking senses[0] unconditionally could store "Dativ Plural des
+    Substantivs Krieg" while a real gloss sat two senses below it. When
+    every sense is a pointer, the first is kept and the word it points at
+    is recorded, so a caller can follow it rather than print it.
     """
     if raw.get("lang_code") != language:
         return None
@@ -319,18 +383,44 @@ def _extract_record(raw: dict, language: str) -> Optional[tuple]:
     if not word:
         return None
 
+    def _sense_form_of(sense: dict) -> Optional[str]:
+        """The word this sense is an inflected form of, or None."""
+        targets = sense.get("form_of") or []
+        target = next(
+            (t.get("word") for t in targets if isinstance(t, dict) and t.get("word")),
+            None,
+        )
+        if target:
+            return target
+        # wiktextract tags the sense even where it does not resolve a target.
+        return "" if "form-of" in (sense.get("tags") or []) else None
+
+    def _read(sense: dict) -> tuple:
+        return (
+            (sense.get("glosses") or [""])[0],
+            [e.get("text", "") for e in (sense.get("examples") or []) if e.get("text")],
+        )
+
     definition = ""
     examples: list[str] = []
+    form_of = ""
+    fallback: Optional[tuple] = None
+
     for sense in raw.get("senses") or []:
-        glosses = sense.get("glosses") or []
-        if glosses:
-            definition = glosses[0]
-            examples = [
-                e.get("text", "")
-                for e in (sense.get("examples") or [])
-                if e.get("text")
-            ]
+        if not (sense.get("glosses") or []):
+            continue
+        pointer = _sense_form_of(sense)
+        if pointer is None:
+            definition, examples = _read(sense)
+            form_of = ""
             break
+        if fallback is None:
+            gloss, exs = _read(sense)
+            fallback = (gloss, exs, pointer)
+    else:
+        if fallback is not None:
+            definition, examples, form_of = fallback
+
     if not definition:
         return None
 
@@ -341,6 +431,17 @@ def _extract_record(raw: dict, language: str) -> Optional[tuple]:
             if item.get("word")
         )[:256]
 
+    # Pronunciation. mp3_url is preferred over ogg_url because it is a direct
+    # upload.wikimedia.org file while ogg_url is a Special:FilePath redirect,
+    # and because Anki plays mp3 without relying on the user's codec setup.
+    sounds = raw.get("sounds") or []
+    ipa = next((s["ipa"] for s in sounds if s.get("ipa")), "")
+    audio = next(
+        (s.get("mp3_url") or s.get("ogg_url")
+         for s in sounds if s.get("mp3_url") or s.get("ogg_url")),
+        "",
+    )
+
     return (
         word.lower(),
         (raw.get("pos") or "")[:32],
@@ -349,6 +450,9 @@ def _extract_record(raw: dict, language: str) -> Optional[tuple]:
         (examples[1] if len(examples) > 1 else "")[:256],
         _joined("synonyms"),
         _joined("antonyms"),
+        ipa[:64],
+        audio[:512],
+        form_of[:128],
     )
 
 
@@ -426,7 +530,8 @@ def build_index(
         conn.execute(
             "CREATE TABLE entries ("
             "  word TEXT, pos TEXT, definition TEXT,"
-            "  example1 TEXT, example2 TEXT, synonyms TEXT, antonyms TEXT)"
+            "  example1 TEXT, example2 TEXT, synonyms TEXT, antonyms TEXT,"
+            "  ipa TEXT, audio_url TEXT, form_of TEXT)"
         )
         batch: list[tuple] = []
         with gzip.open(archive, "rt", encoding="utf-8") as handle:
@@ -447,12 +552,12 @@ def build_index(
                 indexed += 1
                 if len(batch) >= 20000:
                     conn.executemany(
-                        "INSERT INTO entries VALUES (?,?,?,?,?,?,?)", batch
+                        "INSERT INTO entries VALUES (?,?,?,?,?,?,?,?,?,?)", batch
                     )
                     batch = []
                     _say(f"  indexed {indexed:,} entries (line {line_number:,})...")
         if batch:
-            conn.executemany("INSERT INTO entries VALUES (?,?,?,?,?,?,?)", batch)
+            conn.executemany("INSERT INTO entries VALUES (?,?,?,?,?,?,?,?,?,?)", batch)
         conn.execute("CREATE INDEX idx_word ON entries(word)")
         conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         conn.commit()

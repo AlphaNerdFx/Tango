@@ -51,18 +51,38 @@ def isolated_dict_dir(tmp_path, monkeypatch):
 
 
 def _record(word, lang_code="fr", gloss="Une definition.", examples=(),
-            synonyms=(), antonyms=(), pos="noun"):
+            synonyms=(), antonyms=(), pos="noun", sounds=None, senses=None):
+    """
+    Build one wiktextract-shaped record.
+
+    `senses` overrides the single-sense default, for tests that need several
+    -- an inflection pointer sitting in front of a real gloss, say. `sounds`
+    takes the shape wiktextract emits: a list of dicts carrying ipa, mp3_url
+    and ogg_url in any combination.
+    """
     return {
         "word": word,
         "lang_code": lang_code,
         "pos": pos,
-        "senses": [{
+        "senses": senses if senses is not None else [{
             "glosses": [gloss],
             "examples": [{"text": t} for t in examples],
         }],
+        "sounds": sounds or [],
         "synonyms": [{"word": w} for w in synonyms],
         "antonyms": [{"word": w} for w in antonyms],
     }
+
+
+def _sense(gloss, form_of=None, tags=(), examples=()):
+    """One sense. form_of names the word this is an inflected form of."""
+    s = {"glosses": [gloss], "examples": [{"text": t} for t in examples]}
+    if form_of:
+        s["form_of"] = [{"word": form_of}]
+        s["tags"] = ["form-of", *tags]
+    elif tags:
+        s["tags"] = list(tags)
+    return s
 
 
 def _archive(tmp_path, records) -> "object":
@@ -397,3 +417,220 @@ class TestPosForUpos:
         assert wiktdata.pos_for_upos("PROPN") is None
         assert wiktdata.pos_for_upos("") is None
         assert wiktdata.pos_for_upos(None) is None
+
+
+# -- Schema v2: pronunciation and inflection pointers -------------------------
+
+class TestPronunciationFields:
+    """
+    ADR-009 phase 1. IPA and a Commons audio URL sit in the same records the
+    index is already built from, so capturing them is a schema change rather
+    than a new source. Measured on 20000 German entries: 93% carry IPA, 91%
+    an audio URL.
+    """
+
+    def test_ipa_and_audio_are_stored(self, tmp_path):
+        build_index("de", archive=_archive(tmp_path, [
+            _record("hallo", lang_code="de", sounds=[
+                {"ipa": "[ha'lo:]"},
+                {"mp3_url": "https://upload.wikimedia.org/De-Hallo.ogg.mp3",
+                 "ogg_url": "https://commons.wikimedia.org/De-Hallo.ogg"},
+            ]),
+        ]))
+        entry = lookup("hallo", "de")
+        assert entry.ipa == "[ha'lo:]"
+        assert entry.audio_url == "https://upload.wikimedia.org/De-Hallo.ogg.mp3"
+
+    def test_mp3_is_preferred_over_ogg(self, tmp_path):
+        # ogg_url is a Special:FilePath redirect; mp3_url is the direct file,
+        # and Anki plays mp3 without depending on the user's codec setup.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("haus", lang_code="de", sounds=[
+                {"ogg_url": "https://commons.wikimedia.org/De-Haus.ogg",
+                 "mp3_url": "https://upload.wikimedia.org/De-Haus.ogg.mp3"},
+            ]),
+        ]))
+        assert lookup("haus", "de").audio_url.endswith(".mp3")
+
+    def test_ogg_is_used_when_there_is_no_mp3(self, tmp_path):
+        # The partner: preferring mp3 must not mean discarding a lone ogg.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("baum", lang_code="de", sounds=[
+                {"ogg_url": "https://commons.wikimedia.org/De-Baum.ogg"},
+            ]),
+        ]))
+        assert lookup("baum", "de").audio_url.endswith(".ogg")
+
+    def test_absent_sounds_leave_both_empty(self, tmp_path):
+        # 7% of German entries have no sounds block at all, and every entry
+        # in a v1-era fixture has none. Must be None, not "".
+        build_index("fr", archive=_archive(tmp_path, [_record("maison")]))
+        entry = lookup("maison", "fr")
+        assert entry.ipa is None
+        assert entry.audio_url is None
+
+
+class TestFormOfSenses:
+    """
+    Wiktionary indexes every inflected form as its own entry, so a card can
+    read "Dativ Plural des Substantivs Krieg" -- a pointer, not a definition.
+    Measured at 18 of 342 German cards on a real video.
+    """
+
+    def test_a_real_gloss_wins_over_a_pointer_in_the_same_record(self, tmp_path):
+        # The pointer is FIRST here. Taking senses[0] unconditionally, which
+        # is what v1 did, stores the pointer and loses the real definition
+        # sitting right behind it.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("hab", lang_code="de", senses=[
+                _sense("2. Person Singular Imperativ des Verbs haben", form_of="haben"),
+                _sense("Hab und Gut; Besitz"),
+            ]),
+        ]))
+        entry = lookup("hab", "de")
+        assert entry.definition == "Hab und Gut; Besitz"
+        assert entry.form_of is None
+
+    def test_a_pointer_is_kept_when_every_sense_is_one(self, tmp_path):
+        # The partner. Skipping pointers must not turn a word that has only
+        # pointers into a miss -- it would lose the card entirely.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("glaube", lang_code="de", senses=[
+                _sense("1. Person Singular Indikativ des Verbs glauben",
+                       form_of="glauben"),
+            ]),
+        ]))
+        entry = lookup("glaube", "de")
+        assert entry.definition.startswith("1. Person Singular")
+        assert entry.form_of == "glauben"
+
+    def test_the_pointer_target_is_recorded(self, tmp_path):
+        # form_of naming the target is what lets a caller follow the pointer
+        # to glauben's real definition instead of printing the pointer.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("kriegen", lang_code="de", senses=[
+                _sense("Dativ Plural des Substantivs Krieg", form_of="Krieg"),
+            ]),
+        ]))
+        assert lookup("kriegen", "de").form_of == "Krieg"
+
+    def test_a_tagged_sense_with_no_target_still_counts_as_a_pointer(self, tmp_path):
+        # wiktextract tags some senses form-of without resolving a target.
+        # Those must still lose to a real gloss.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("test", lang_code="de", senses=[
+                {"glosses": ["Genitiv Singular"], "tags": ["form-of"]},
+                _sense("Eine Pruefung."),
+            ]),
+        ]))
+        assert lookup("test", "de").definition == "Eine Pruefung."
+
+    def test_examples_follow_the_selected_sense(self, tmp_path):
+        # The gloss and its examples must come from the same sense. Reading
+        # the gloss from one and examples from another is the field-mismatch
+        # shape this project keeps hitting.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("hab", lang_code="de", senses=[
+                _sense("Imperativ des Verbs haben", form_of="haben",
+                       examples=["Hab dich nicht so!"]),
+                _sense("Besitz", examples=["Sein Hab und Gut."]),
+            ]),
+        ]))
+        assert lookup("hab", "de").example1 == "Sein Hab und Gut."
+
+
+class TestSchemaVersioning:
+
+    def test_a_v1_index_is_reported_unusable(self, tmp_path, monkeypatch):
+        # A stale index must be rebuilt rather than queried with the wrong
+        # columns. Without this the v2 read would raise on a missing column
+        # for anyone who does not rebuild.
+        build_index("fr", archive=_archive(tmp_path, [_record("maison")]))
+        path = index_path("fr")
+        with sqlite3.connect(path) as conn:
+            conn.execute("PRAGMA user_version = 1")
+        assert is_available("fr") is False
+
+
+class TestFollowingFormOfPointers:
+    """
+    81.4% of the real German index is inflected forms, so a selected row's
+    whole gloss is often a pointer. v2 stores the target, so it can be
+    followed instead of printed. Verified on the real index: "glaube" went
+    from "1. Person Singular Indikativ Präsens Aktiv des Verbs glauben" to
+    "religiös sein, an einen oder mehrere Götter glauben".
+    """
+
+    @staticmethod
+    def _pair(tmp_path):
+        return _archive(tmp_path, [
+            _record("glaube", lang_code="de", pos="verb",
+                    sounds=[{"ipa": "[glaube-ipa]"}],
+                    senses=[_sense("1. Person Singular des Verbs glauben",
+                                   form_of="glauben")]),
+            _record("glauben", lang_code="de", pos="verb",
+                    sounds=[{"ipa": "[glauben-ipa]"}],
+                    senses=[_sense("geistig taetig sein",
+                                   examples=["Ich glaube dir."])]),
+        ])
+
+    def test_a_pointer_resolves_to_its_target_definition(self, tmp_path):
+        build_index("de", archive=self._pair(tmp_path))
+        entry = lookup("glaube", "de", pos="VERB")
+        assert entry.definition == "geistig taetig sein"
+        assert entry.form_of == "glauben"
+
+    def test_examples_come_from_the_target_too(self, tmp_path):
+        # The pointer entry has no examples of its own; the target does.
+        build_index("de", archive=self._pair(tmp_path))
+        assert lookup("glaube", "de", pos="VERB").example1 == "Ich glaube dir."
+
+    def test_pronunciation_stays_with_the_word_that_was_looked_up(self, tmp_path):
+        # The learner sees "glaube" on the card, so it must carry glaube's
+        # IPA even though the meaning is borrowed. Taking the whole row from
+        # the target would put the wrong pronunciation on the card -- the
+        # field-mismatch shape CLAUDE.md 3.2 exists to prevent.
+        build_index("de", archive=self._pair(tmp_path))
+        assert lookup("glaube", "de", pos="VERB").ipa == "[glaube-ipa]"
+
+    def test_a_real_definition_is_not_redirected(self, tmp_path):
+        # The partner: only pointers are followed. A word with a real gloss
+        # must be returned untouched.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("haus", lang_code="de", senses=[_sense("Ein Gebaeude.")]),
+        ]))
+        entry = lookup("haus", "de")
+        assert entry.definition == "Ein Gebaeude."
+        assert entry.form_of is None
+
+    def test_a_missing_target_keeps_the_pointer_rather_than_the_card(self, tmp_path):
+        # Losing the card is worse than a poor definition -- the rule the
+        # rest of this module follows.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("glaube", lang_code="de",
+                    senses=[_sense("1. Person Singular des Verbs glauben",
+                                   form_of="glauben")]),
+        ]))
+        entry = lookup("glaube", "de")
+        assert entry.definition.startswith("1. Person Singular")
+
+    def test_a_pointer_to_a_pointer_is_not_chased(self, tmp_path):
+        # One hop only. A chain must terminate rather than loop.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("a", lang_code="de", senses=[_sense("pointer to b", form_of="b")]),
+            _record("b", lang_code="de", senses=[_sense("pointer to a", form_of="a")]),
+        ]))
+        assert lookup("a", "de").definition == "pointer to b"
+
+    def test_the_target_row_is_chosen_by_the_same_pos(self, tmp_path):
+        # The target can itself be ambiguous. "leide" is a verb form, so the
+        # verb sense of "leiden" is wanted, not the noun.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("leide", lang_code="de", pos="verb",
+                    senses=[_sense("1. Person des Verbs leiden", form_of="leiden")]),
+            _record("leiden", lang_code="de", pos="noun",
+                    senses=[_sense("Das Leiden, ein Zustand.")]),
+            _record("leiden", lang_code="de", pos="verb",
+                    senses=[_sense("Schmerzen verspueren.")]),
+        ]))
+        assert lookup("leide", "de", pos="VERB").definition == "Schmerzen verspueren."
