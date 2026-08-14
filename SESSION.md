@@ -109,12 +109,12 @@ None. `ADR-009 phase 1` is committed in full — the index half (8.30), the
 model-ID correction (8.31), and the card half with the notetype alignment
 that keeps imports merging (8.32).
 
-**Anki housekeeping, one item.** Verifying 8.32 was done in the `AI Tester`
-profile, not `User 1`, and it left one artefact behind: an empty forked
-notetype, `YT Anki Pipeline — Recognition-da2c0` at `1607392322`. AnkiConnect
-has no `deleteModel` action, so it needs Tools → Manage Note Types → Delete
-in the Anki UI. Harmless where it is. That profile's notetype now carries the
-12 fields and its 207 notes are intact.
+**Anki housekeeping: done.** Verifying 8.32 was done in the `AI Tester`
+profile, not `User 1`. It left an empty forked notetype behind
+(`YT Anki Pipeline — Recognition-da2c0` at `1607392322`), since AnkiConnect
+has no `deleteModel` action; that was removed by hand in the Anki UI on
+15 August 2026. Re-checked afterwards: one notetype at `1607392321`, 12
+fields, 207 notes intact.
 
 `User 1` has not been opened or touched. Its notetype is still the 10-field
 one, and `ensure_model_fields()` will add IPA and Pronunciation on the first
