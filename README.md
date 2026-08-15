@@ -3,7 +3,7 @@
 [![CI](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml/badge.svg)](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.4.0--beta-orange)](https://github.com/youssefea/tango/releases/tag/v0.4.0)
+[![Version](https://img.shields.io/badge/version-v0.5.0-orange)](https://github.com/AlphaNerdFx/Tango/releases/tag/v0.5.0)
 
 Turn any YouTube video into Anki flashcards, automatically.
 
@@ -172,6 +172,13 @@ Each card contains:
 - Example from Youtube Video (transcript sentence)
 - Synonyms (in original language)
 - Antonyms (in original language)
+- IPA (pronunciation transcription, where a dictionary index is built)
+- Pronunciation (link to a Wikimedia Commons recording, where one exists)
+
+Fields are **appended, never reordered** — indices 0-9 are what every
+already-imported card is bound to. Adding one is a notetype schema change:
+Tango aligns your collection's notetype before importing, and Anki will ask
+for one full sync afterwards. See `CHANGELOG.md` for the v0.5.0 migration.
 
 ---
 
@@ -200,19 +207,28 @@ tango/
 
 ## Roadmap
 
-- [x] Core pipeline: transcript to Anki cards
-- [x] Language filter: subtitle selection by language code or deck name
-- [x] Multilingual definitions: native language examples and synonyms
-- [x] Translation mode: English definitions of non-English words
-- [x] Fuzzy matching improvements for morphologically rich languages
-- [x] Single-letter and proper noun filtering
-- [ ] Additional synonym and antonym APIs
-- [x] Concurrent definition fetching via a bounded thread pool
-- [ ] Full CLI tool with Typer, proper flags, and error handling
-- [ ] Dockerfile for cloud deployment
-- [ ] User vocabulary profiles from Anki review history
-- [ ] Video recommendations based on vocabulary domain and level
-- [ ] Web UI and browser extension
+Goals are tracked per release tag in **[ROADMAP.md](ROADMAP.md)**, which also
+records what v1.0.0 freezes and what is deliberately out of scope.
+
+**v1.0.0 is a finished CLI** — installable from a package, running on
+Windows, macOS and Linux, on low-end and high-end hardware alike.
+
+| tag | goal |
+|---|---|
+| v0.5.0 | pronunciation on cards, and a notetype that merges *(current)* |
+| v0.5.1 | pronunciation for every language, starting with English |
+| v0.6.0 | card quality |
+| v0.7.0 | the command line as a product |
+| v0.8.0 | runs on any operating system |
+| v0.9.0 | runs on modest hardware |
+| v0.10.0 | packaged and installable |
+| v1.0.0 | a finished CLI |
+
+A browser extension, a web or desktop app, and distribution to other
+language ecosystems are **out of scope** for 1.0.0 — plausibly a separate
+project sharing a common premise. See [ROADMAP.md](ROADMAP.md) §4.
+
+Release history is in **[CHANGELOG.md](CHANGELOG.md)**.
 
 ---
 

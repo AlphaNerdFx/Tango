@@ -1,0 +1,32 @@
+version: 2
+
+updates:
+  # Python dependencies. Grouped and monthly rather than per-package and
+  # weekly: this project pins ranges rather than exact versions, so most
+  # individual bumps are noise, and the dependency that actually matters
+  # here is argostranslate -- it pulls in stanza, torch and the CUDA stack,
+  # 4.5 GB of the 5.9 GB install (ROADMAP.md v0.9.0).
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      dev-dependencies:
+        patterns:
+          - pytest*
+          - black
+          - ruff
+          - mypy
+          - types-*
+          - tomli
+    labels:
+      - dependencies
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels:
+      - dependencies
+      - ci
