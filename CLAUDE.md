@@ -23,7 +23,9 @@ a video plays. Only the CLI exists today.
 **Virtual environment:** `.tangovenv` — do NOT create `.venv`, it is the wrong name
 **Python:** 3.10, running in WSL2 on Windows 11
 **Current tag:** v0.4.5
-**Working toward:** v0.4.6
+**Working toward:** v0.5.0 — a MINOR, not a patch, because it migrates the
+notetype. Goals per tag through v1.0.0 are in `ROADMAP.md`; the rule that
+picks the number is in section 15.
 
 ---
 
@@ -340,7 +342,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 817 passing, 24 deselected. The count drifts as tests are added —
+Expected: 819 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
@@ -422,6 +424,7 @@ docs/Code_Walkthrough.pdf        Function-by-function explanation
 ARCHITECTURE.md                  This repo, full system detail
 SESSION.md                       Current working state
 TASKS.md                         Prioritised remaining work
+ROADMAP.md                       One goal per tag to v1.0.0, and what 1.0.0 freezes
 ```
 
 ## 10. Pre-commit gate
@@ -438,3 +441,10 @@ When working autonomously: commit in small, verified increments; keep a running 
 
 ## 14. Docs edits
 Before inserting a new section into a Markdown doc, print the existing heading outline (`grep -n '^#' <file>`) and state which heading the new section goes after. Match the surrounding heading level and ordering convention.
+
+## 15. Versioning
+[SemVer 2.0.0](https://semver.org). While at `0.x`: **PATCH** for fixes and for completing something already shipped; **MINOR** for new capability *or anything requiring a migration*. The deciding question is whether an existing user must do something, or whether something they already have changes shape — if yes, it is at least a MINOR. v0.5.0 is a MINOR because the notetype gains two fields and every collection must be altered before importing.
+
+Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
+
+At the moment of tagging, `pyproject.toml`, the git tag, and section 1's "Current tag" must agree. They never once have — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, and `0.4.4` at v0.4.5. Treat a mismatch as a release bug. Every tag also gets GitHub release notes; v0.4.1–v0.4.5 have none.

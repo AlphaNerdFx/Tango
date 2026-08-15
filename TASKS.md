@@ -477,14 +477,44 @@ remaining user-visible value is; the rest is measurement and hygiene.
       stoplist of filler sounds, not a POS rule: `Bonsoir` is also `INTJ` and
       is worth learning.
 
-- [ ] **ADR-009 phase 1: IPA and Commons pronunciation audio.** 91.5% of
-      German entries carry IPA and 65.7% carry a Wikimedia Commons audio URL,
-      in data `wiktdata.py` already downloads. The index stores neither, so
-      it is a schema change plus a rebuild rather than a new source. Highest
-      value per unit of work in the whole media proposal. Fields must be
-      APPENDED at index 10+ (3.2 is positional), and keeping MODEL_ID while
-      changing the field list is a notetype schema change that must be tested
-      against a collection with real review history.
+- [x] **ADR-009 phase 1: IPA and Commons pronunciation audio.** Shipped for
+      v0.5.0. The ADR's estimates were low for German — real coverage is
+      99.7% IPA and 95.0% audio, not 91.5% and 65.7% — but German is not
+      representative: French is 85.1% / 12.1% and Russian 83.3% / 4.4%
+      (ARCHITECTURE 8.30). IPA is dependable everywhere, audio is a German
+      feature that degrades elsewhere.
+
+      The warning about the notetype was the right one and understated. It is
+      not merely that it "must be tested" — appending a field makes Anki
+      **fork** the notetype at a bumped ID and strand every existing note,
+      which is the same mechanism that had already moved this project's
+      MODEL_ID twice. `deck.ensure_model_fields()` now aligns the collection
+      before importing. ARCHITECTURE 8.32, and 8.33 for why it must resolve
+      the notetype by ID rather than name.
+
+- [ ] **Pronunciation for languages with no offline index.** v0.5.0 gives
+      IPA and audio only where an index exists — de, fr, ru. English gets
+      nothing, and es/ja/ko/pt/zh have a spaCy model but no index. Three
+      groups, one goal, and the English half is nearly free:
+
+      **English:** dictionaryapi.dev already returns true IPA and a complete
+      audio URL, and the pipeline already calls it. Verified live:
+      `/house` → `phonetic: /hʌʊs/`, `phonetics[].text: '/haʊs/'`,
+      `phonetics[].audio: https://api.dictionaryapi.dev/media/...`.
+      `_parse_dictapi_response` never reads `phonetics` — the sixth instance
+      of the fetched-parsed-discarded shape (SESSION.md 6.13).
+
+      Merriam-Webster is the wrong source and this was checked, not assumed:
+      Collegiate returns `hwi.prs[].mw` = `ˈhau̇s`, which is MW's own
+      respelling rather than IPA, and audio as a bare filename (`house001`)
+      needing subdirectory rules to build a URL.
+
+      The catch: MW is tried first for English and dictapi only runs `if not
+      definition`, so most English cards never reach it. Needs the phonetics
+      lookup to happen even when MW supplied the definition — free, no key,
+      already cached and behind the circuit breaker.
+
+      **es, ja, ko, pt, zh:** `make dictionary LANGUAGE=<code>`, below.
 
 - [x] **The sweep needs Anki, and does not say so.** Checks AnkiConnect up
       front now and fails with a message naming the cause, instead of
@@ -511,10 +541,20 @@ remaining user-visible value is; the rest is measurement and hygiene.
       the state that yields definition-less cards. `make dictionary
       LANGUAGE=es` each. Cheapest large win available per language.
 
-- [ ] **A test per hard constraint.** The 3.3 violation shipped because
-      nothing pinned it, and it was caught by a coverage sweep noticing an
-      impossible number. 3.1 (MODEL_ID/DECK_ID), 3.2 (field order) and 3.3
-      (field language) should each fail loudly rather than rely on review.
+- [x] **A test per hard constraint.** Done for all six in
+      `tests/test_hard_constraints.py`, each mutation-verified.
+
+      Two things worth keeping from doing it. 3.1's first version pinned only
+      the *resolved* `MODEL_ID`, which reads through `ANKI_MODEL_ID` — so it
+      passed on any machine with a `.env` while the source default drifted;
+      it now pins the literal in `config.py`'s source too. And 3.3 was found
+      to have a hole a mutation run walked straight through: the tests sliced
+      `fetch_definition`'s source from `wiktdata.lookup(query_lemma` onwards,
+      which begins *after* the Merriam-Webster block, so one of the three
+      call sites the constraint names was never inspected at all.
+
+      The lesson is that a constraint test is only as good as the mutation
+      that was run against it. `make check` passing proves nothing here.
 
 - [x] **Re-run the sweep and record the corrected baseline.** Done, 13
       August, all 16 rows, cache off. SESSION.md section 5. English examples
