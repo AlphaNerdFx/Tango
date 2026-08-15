@@ -135,13 +135,27 @@ was verified by diffing all 2135 notes before and after:
   115, total notes unchanged at 28 596
 - re-running the alignment returns `[]`, so it is idempotent
 
-**Open item: Anki is still on the `User 1` profile.** `loadProfile` returns
-`{"result": true}` and does not switch — reproduced twice. Almost certainly
-the full-sync confirmation that a schema change triggers: AnkiConnect cannot
-answer a modal dialog. Switching back to `AI Tester` has to be done in the
-UI (File → Switch Profile), taking the full-sync prompt on the way. The
-earlier switch in the other direction worked because nothing had been
-modified yet.
+Anki is back on the `AI Tester` profile.
+
+**A note on `loadProfile`, and a correction.** Two calls to switch back to
+`AI Tester` returned `{"result": true}` while `getActiveProfile` kept
+reporting `User 1`. This file previously recorded that as "almost certainly
+the full-sync confirmation a schema change triggers, which AnkiConnect
+cannot answer" — **that explanation was invented, not verified, and it is
+wrong.** Anki was shut down accidentally shortly afterwards and came back on
+`AI Tester`.
+
+The field addition itself was verified live, against the collection, before
+that shutdown — the 2135-note diff above. That it survived an unclean
+shutdown is reported rather than re-measured, since checking it from here
+would mean switching profiles again. Confirm it next time `User 1` is open:
+Tools → Manage Note Types → `YT Anki Pipeline — Recognition-6c3a0` → Fields
+should list `IPA` and `Pronunciation` at positions 11 and 12.
+
+What is actually known: `loadProfile` acknowledged and did not take effect
+within the window it was observed, and the profile did change by the time
+Anki was restarted. The cause is unestablished. Do not build on the modal
+theory. See 6.22.
 
 ---
 
@@ -457,6 +471,31 @@ The inverse of 6.9's failure. There the risk was trusting a document that
 recorded something untrue; here it was trusting a document that recorded
 something true without recording *why*, so the only actionable part had been
 lost.
+
+### 6.22 Mistake: writing a plausible cause into the record, same session
+
+`loadProfile` returned `{"result": true}` twice while the profile did not
+change. The cause recorded here was "almost certainly the full-sync
+confirmation a schema change triggers; AnkiConnect cannot answer a modal."
+That was reasoning, not evidence. Anki had in fact been shut down
+accidentally, and came back on the requested profile with the change intact.
+
+The tell was in the writing: *almost certainly*, attached to a mechanism
+never observed, on the first reading that fit. Nothing was checked — not
+whether a dialog existed, not whether the collection was actually
+schema-modified, not whether `loadProfile` behaves this way at all.
+
+This is 6.7 exactly ("a plausible explanation that requires no verification
+is more dangerous than no explanation at all"), committed to SESSION.md and
+a commit message within the same session that added a lesson about numbers
+in constraints being unexamined evidence. Two guards would have caught it:
+the confidence-marking rule in CLAUDE.md 7.3 — it should have been
+`[Guessing]`, and calling it that would have made it obviously unfit to
+write down — and simply stopping at "the cause is unestablished," which
+costs nothing and stays true.
+
+The rule this file needs: **an unverified cause goes in the report, never in
+the record.** A handover may say what is not known. It may not guess.
 
 ---
 
