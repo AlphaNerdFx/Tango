@@ -8,13 +8,13 @@
 pytest==9.1.1
 
 # Code formatter
-black==25.1.0
+black==26.5.1
 
 # Linter
-ruff==0.11.13
+ruff==0.16.2
 
 # Static type checker
-mypy==1.15.0
+mypy==2.3.0
 
 # Type stubs
-types-requests==2.32.0.20250515
+types-requests==2.33.0.20260712
