@@ -137,16 +137,57 @@ declared** — it all arrives through `argostranslate`. The CUDA stack lands
 on machines that will never have a GPU. CLAUDE.md 3.6 has been saying
 "roughly 1.5GB" for this; the real figure is three times that.
 
-The largest single lever is therefore not code: installing the CPU-only
-torch wheel should remove most of 3.4 GB without changing a line of the
-pipeline.
+**Why torch is there at all, traced rather than assumed:**
+
+```
+argostranslate → stanza → torch → nvidia-cudnn/cusparselt/nccl/nvshmem, triton
+```
+
+Translation *inference* does not use torch. It uses `ctranslate2` and
+`sentencepiece`, together about 75 MB. `stanza` is pulled in for **sentence
+boundary detection** — splitting a paragraph into sentences — and it brings
+the entire CUDA stack with it. 4.5 GB to find full stops.
+
+argostranslate already knows this: it depends on `minisbd`, a minimal
+sentence boundary detector, and `translate.py` selects `MiniSBDSentencizer`
+when the installed language package ships minisbd rather than stanza.
+
+Two things block simply removing it, both verified in the installed source:
+
+- `argostranslate/sbd.py:12` is a bare `import stanza`, unguarded — unlike
+  the `import spacy` directly above it, which sits in a `try/except`. So
+  uninstalling stanza breaks argostranslate at import time, not just on the
+  stanza path.
+- `settings.stanza_available` is referenced by `translate.py:457` but is
+  **defined inside a docstring** in `settings.py`, so it is not a setting at
+  all. `ARGOS_STANZA_AVAILABLE` does nothing.
+
+So the reduction is staged, cheapest first:
+
+| step | saves | risk |
+|---|---|---|
+| 1. install the CPU-only torch wheel (`--index-url .../whl/cpu`) | ~3.4 GB of `nvidia` + `triton`, and torch itself shrinks | none — no code change, no GPU here to lose |
+| 2. drop `pymupdf` | 63 MB | none — zero references in the repo |
+| 3. install spaCy models on demand, not all nine | ~400 MB (`sudachidict_core` 208 MB + `zh_core_web_sm` 76 MB + others) | none for users who need one language |
+| 4. guard the stanza import upstream, ship minisbd packages | the remaining ~1.1 GB of torch | needs an upstream patch or a vendored shim; verify translation quality is unchanged |
+
+**After step 1 the dictionary index becomes the largest single item**, and
+that reframes the work: `dictionaries/` is 820 MB for three languages,
+131–423 MB each. 81.4% of the German index is inflected forms (8.30), which
+are needed for lookup but are mostly a word plus a pointer — whether that
+warrants the current row format is an open question with a real number
+attached to it.
+
+A realistic floor for a one-language, no-translation install is therefore
+roughly **250–300 MB of code plus one index**, and the index dominates.
+Worth knowing before optimising the wrong half.
 
 Proposed acceptance targets. **None of these are measured yet** — the 5.9 GB
 above is the only real number here, and the rest are the shape of the goal
 rather than findings:
 
-- base install, no translation: **≤ 500 MB**
-- with translation, CPU-only torch: **≤ 1 GB**
+- base install, no translation, one language: **≤ 300 MB** of code
+- with translation: **≤ 600 MB** after step 1, **≤ 200 MB** after step 4
 - peak RSS on a normal run: **≤ 1 GB**
 - index build completes within **2 GB RAM** (currently the most memory-hungry
   step by far, and unmeasured)
