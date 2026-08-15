@@ -116,19 +116,32 @@ has no `deleteModel` action; that was removed by hand in the Anki UI on
 15 August 2026. Re-checked afterwards: one notetype at `1607392321`, 12
 fields, 207 notes intact.
 
-`User 1` has been **inspected read-only** and not written to. That
-inspection found the 8.33 bug before it could do damage: the alignment
-resolved the notetype by name, and in that collection the plain name
-`YT Anki Pipeline — Recognition` belongs to a 1134-note notetype with an
-older schema, while this pipeline's 2135 cards sit on
-`YT Anki Pipeline — Recognition-6c3a0` at 1607392321. Resolving by name
-would have added six fields to the wrong notetype. Fixed to resolve by
-`MODEL_ID`; dry-run against the real collection now reports exactly
-`[IPA, Pronunciation]`.
+`User 1` was inspected read-only first, and that inspection found the 8.33
+bug before it could do damage: the alignment resolved the notetype by name,
+and in that collection the plain name `YT Anki Pipeline — Recognition`
+belongs to a 1134-note notetype with an older schema, while this pipeline's
+2135 cards sit on `YT Anki Pipeline — Recognition-6c3a0` at 1607392321.
+Resolving by name would have added six fields to the wrong notetype. Fixed
+to resolve by `MODEL_ID`.
 
-Still to do there: nothing has been applied. The first auto-import will add
-those two fields, which is a schema change, so expect Anki to ask for a full
-sync that once.
+**The alignment has since been applied to `User 1`,** on 15 August 2026.
+`ensure_model_fields` returned `['IPA', 'Pronunciation']`, and the result
+was verified by diffing all 2135 notes before and after:
+
+- 2135 notes before and after, identical note ids
+- **0 notes with any changed field value**
+- all now carry 12 fields, both new ones empty
+- notetype name unchanged (no fork), collection notetype count unchanged at
+  115, total notes unchanged at 28 596
+- re-running the alignment returns `[]`, so it is idempotent
+
+**Open item: Anki is still on the `User 1` profile.** `loadProfile` returns
+`{"result": true}` and does not switch — reproduced twice. Almost certainly
+the full-sync confirmation that a schema change triggers: AnkiConnect cannot
+answer a modal dialog. Switching back to `AI Tester` has to be done in the
+UI (File → Switch Profile), taking the full-sync prompt on the way. The
+earlier switch in the other direction worked because nothing had been
+modified yet.
 
 ---
 
