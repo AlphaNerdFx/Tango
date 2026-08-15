@@ -101,14 +101,73 @@ The first release aimed at someone who did not write it.
   this; the pipeline itself does not)
 - Progress and timing that make a long run legible
 
-### v0.8.0 — Install it anywhere
+### v0.8.0 — Runs on any operating system
 
-- Dependency size: PyTorch via argostranslate is ~1.5GB in an optional group
-  that is easy to install by accident
-- Dockerfile
-- Drop the assumptions this repo has about WSL2 + Windows Anki
+Today the repo assumes WSL2 with Anki on the Windows side. That assumption
+is load-bearing in more places than it looks.
 
-### v0.9.0 — Freeze candidate
+- `_translate_wsl_path()` and `_is_wsl()` exist because AnkiConnect resolves
+  paths on the Windows side. macOS and native Linux need neither; native
+  Windows needs no translation but different path handling
+- `ANKI_HOST` is a WSL gateway IP that changes on every WSL restart. On any
+  other platform it is `localhost` and never moves
+- The Makefile is the documented entry point for 23 targets, and GNU make is
+  not a reasonable requirement on Windows. `make help` already prints the CLI
+  equivalent of every user-facing target — the remaining work is making the
+  CLI the primary path and the Makefile a convenience
+- CI on Linux, macOS and Windows, because "should work" is not evidence
+
+### v0.9.0 — Runs on modest hardware
+
+**Measured, 15 August 2026: `.tangovenv` is 5.9 GB and `dictionaries/` is
+820 MB.** Where the 5.9 GB goes:
+
+| package | size | why it is there |
+|---|---|---|
+| `nvidia` | 2.7 GB | CUDA runtime, pulled in by torch |
+| `torch` | 1.1 GB | pulled in by argostranslate |
+| `triton` | 689 MB | pulled in by torch |
+| `sudachidict_core` | 208 MB | Japanese tokenizer for spaCy |
+| `spacy` | 110 MB | core dependency |
+| `ctranslate2.libs` | 75 MB | argostranslate |
+| `pymupdf` | 63 MB | **nothing — zero references in `src/`, `scripts/` or `tests/`** |
+
+**torch + nvidia + triton is 4.5 GB, 76% of the install, and none of it is
+declared** — it all arrives through `argostranslate`. The CUDA stack lands
+on machines that will never have a GPU. CLAUDE.md 3.6 has been saying
+"roughly 1.5GB" for this; the real figure is three times that.
+
+The largest single lever is therefore not code: installing the CPU-only
+torch wheel should remove most of 3.4 GB without changing a line of the
+pipeline.
+
+Proposed acceptance targets. **None of these are measured yet** — the 5.9 GB
+above is the only real number here, and the rest are the shape of the goal
+rather than findings:
+
+- base install, no translation: **≤ 500 MB**
+- with translation, CPU-only torch: **≤ 1 GB**
+- peak RSS on a normal run: **≤ 1 GB**
+- index build completes within **2 GB RAM** (currently the most memory-hungry
+  step by far, and unmeasured)
+- a full run completes on a **4 GB / 2-core** machine
+- per-language index: currently 131–423 MB, and worth asking what could be
+  dropped or compressed
+
+High-end hardware should be able to spend more, not merely avoid crashing:
+worker counts, batch sizes and cache behaviour should scale to what the
+machine has rather than being fixed at defaults chosen on one laptop.
+
+### v0.10.0 — Packaged and installable
+
+- A published package, so the install is one command and not a git clone.
+  **The name needs deciding: `tango` on PyPI is an unrelated project** —
+  `pyproject.toml` currently says `yt-anki-pipeline`
+- Model and index downloads as a first-run step rather than a README
+- Dockerfile for the "just run it" case
+- Uninstall that actually removes the 800 MB of indexes
+
+### v0.11.0 — Freeze candidate
 
 - Write the compatibility document: every item in §3 below, pinned
 - Deprecation policy — what a `0.9 → 1.0` break costs a user
@@ -116,14 +175,12 @@ The first release aimed at someone who did not write it.
 - Coverage sweep green across all 16 language pairs, including the new
   pronunciation columns
 
-### v1.0.0 — Stable CLI
+### v1.0.0 — A finished CLI
 
-No new features. §3 is frozen, documented, and tested.
-
-**Explicitly not in 1.0.0:** the FastAPI backend, the web app, and the
-Chrome extension. Those are the multi-surface product, and 1.0.0 is the CLI
-that feeds them. The name-keyed payload dicts in `cards.py` are the seam
-they will consume.
+A fully-fledged, optimized command-line tool that installs from a package,
+runs on Windows, macOS and Linux, and works on low-end and high-end hardware
+alike. §3 is frozen, documented and tested. No new features — everything
+above is done or explicitly deferred.
 
 ---
 
@@ -154,7 +211,39 @@ sources may improve), log output, and anything private (`_`-prefixed).
 
 ---
 
-## 4. Keeping this honest
+## 4. Out of scope, and why that is a decision rather than a deferral
+
+Tango 1.0.0 is a CLI. The following are **not** on the ladder above and
+should not quietly acquire rungs on it:
+
+- a Google Chrome extension surfacing vocabulary during playback
+- a desktop or web application, and the FastAPI backend behind it
+- deep-learning work beyond the existing spaCy/argostranslate use
+- distribution to other language ecosystems — npm, crates.io — alongside PyPI
+
+These are plausibly a **separate expansion project sharing a common premise**
+with this one, not later versions of this one. Keeping them off the ladder
+is what lets 1.0.0 mean "finished" instead of "paused".
+
+**What that costs now: almost nothing. What it requires now: one thing.**
+The seam those surfaces would consume is the card payload — the name-keyed
+dicts `cards._build_note()` and `_build_fallback_note()` construct before
+`_note_fields()` flattens them for genanki. That structure is already
+independent of genanki and already keyed by name.
+
+This matters most for the cross-ecosystem idea, because that one is easy to
+mis-scope. A Rust or JavaScript implementation would not reuse this Python;
+what travels between ecosystems is the **format**, not the code. So the only
+pre-1.0 obligation is to keep that payload clean and, at freeze time,
+specify it — a documented JSON shape for one card. Everything else is the
+other project's problem, and specifying the format is cheap precisely
+because §3 freezes the field list anyway.
+
+The one thing to avoid before 1.0.0 is letting genanki concepts leak back
+into that payload, which would quietly make the format unusable to anyone
+not generating `.apkg` files.
+
+## 5. Keeping this honest
 
 Each tag should leave, at minimum:
 

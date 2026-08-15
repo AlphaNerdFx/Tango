@@ -15,13 +15,23 @@ extracts the transcript, identifies vocabulary, checks the user's existing deck
 for duplicates, fetches definitions and example sentences, and produces an
 importable `.apkg` file.
 
-The long-term goal is a multi-surface product: this CLI, a FastAPI backend, a
-web application, and a Google Chrome extension that surfaces new vocabulary as
-a video plays. Only the CLI exists today.
+**Tango is a CLI, and v1.0.0 is a finished CLI** — installable from a
+package, running on Windows, macOS and Linux, on low-end and high-end
+hardware alike.
+
+A Chrome extension, a web or desktop app, deep-learning work, and
+distribution to other ecosystems (npm, crates.io) are **out of scope**:
+plausibly a separate expansion project sharing a common premise, not later
+versions of this one. ROADMAP.md §4 records what that costs — almost
+nothing now, provided the card payload in `cards.py` stays independent of
+genanki, because what travels between ecosystems is the format, not the
+code.
 
 **Repository:** https://github.com/AlphaNerdFx/Tango
 **Virtual environment:** `.tangovenv` — do NOT create `.venv`, it is the wrong name
-**Python:** 3.10, running in WSL2 on Windows 11
+**Python:** 3.10. Developed under WSL2 on Windows 11, but that is the
+current environment, not a target: cross-platform support is a v0.8.0 goal
+and the WSL assumptions in `__main__.py` and `ANKI_HOST` are known work.
 **Current tag:** v0.4.5
 **Working toward:** v0.5.0 — a MINOR, not a patch, because it migrates the
 notetype. Goals per tag through v1.0.0 are in `ROADMAP.md`; the rule that
@@ -194,8 +204,22 @@ or an installed spaCy or translation model. Tests requiring those use
 
 ### 3.6 No new heavy runtime dependencies in the base install
 
-PyTorch already adds roughly 1.5GB via argostranslate. New heavy dependencies
-go in optional groups in `pyproject.toml`, not the base `dependencies` list.
+New heavy dependencies go in optional groups in `pyproject.toml`, not the
+base `dependencies` list.
+
+This rule used to say PyTorch adds "roughly 1.5GB" via argostranslate.
+**Measured 15 August 2026, that is a threefold understatement:**
+`.tangovenv` is **5.9 GB**, of which `torch` is 1.1 GB, `nvidia` (the CUDA
+runtime torch pulls in) is 2.7 GB and `triton` a further 689 MB — 4.5 GB,
+76% of the install, none of it declared anywhere in `pyproject.toml` and
+none of it useful on a machine without a GPU. `dictionaries/` adds 820 MB
+on top.
+
+Two things follow. The optional group is doing less than it appears: it
+keeps the dependency undeclared, not uninstalled, once anyone runs
+`make translate-setup`. And a number in this file that nobody re-measured
+was wrong by 3x for months — see ROADMAP.md v0.9.0, where shrinking this
+is a release goal with acceptance targets.
 
 ---
 
