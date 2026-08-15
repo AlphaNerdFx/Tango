@@ -200,6 +200,43 @@ class TestConstraint33FieldLanguage:
         before_definition = target_branch.split("definition     = entry.definition")[0]
         assert "target_language == language" not in before_definition
 
+    def test_the_merriam_webster_call_site_is_gated(self):
+        # The first of the three call sites, and one the tests above never
+        # looked at: they slice the source from `wiktdata.lookup(query_lemma`
+        # onwards, which begins AFTER the Merriam-Webster block. Deleting
+        # this gate went completely undetected in a mutation run.
+        #
+        # It matters because MW is an English dictionary. Ungated, a German
+        # video with --def-lang en puts English MW sentences on the card --
+        # the same defect as 8.25, from a different source.
+        from pipeline import definition
+        src = inspect.getsource(definition.fetch_definition)
+        mw_block = (
+            src.split('_actual_source = "merriam-webster"')[1]
+               .split("native_ex1 = mw.example_dict")[0]
+        )
+        assert "target_language == language" in mw_block, (
+            "CLAUDE.md 3.3: Merriam-Webster examples may only be used when "
+            "the target language IS the transcript language."
+        )
+
+    def test_the_transcript_language_call_site_is_not_gated(self):
+        # The third call site, and the partner to the two gate assertions.
+        # This entry IS in the transcript language, so it is the one source
+        # allowed to fill these fields unconditionally. Gating it too would
+        # satisfy every other test here while silently emptying the fields
+        # on exactly the cards the native fallback exists to rescue (8.26).
+        from pipeline import definition
+        src = inspect.getsource(definition.fetch_definition)
+        native_block = (
+            src.split('_actual_source = "wiktionary-native"')[1]
+               .split("native_syns = entry.synonyms")[0]
+        )
+        assert "target_language == language" not in native_block, (
+            "CLAUDE.md 3.3: the transcript-language entry is the one source "
+            "that may fill examples/synonyms/antonyms unconditionally."
+        )
+
     def test_wordnet_receives_the_original_lemma_not_the_translation(self):
         # Same constraint, different path. Passing query_lemma here writes
         # the target language's synonyms into a native field -- the original
@@ -241,7 +278,9 @@ class TestConstraint34ValidateTheLemma:
         """
         import ast
         import textwrap
+
         from pipeline import nlp
+
         fn = ast.parse(textwrap.dedent(inspect.getsource(nlp._is_valid_token))).body[0]
         if ast.get_docstring(fn):
             fn.body = fn.body[1:]
