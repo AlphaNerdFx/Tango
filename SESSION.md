@@ -12,10 +12,11 @@ installed environment at the time of writing, not recalled from memory. See
 
 ## 1. Where the project is
 
-**Tagged release:** v0.4.5
-**In development:** v0.5.0 — a MINOR rather than a patch, because it
-migrates the notetype. `ROADMAP.md` has the ladder to v1.0.0 and the rule
-that picks the number; CLAUDE.md 15 is the short form.
+**Tagged release:** v0.5.0 — pronunciation on cards, and a notetype that
+merges instead of forking. `CHANGELOG.md` has the entry and the migration.
+**In development:** v0.5.1 — pronunciation for languages with no offline
+index. `ROADMAP.md` has the ladder to v1.0.0 and the rule that picks the
+number; CLAUDE.md 15 is the short form.
 **HEAD:** 29 commits past the tag, 11 of them unpushed. Working tree clean.
 **Test state:** 819 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 87% overall, `__main__.py` 82% (`make coverage`). The 88%

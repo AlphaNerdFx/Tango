@@ -32,10 +32,12 @@ code.
 **Python:** 3.10. Developed under WSL2 on Windows 11, but that is the
 current environment, not a target: cross-platform support is a v0.8.0 goal
 and the WSL assumptions in `__main__.py` and `ANKI_HOST` are known work.
-**Current tag:** v0.4.5
-**Working toward:** v0.5.0 — a MINOR, not a patch, because it migrates the
-notetype. Goals per tag through v1.0.0 are in `ROADMAP.md`; the rule that
-picks the number is in section 15.
+**Current tag:** v0.5.0 — a MINOR rather than a patch, because it migrates
+the notetype (two new fields, and Anki wants a full sync afterwards).
+**Working toward:** v0.5.1 — pronunciation for languages with no offline
+index, English first. Goals per tag through v1.0.0 are in `ROADMAP.md`; the
+rule that picks the number is in section 15; release history is in
+`CHANGELOG.md`.
 
 ---
 
