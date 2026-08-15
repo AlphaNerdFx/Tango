@@ -15,7 +15,7 @@ installed environment at the time of writing, not recalled from memory. See
 **Tagged release:** v0.4.5
 **HEAD:** 14 commits past the tag, working tree clean, level with
 `tango-origin/main`
-**Test state:** 815 passing, 0 failing, 24 integration deselected (`make test`)
+**Test state:** 817 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 87% overall, `__main__.py` 82% (`make coverage`). The 88%
 carried here before was stale — measured at 86% immediately before the
 8.29 work, 87% after it.
@@ -116,9 +116,18 @@ has no `deleteModel` action; that was removed by hand in the Anki UI on
 15 August 2026. Re-checked afterwards: one notetype at `1607392321`, 12
 fields, 207 notes intact.
 
-`User 1` has not been opened or touched. Its notetype is still the 10-field
-one, and `ensure_model_fields()` will add IPA and Pronunciation on the first
-auto-import — which is a schema change, so expect Anki to ask for a full
+`User 1` has been **inspected read-only** and not written to. That
+inspection found the 8.33 bug before it could do damage: the alignment
+resolved the notetype by name, and in that collection the plain name
+`YT Anki Pipeline — Recognition` belongs to a 1134-note notetype with an
+older schema, while this pipeline's 2135 cards sit on
+`YT Anki Pipeline — Recognition-6c3a0` at 1607392321. Resolving by name
+would have added six fields to the wrong notetype. Fixed to resolve by
+`MODEL_ID`; dry-run against the real collection now reports exactly
+`[IPA, Pronunciation]`.
+
+Still to do there: nothing has been applied. The first auto-import will add
+those two fields, which is a schema change, so expect Anki to ask for a full
 sync that once.
 
 ---

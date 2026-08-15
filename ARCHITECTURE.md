@@ -1750,6 +1750,28 @@ both sets of columns were already sitting in the same source records.
 trusted, and the real German build beats them: IPA on **99.7%** of rows
 against a claimed 91.5%, audio on **95.0%** against 65.7%.
 
+**German is not representative, and the ADR's single figure hid that.**
+Measured across all three built indexes:
+
+| language | rows | ipa | audio | form_of |
+|---|---|---|---|---|
+| de | 993,774 | 99.7% | **95.0%** | 81.4% |
+| fr | 2,108,227 | 85.1% | **12.1%** | 73.3% |
+| ru | 470,784 | 83.3% | **4.4%** | 2.5% |
+
+IPA is dependable everywhere (83-99%). **Audio is not**: German has a
+recording for almost every entry, French for one in eight, Russian for one
+in twenty-three. So the "Listen" link is a German feature that degrades
+gracefully elsewhere, not a general one, and any future decision to embed
+audio rather than link it (see `cards._audio_field`) should be costed on
+German alone — it is the only language where most cards would carry a file.
+
+`form_of` splits the same way. The inflection-pointer fix matters enormously
+for German and French, where 81% and 73% of rows are inflected forms, and is
+nearly inert for Russian at 2.5%. SESSION.md 6.14 is the standing lesson
+here: measure per language before generalising. This table exists because
+that lesson was about to be repeated from a German-only sample.
+
 **Inflection pointers turned out to be the larger finding.** German indexes
 every case, number and tense form as its own entry -- **81.4%** of the real
 index -- so a card could read "1. Person Singular Indikativ Präsens Aktiv des
@@ -1857,6 +1879,56 @@ notes, not one field value changed. Pronunciation therefore reaches new cards
 only, which is consistent with the pipeline shipping just the words the deck
 check called NEW, but it does mean already-imported cards will not gain these
 fields without a separate back-fill.
+
+### 8.33 The notetype must be found by ID, because the name is not stable
+
+8.32's alignment shipped resolving the notetype by **name**. That is wrong
+on any collection with history, and the reason is 8.32's own mechanism:
+**when Anki forks a notetype it suffixes the name.** So the fork takes the
+ID and a *decorated* name, and the plain name is left on whatever was there
+before.
+
+Found by a read-only inspection of the real collection before applying
+anything to it. What was actually there:
+
+| id | notes | name | field list |
+|---|---|---|---|
+| 1607392319 | 0 | `Simple Model` | genanki's tutorial, 7 fields |
+| 1607392320 | 0 | `Simple Model++++++++` | 4 fields |
+| 1782849352300 | 1134 | **`YT Anki Pipeline — Recognition`** | `PartOfSpeech`, `ExampleDict`, `FallbackNote` … |
+| 1783884301416 | 409 | `YT Anki Pipeline — Recognition+` | 12 fields, `WordSecondary` |
+| 1784324984520 | 907 | `YT Anki Pipeline — Recognition++` | 11 fields, `FallbackNote` |
+| 1784390271313 | 1773 | `YT Anki Pipeline — Recognition+++` | the canonical 10 |
+| **1607392321** | **2135** | **`YT Anki Pipeline — Recognition-6c3a0`** | **the canonical 10** |
+
+The notetype this pipeline actually writes to is the *suffixed* one, and the
+plain name belongs to a different notetype with an incompatible schema from
+an older version of the card model.
+
+Resolving by name therefore picked `1782849352300` and would have added six
+fields — `Class`, the three example fields, `IPA`, `Pronunciation` — to a
+notetype holding 1134 notes that the pipeline does not write to, while the
+import forked anyway because the ID still disagreed. Dry-run on the real
+collection, by ID against by name:
+
+```
+by ID    -> 'YT Anki Pipeline — Recognition-6c3a0'   would add: [IPA, Pronunciation]
+by name  -> 'YT Anki Pipeline — Recognition'         would add: [Class, 1st Example
+            Sentence, 2nd Example Sentence, Example from Youtube Video, IPA,
+            Pronunciation]
+```
+
+`ensure_model_fields()` now takes `config.MODEL_ID` and inverts
+`modelNamesAndIds`. The ID is what Anki matches on when importing, so the ID
+is what the alignment must read.
+
+**Why the 8.32 verification did not catch it.** That was run in a scratch
+profile containing exactly one pipeline notetype, created fresh, whose name
+and ID agreed. The bug is not expressible there — the same shape as
+SESSION.md 6.18 and 6.11: a fixture that cannot represent the failure.
+The `+`, `++`, `+++` names in the table above are the audit trail of every
+earlier schema change, and they were sitting in the collection the whole
+time.
 
 ---
 

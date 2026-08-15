@@ -378,13 +378,16 @@ class TestPromptImport:
         # Pins the arguments, not just the call. Passing a stale literal
         # here instead of cards.FIELDS would leave any future field out of
         # the alignment and fork the notetype on the import that adds it.
+        # The id matters as much: resolving by NAME picks the wrong notetype
+        # on any collection where a previous fork took the plain name
+        # (ARCHITECTURE 8.33).
         mock_response = MagicMock()
         mock_response.json.return_value = {"result": True, "error": None}
         with patch("builtins.input", return_value="y"), \
              patch("requests.post", return_value=mock_response):
             _prompt_import(tmp_apkg)
-        name, fields = _aligned_notetype.call_args[0]
-        assert name == cards_module.MODEL_NAME
+        model_id, fields = _aligned_notetype.call_args[0]
+        assert model_id == cards_module.MODEL_ID
         assert tuple(fields) == cards_module.FIELDS
 
     def test_a_failed_alignment_blocks_the_import(self, tmp_apkg, _aligned_notetype):

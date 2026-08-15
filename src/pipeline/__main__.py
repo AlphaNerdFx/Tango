@@ -160,7 +160,7 @@ def _prompt_import(apkg_path: Path) -> None:
     # shape, and importing anyway is what causes the fork. Better to leave
     # the .apkg on disk than to split the user's collection.
     try:
-        added = deck_module.ensure_model_fields(cards.MODEL_NAME, cards.FIELDS)
+        added = deck_module.ensure_model_fields(cards.MODEL_ID, cards.FIELDS)
     except Exception as exc:
         _warn(f"Could not align the Anki notetype: {exc}")
         _info("Import skipped — importing now could fork the notetype and")

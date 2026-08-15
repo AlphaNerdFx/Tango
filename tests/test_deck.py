@@ -126,11 +126,11 @@ class TestEnsureModelFields:
     @patch("pipeline.deck._anki_request")
     def test_adds_only_the_missing_fields(self, mock_req):
         mock_req.side_effect = [
-            ["YT Model"],                        # modelNames
+            {"YT Model": 42},                    # modelNamesAndIds
             ["Word", "Class", "Definition"],     # modelFieldNames
             None, None,                          # two modelFieldAdd calls
         ]
-        added = ensure_model_fields("YT Model", self.CANON)
+        added = ensure_model_fields(42, self.CANON)
         assert added == ["IPA", "Pronunciation"]
 
         adds = [c for c in mock_req.call_args_list if c[0][0] == "modelFieldAdd"]
@@ -144,11 +144,11 @@ class TestEnsureModelFields:
         # Pronunciation transposed relative to every generated package --
         # the exact silent field-shift 3.2 exists to prevent.
         mock_req.side_effect = [
-            ["YT Model"],
+            {"YT Model": 42},
             ["Word", "Class", "Definition"],
             None, None,
         ]
-        ensure_model_fields("YT Model", self.CANON)
+        ensure_model_fields(42, self.CANON)
 
         adds = [c for c in mock_req.call_args_list if c[0][0] == "modelFieldAdd"]
         assert [c[1]["index"] for c in adds] == [3, 4]
@@ -159,11 +159,11 @@ class TestEnsureModelFields:
         # EARLY field must receive it at that position, not appended at the
         # end where it would shift nothing into place.
         mock_req.side_effect = [
-            ["YT Model"],
+            {"YT Model": 42},
             ["Word", "Definition", "IPA", "Pronunciation"],   # no "Class"
             None,
         ]
-        added = ensure_model_fields("YT Model", self.CANON)
+        added = ensure_model_fields(42, self.CANON)
         assert added == ["Class"]
 
         adds = [c for c in mock_req.call_args_list if c[0][0] == "modelFieldAdd"]
@@ -171,8 +171,8 @@ class TestEnsureModelFields:
 
     @patch("pipeline.deck._anki_request")
     def test_matching_notetype_is_left_alone(self, mock_req):
-        mock_req.side_effect = [["YT Model"], list(self.CANON)]
-        assert ensure_model_fields("YT Model", self.CANON) == []
+        mock_req.side_effect = [{"YT Model": 42}, list(self.CANON)]
+        assert ensure_model_fields(42, self.CANON) == []
         assert not [c for c in mock_req.call_args_list if c[0][0] == "modelFieldAdd"]
 
     @patch("pipeline.deck._anki_request")
@@ -180,14 +180,56 @@ class TestEnsureModelFields:
         # A first import creates the notetype whole and correct, so there is
         # nothing to align. Calling modelFieldAdd against a notetype that
         # does not exist would raise instead.
-        mock_req.side_effect = [["Some Other Model"]]
-        assert ensure_model_fields("YT Model", self.CANON) == []
+        mock_req.side_effect = [{"Some Other Model": 99}]
+        assert ensure_model_fields(42, self.CANON) == []
         assert mock_req.call_count == 1
 
     @patch("pipeline.deck._anki_request", side_effect=AnkiNotRunningError("down"))
     def test_raises_when_anki_not_running(self, _):
         with pytest.raises(AnkiNotRunningError):
-            ensure_model_fields("YT Model", self.CANON)
+            ensure_model_fields(42, self.CANON)
+
+    @patch("pipeline.deck._anki_request")
+    def test_the_notetype_is_chosen_by_id_not_by_name(self, mock_req):
+        """
+        The real collection's shape, and the bug it caught.
+
+        Anki names a fork by suffixing, so on any collection with history
+        the ID and the plain name come apart. Measured on the real profile:
+        1607392321 is named "YT Anki Pipeline — Recognition-6c3a0" and holds
+        this pipeline's 2135 cards, while a DIFFERENT notetype named exactly
+        "YT Anki Pipeline — Recognition" sits at 1782849352300 with 1134
+        notes on an older, incompatible field list.
+
+        Resolving by name found the wrong one and would have added six
+        fields to a notetype the pipeline never writes to. ARCHITECTURE 8.33.
+        """
+        mock_req.side_effect = [
+            {
+                "YT Anki Pipeline — Recognition":       1782849352300,
+                "YT Anki Pipeline — Recognition-6c3a0": 1607392321,
+            },
+            ["Word", "Class", "Definition"],     # the -6c3a0 field list
+            None, None,
+        ]
+        ensure_model_fields(1607392321, self.CANON)
+
+        # Every write must name the suffixed notetype, never the plain one.
+        targeted = {
+            c[1]["modelName"]
+            for c in mock_req.call_args_list
+            if c[0][0] in ("modelFieldNames", "modelFieldAdd")
+        }
+        assert targeted == {"YT Anki Pipeline — Recognition-6c3a0"}
+
+    @patch("pipeline.deck._anki_request")
+    def test_a_name_collision_on_another_id_is_ignored(self, mock_req):
+        # The partner: the plain name exists but belongs to some other
+        # notetype, and ours is absent entirely. Nothing may be touched --
+        # this is a first import, which creates the notetype correctly.
+        mock_req.side_effect = [{"YT Anki Pipeline — Recognition": 1782849352300}]
+        assert ensure_model_fields(1607392321, self.CANON) == []
+        assert mock_req.call_count == 1
 
 
 # ── get_card_fronts ───────────────────────────────────────────────────────────

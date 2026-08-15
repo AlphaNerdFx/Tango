@@ -174,7 +174,7 @@ def get_deck_names() -> list[str]:
     return sorted(result)
 
 
-def ensure_model_fields(model_name: str, fields: Sequence[str]) -> list[str]:
+def ensure_model_fields(model_id: int, fields: Sequence[str]) -> list[str]:
     """
     Add any field the collection's notetype is missing, before an import.
 
@@ -194,21 +194,40 @@ def ensure_model_fields(model_name: str, fields: Sequence[str]) -> list[str]:
     notes came through with byte-identical field values and two new empty
     fields.
 
+    **Resolved by ID, not by name, and the distinction is not academic.**
+    Anki's fork names the new notetype by suffixing, so on a collection with
+    any history the ID and the plain name come apart: measured on the real
+    collection, `1607392321` is named "YT Anki Pipeline — Recognition-6c3a0"
+    and holds this pipeline's 2135 cards, while a *different* notetype named
+    exactly "YT Anki Pipeline — Recognition" sits at 1782849352300 with 1134
+    notes and an older, incompatible field list (PartOfSpeech, ExampleDict,
+    FallbackNote). Looking up by name found that one and would have added six
+    fields to a notetype the pipeline does not write to, while the import
+    forked anyway. The ID is what Anki matches on, so the ID is what this
+    must read. ARCHITECTURE.md 8.33.
+
     Args:
-        model_name: The notetype's name in the collection (cards.MODEL_NAME).
-        fields:     The full ordered field list (cards.FIELDS). Missing names
-                    are added at their index in this sequence.
+        model_id: The notetype's ID (config.MODEL_ID) -- the same integer
+                  genanki stamps into the package.
+        fields:   The full ordered field list (cards.FIELDS). Missing names
+                  are added at their index in this sequence.
 
     Returns:
         The field names added, in the order added. Empty when the notetype
-        already matched, and empty when it does not exist at all -- a first
-        import creates it whole and correct, so there is nothing to align.
+        already matched, and empty when no notetype carries this ID at all --
+        a first import creates it whole and correct, so there is nothing to
+        align.
 
     Raises:
         AnkiNotRunningError: Anki not running.
         AnkiConnectError:    AnkiConnect returned an error.
     """
-    if model_name not in _anki_request("modelNames"):
+    # modelNamesAndIds rather than modelNameFromId: it answers in one call
+    # and returns nothing rather than raising when the ID is absent, which
+    # is the ordinary first-import case.
+    names_by_id = {v: k for k, v in _anki_request("modelNamesAndIds").items()}
+    model_name = names_by_id.get(model_id)
+    if model_name is None:
         return []
 
     existing = _anki_request("modelFieldNames", modelName=model_name)
