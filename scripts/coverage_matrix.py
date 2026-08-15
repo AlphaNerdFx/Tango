@@ -61,6 +61,15 @@ FIELDS = [
     ("Video Example", 5),
     ("Synonyms", 6),
     ("Antonyms", 7),
+    # ADR-009 phase 1. Only the offline index supplies these, so they are 0%
+    # for any language without one -- English included, which has no index at
+    # all. A 0% IPA row for de/fr/ru means something is wrong; a 0% row for
+    # en is the expected result. Audio is far more variable than IPA: the
+    # indexes carry a recording on 95.0% of German rows, 12.1% of French and
+    # 4.4% of Russian (ARCHITECTURE.md 8.30), so a low audio number is not by
+    # itself a defect.
+    ("IPA", 10),
+    ("Audio", 11),
 ]
 
 # Source field, used to tell a real cross-language definition from one that
