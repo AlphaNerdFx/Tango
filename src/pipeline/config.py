@@ -119,6 +119,20 @@ REVIEW_FILE: Path = _resolve_path("REVIEW_FILE", "review.json")
 # confused with the definition cache, which is expensive to rebuild.
 DICT_DIR: Path = _resolve_path("DICT_DIR", "dictionaries")
 
+# Cache for pronunciation audio downloaded at package-build time, so a card
+# plays the recording instead of linking out to it. Measured on real
+# Wikimedia Commons files: 16-30 KB each, roughly 5 MB for a 240-card German
+# deck. Kept as a cache rather than written straight into the package so a
+# word appearing in a second video is not downloaded twice, and a failed
+# download costs one card its audio rather than the run.
+MEDIA_DIR: Path = _resolve_path("MEDIA_DIR", "media")
+
+# Seconds to wait for one audio file. Short on purpose: these are small
+# files, and the sources do go down -- dictionaryapi.dev's media host was
+# returning 502 for some words while serving others -- so a slow response is
+# more likely a failure than a big file.
+MEDIA_TIMEOUT: int = int(os.getenv("MEDIA_TIMEOUT", "10"))
+
 # Anki
 
 # AnkiConnect host — change if running Anki on a non-default port

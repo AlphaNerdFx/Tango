@@ -70,3 +70,5 @@ src/yt_anki_pipeline.egg-info
 
 # Claude Settings
 .claude/settings.local.json
+# Pronunciation audio cache (ADR-009). Rebuildable, and large in aggregate.
+media/

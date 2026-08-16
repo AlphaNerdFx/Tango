@@ -29,6 +29,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -36,6 +37,7 @@ from typing import Optional
 
 import genanki
 
+from pipeline import media
 from pipeline.definition import DefinitionResult
 
 logger = logging.getLogger(__name__)
@@ -372,28 +374,88 @@ def _format_pills(words: list[str], css_class: str, max_chars: int = 256) -> str
     return " ".join(pills)
 
 
-def _audio_field(audio_url: Optional[str]) -> str:
+def _audio_field(audio_url: Optional[str], media_name: Optional[str] = None) -> str:
     """
-    Render the Pronunciation field from a Wikimedia Commons audio URL.
+    Render the Pronunciation field.
 
-    A link, not an embedded `[sound:...]` file, and that is the whole
-    decision worth recording here.
+    Args:
+        audio_url:  Remote recording URL, or None.
+        media_name: Filename of a copy already downloaded into the package's
+                    media. When present the card plays it inline.
 
-    Embedding would mean downloading one audio file per card at build time.
-    ADR-009 costed that: a 400-card deck goes from a few hundred kilobytes
-    to tens of megabytes, every build acquires a network fetch per card
-    against a service with its own rate expectations, and the deck may stop
-    being shareable at all. Coverage makes it worse rather than better --
-    95% of German index rows carry audio, so almost every card would pay.
+    Returns:
+        An Anki `[sound:...]` tag, a link, or "".
 
-    A link costs nothing, ships today, and keeps the URL in the field so
-    embedding later is a rendering change rather than a re-fetch. Attribution
-    stays intact because the link points at Commons, which ADR-009 flags as
-    an obligation rather than a courtesy for CC BY-SA material.
+    Embedded when the file was downloaded, linked when it was not, and this
+    degrades per card rather than per run. A link opens a browser, which is
+    not reviewing; `[sound:]` plays inside the card, works on AnkiDroid and
+    AnkiMobile, and keeps working when the source is down.
+
+    v0.5.0 linked because ADR-009 costed embedding at "tens of megabytes" for
+    a 400-card deck. Measured, that was wrong: real Commons files are 16-30 KB,
+    so a 240-card German deck is about 5 MB. Wikimedia also serves them as MP3
+    already, so nothing needs converting.
+
+    The fallback is not decoration. dictionaryapi.dev served one word's audio
+    and returned 502 for another in the same minute, so some cards in a real
+    run will have a URL and no file.
     """
+    if media_name:
+        return f"[sound:{media_name}]"
     if not audio_url:
         return ""
     return f'<a class="audio-link" href="{audio_url}">&#9654; Listen</a>'
+
+
+def _download_audio(
+    wanted: dict[str, str], language: str, max_workers: int = 8
+) -> tuple[dict[str, str], list[Path]]:
+    """
+    Fetch every card's pronunciation audio, concurrently.
+
+    Args:
+        wanted:      lemma (lower-cased) -> remote audio URL.
+        language:    Transcript language, part of each cached filename.
+        max_workers: Concurrent downloads.
+
+    Returns:
+        (names, paths). `names` maps lemma -> the filename to put in a
+        `[sound:...]` tag, containing only lemmas whose file actually
+        arrived. `paths` is what goes into the package's media list.
+
+    A lemma missing from `names` is not an error: its card falls back to a
+    link. That happens whenever a source is down, which is routine --
+    dictionaryapi.dev served one word and 502'd another in the same minute.
+
+    Nothing here can fail the run. The package is the expensive artefact and
+    it is built either way.
+    """
+    if not wanted:
+        return {}, []
+
+    names: dict[str, str] = {}
+    paths: list[Path] = []
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {
+            pool.submit(media.fetch_audio, url, lemma, language): lemma
+            for lemma, url in wanted.items()
+        }
+        for future in as_completed(futures):
+            lemma = futures[future]
+            try:
+                path = future.result()
+            except Exception:
+                logger.debug("Audio download raised for '%s'.", lemma, exc_info=True)
+                continue
+            if path:
+                names[lemma] = path.name
+                paths.append(path)
+
+    logger.info(
+        "Audio: %d of %d cards will play inline; the rest link out.",
+        len(names), len(wanted),
+    )
+    return names, paths
 
 
 def _build_note(
@@ -403,6 +465,7 @@ def _build_note(
     language: str = "en",
     ipa: Optional[str] = None,
     audio_url: Optional[str] = None,
+    media_name: Optional[str] = None,
 ) -> genanki.Note:
     """
     Build a recognition card. Fields match renamed Anki model fields.
@@ -429,7 +492,7 @@ def _build_note(
             "VideoID":                    video_id,
             "Source":                     result.source,
             "IPA":                        ipa or "",
-            "Pronunciation":              _audio_field(audio_url),
+            "Pronunciation":              _audio_field(audio_url, media_name),
         }),
         # language is part of the GUID (issue #14) so the same video
         # reprocessed in a second language doesn't collide on a cognate
@@ -452,6 +515,7 @@ def _build_fallback_note(
     antonyms: Optional[list[str]] = None,
     ipa: Optional[str] = None,
     audio_url: Optional[str] = None,
+    media_name: Optional[str] = None,
 ) -> genanki.Note:
     """
     Build a fallback card for a lemma with no definition from any source.
@@ -485,7 +549,7 @@ def _build_fallback_note(
             "VideoID":                    video_id,
             "Source":                     "not_found",
             "IPA":                        ipa or "",
-            "Pronunciation":              _audio_field(audio_url),
+            "Pronunciation":              _audio_field(audio_url, media_name),
         }),
         guid=genanki.guid_for(lemma, video_id, language),
         tags=["yt-anki", video_id, "no-definition"],
@@ -635,6 +699,18 @@ def build_package(
     fallback_count = 0
     skipped_count  = 0
 
+    # Pronunciation audio, downloaded once for the whole package before any
+    # note is built, because a note needs to know whether its file exists.
+    #
+    # Concurrent and bounded, for the same reason definition fetching is: a
+    # 240-card German deck is ~228 small files, and doing them one at a time
+    # would add minutes to every run. Failures are per file -- the card falls
+    # back to a link and the run continues.
+    audio_wanted = {r.lemma.lower(): r.audio_url for r in found if r.audio_url}
+    for lem, url in (not_found_audio or {}).items():
+        audio_wanted.setdefault(lem.lower(), url)
+    media_names, media_paths = _download_audio(audio_wanted, language)
+
     # Tracks every lemma that has already produced a note in this package,
     # independent of definition.fetch_definitions()'s own input-list dedup.
     # Defense in depth (see ARCHITECTURE.md 8.6): a duplicate that slips past
@@ -657,6 +733,7 @@ def build_package(
         deck.add_note(_build_note(
             result, model, video_id, language,
             ipa=result.ipa, audio_url=result.audio_url,
+            media_name=media_names.get(key),
         ))
         standard_count += 1
         logger.debug("Card built: '%s' (%s)", result.lemma, result.source)
@@ -689,6 +766,7 @@ def build_package(
                 dict_example2, fallback_synonyms, fallback_antonyms,
                 ipa=(not_found_ipa or {}).get(lemma),
                 audio_url=(not_found_audio or {}).get(lemma),
+                media_name=media_names.get(key),
             )
         )
         fallback_count += 1
@@ -696,7 +774,11 @@ def build_package(
 
     total_cards = standard_count + fallback_count
     output_path = _build_output_path(video_id)
-    genanki.Package(deck).write_to_file(str(output_path))
+    package = genanki.Package(deck)
+    # Anki copies these into the collection's media folder on import, which
+    # is what makes [sound:...] play rather than show as literal text.
+    package.media_files = [str(p) for p in media_paths]
+    package.write_to_file(str(output_path))
 
     logger.info(
         "Package written: %s | %d cards (%d standard, %d fallback, %d skipped)",

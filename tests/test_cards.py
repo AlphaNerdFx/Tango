@@ -520,6 +520,64 @@ class TestBuildPackage:
         assert "example.invalid/philo.ogg" in fields[11]        # Pronunciation
         assert fields[2] == "No definition found"               # still a fallback card
 
+    def test_downloaded_audio_plays_in_the_card(self, tmp_path):
+        # [sound:...] is what makes Anki play the file inline. A link opens a
+        # browser, which is not reviewing.
+        audio = tmp_path / "tango-de-haus-1234abcd.mp3"
+        audio.write_bytes(b"ID3fake")   # genanki stats the file when packaging
+        with patch.object(cards_module.media, "fetch_audio", return_value=audio):
+            result = build_package(
+                VIDEO_ID, DECK_NAME,
+                [DefinitionResult(lemma="haus", definition="Gebaeude.", example_dict="Ex.",
+                                  example_dict2=None, example_transcript="Ein Satz.",
+                                  synonyms=[], antonyms=[], part_of_speech="noun",
+                                  source="wiktionary", ipa="[haʊ̯s]",
+                                  audio_url="https://e.invalid/de-haus.mp3")],
+                [], language="de")
+        extract = tmp_path / "x"
+        with zipfile.ZipFile(result.path) as z:
+            z.extractall(extract)
+            assert "media" in z.namelist()
+        flds = sqlite3.connect(extract / "collection.anki2").execute(
+            "SELECT flds FROM notes").fetchone()[0].split("\x1f")
+        assert flds[11] == "[sound:tango-de-haus-1234abcd.mp3]"
+
+    def test_a_failed_download_falls_back_to_a_link(self, tmp_path):
+        # Per card, not per run. Sources do go down mid-run: dictionaryapi.dev
+        # served one word's audio and returned 502 for another in the same
+        # minute. Losing the recording must not lose the URL too.
+        with patch.object(cards_module.media, "fetch_audio", return_value=None):
+            result = build_package(
+                VIDEO_ID, DECK_NAME,
+                [DefinitionResult(lemma="haus", definition="Gebaeude.", example_dict="Ex.",
+                                  example_dict2=None, example_transcript="Ein Satz.",
+                                  synonyms=[], antonyms=[], part_of_speech="noun",
+                                  source="wiktionary", ipa="[haʊ̯s]",
+                                  audio_url="https://e.invalid/de-haus.mp3")],
+                [], language="de")
+        extract = tmp_path / "y"
+        with zipfile.ZipFile(result.path) as z:
+            z.extractall(extract)
+        flds = sqlite3.connect(extract / "collection.anki2").execute(
+            "SELECT flds FROM notes").fetchone()[0].split("\x1f")
+        assert "audio-link" in flds[11] and "e.invalid/de-haus.mp3" in flds[11]
+        assert "[sound:" not in flds[11]
+
+    def test_a_download_that_raises_does_not_kill_the_package(self, tmp_path):
+        # By the time audio is fetched the expensive work is done. An
+        # unexpected exception must cost one card its recording, not the run.
+        with patch.object(cards_module.media, "fetch_audio",
+                          side_effect=RuntimeError("boom")):
+            result = build_package(
+                VIDEO_ID, DECK_NAME,
+                [DefinitionResult(lemma="haus", definition="Gebaeude.", example_dict="Ex.",
+                                  example_dict2=None, example_transcript="Ein Satz.",
+                                  synonyms=[], antonyms=[], part_of_speech="noun",
+                                  source="wiktionary", ipa="[haʊ̯s]",
+                                  audio_url="https://e.invalid/de-haus.mp3")],
+                [], language="de")
+        assert result.total_cards == 1
+
     def test_fallback_without_pronunciation_leaves_both_fields_empty(self):
         # The partner. A language with no index must produce exactly the old
         # card -- empty, not the string "None", which is what a bare

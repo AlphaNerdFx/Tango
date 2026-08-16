@@ -16,6 +16,45 @@ rather than list every change.
 
 Nothing yet.
 
+## [0.5.2] — 2026-08-16
+
+Pronunciation audio plays inside the card instead of linking out.
+
+### Added
+
+- **Embedded audio.** Recordings are downloaded when the package is built and
+  shipped inside the `.apkg`, so the Pronunciation field is now
+  `[sound:...]` and plays in place. A link opened a browser, which is not
+  reviewing; embedded audio also works on AnkiDroid and AnkiMobile and keeps
+  working when the source is down.
+
+  ADR-009 rejected this on size grounds and the estimate was wrong. Measured
+  on real Commons files — De-Haus 16 KB, De-Spaziergang 30 KB — a 240-card
+  German deck costs about 5 MB, not the "tens of megabytes" assumed.
+  Wikimedia already serves them as MP3, so nothing is converted.
+
+- `media.py`, with an on-disk cache (`MEDIA_DIR`, default `media/`) so a word
+  met in a second video is not downloaded twice.
+
+- **A link fallback per card.** When a download fails the card keeps the
+  linked URL rather than losing the audio entirely. This is routine, not
+  defensive padding: dictionaryapi.dev served one word's audio and returned
+  502 for another in the same minute.
+
+### Fixed
+
+- **The documented non-interactive recipe crashed.** `echo "s" | make run`
+  supplies one line; the queued-word prompt consumed it and the import prompt
+  then hit `EOFError`, ending the run with a traceback *after* the package had
+  been written. All prompts now treat exhausted stdin as "no input" and take
+  a safe default. CLAUDE.md 4.4.
+
+### Known issues
+
+- Images are ADR-009 **phase 3** and deliberately not built: sampling
+  measured 2 of 5 usable, with `laufen` returning a coin from the town of
+  Laufen. They need a relevance gate before they are worth having.
+
 ## [0.5.1] — 2026-08-16
 
 Pronunciation now describes the word on the card, in every mode and in
@@ -165,7 +204,8 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.4.5...v0.5.0
 [0.4.5]: https://github.com/AlphaNerdFx/Tango/compare/v0.4.4...v0.4.5
