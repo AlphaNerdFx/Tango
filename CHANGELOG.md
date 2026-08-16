@@ -14,8 +14,41 @@ rather than list every change.
 
 ## [Unreleased]
 
-Nothing yet. Next up is v0.5.1 — pronunciation for languages with no offline
-index, starting with English.
+Nothing yet.
+
+## [0.5.1] — 2026-08-16
+
+Pronunciation now describes the word on the card, in every mode and in
+English. No migration: the fields added in v0.5.0 are unchanged, and this
+only alters what goes into them.
+
+### Fixed
+
+- **Cross-language mode put the wrong word's pronunciation on the card.**
+  With `--def-lang`, `ipa` and `audio_url` were read from the *translated*
+  word's index entry, so a German video with `--def-lang fr` showed `Haus`
+  carrying maison's `\me.zɔ̃\` and a French recording. Examples, synonyms
+  and antonyms were already gated against exactly this; pronunciation had
+  been added beside the gate without being inside it.
+
+  Pronunciation is now resolved once, by `_resolve_pronunciation(lemma,
+  language)`, independent of which source supplied the definition. No
+  definition branch touches it. See `ARCHITECTURE.md` 8.34.
+
+### Added
+
+- **English pronunciation.** dictionaryapi.dev returns real IPA (`/haʊs/`)
+  and a complete audio URL in a `phonetics` block, on a call the pipeline
+  already made and never parsed. English cards now carry pronunciation even
+  when Merriam-Webster supplied the definition.
+- Pronunciation on English fallback cards, through the same resolver.
+
+### Changed
+
+- `CLAUDE.md` §3.3 is now stated as a question — *does this field describe
+  the word shown?* — rather than a list of three field names. Written as a
+  list, it was violated three times, each by someone adding a fourth thing
+  beside the gate.
 
 ## [0.5.0] — 2026-08-15
 
@@ -132,7 +165,8 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.4.5...v0.5.0
 [0.4.5]: https://github.com/AlphaNerdFx/Tango/compare/v0.4.4...v0.4.5
 [0.4.4]: https://github.com/AlphaNerdFx/Tango/compare/v0.4.3...v0.4.4

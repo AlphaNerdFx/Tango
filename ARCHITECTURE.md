@@ -1930,6 +1930,60 @@ The `+`, `++`, `+++` names in the table above are the audit trail of every
 earlier schema change, and they were sitting in the collection the whole
 time.
 
+### 8.34 Pronunciation describes the word on the card, so it has one source
+
+v0.5.0 shipped pronunciation that could belong to a different word than the
+one printed on the card.
+
+In `fetch_definition()`, the cross-language branch looks the word up in the
+**target** language, using `query_lemma` — the translation. It assigned:
+
+```python
+definition     = entry.definition
+ipa            = ipa or entry.ipa          # ← outside the gate
+audio_url      = audio_url or entry.audio_url
+if target_language == language:            # ← the gate
+    native_ex1 = entry.example1            # examples/synonyms/antonyms
+```
+
+Examples, synonyms and antonyms were already protected. Pronunciation was
+added immediately above that gate in v0.5.0 and never joined it. Measured on
+real index data, a German video with `--def-lang fr`:
+
+| field | value | correct? |
+|---|---|---|
+| Word | `Haus` | |
+| Definition | `Bâtiment servant de logis…` | yes — 3.3 permits this |
+| IPA | `\me.zɔ̃\` | **no — that is *maison*** |
+| Pronunciation | a French recording | **no** |
+
+The learner is told `Haus` sounds like /mɛ.zɔ̃/, which is worse than the empty
+field English gets: confidently wrong rather than absent.
+
+**The fix is structural, not a fourth gate.** Pronunciation is now resolved
+exactly once, by `_resolve_pronunciation(lemma, language, pos)`, after the
+definition is settled and independent of which source supplied it. No
+definition branch touches `ipa` or `audio_url`. The branches differ in which
+language they hold; pronunciation must not, and one assignment cannot
+disagree with itself.
+
+That also fixed English for free. `_resolve_pronunciation` falls through to
+dictionaryapi.dev when a language has no index, and the pipeline already
+called that API — it returns real IPA (`/haʊs/`) and a complete audio URL in
+a `phonetics` block that nothing ever parsed. The sixth instance of
+fetched-parsed-discarded. English cards now carry pronunciation even when
+Merriam-Webster supplied the definition, which the old per-branch structure
+could not express, because MW is tried first and the dictapi branch only ran
+when it missed.
+
+**The lesson is about how the constraint was written.** 3.3 named three
+fields, and was violated three times — each by someone adding a *fourth*
+thing beside the gate. A constraint stated as a list invites that; stated as
+a question — *does this describe the word shown?* — it does not. 3.3 is now
+written that way, and pronunciation's single-source structure is pinned by
+`test_pronunciation_has_exactly_one_source`, which fails if any branch reads
+`entry.ipa` again.
+
 ---
 
 ## 9. Known architectural gaps

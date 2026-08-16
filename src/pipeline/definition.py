@@ -879,6 +879,96 @@ def _fetch_from_mw(lemma: str) -> Optional[list]:
     return None
 
 
+def _parse_dictapi_phonetics(data: list) -> tuple[Optional[str], Optional[str]]:
+    """
+    Pull IPA and an audio URL out of a dictionaryapi.dev response.
+
+    Args:
+        data: The raw JSON list returned by _fetch_from_dictapi().
+
+    Returns:
+        (ipa, audio_url), either of which may be None.
+
+    dictionaryapi.dev returns a `phonetics` list whose entries carry `text`
+    (real IPA, e.g. "/haʊs/") and `audio` (a complete URL, already hosted).
+    Both were fetched and discarded for the life of this project -- the sixth
+    instance of that shape (SESSION.md 6.13) -- which is why English cards had
+    no pronunciation despite the data arriving on every English lookup.
+
+    Entries are uneven: some carry text with no audio, some audio with no
+    text, some neither, and regional variants disagree (/hʌʊs/ against
+    /haʊs/ for "house"). An entry carrying BOTH is preferred so the
+    transcription and the recording describe the same pronunciation rather
+    than being stitched from two different accents; otherwise each is taken
+    from the first entry that has it.
+    """
+    entries = []
+    for item in data or []:
+        if isinstance(item, dict):
+            entries.extend(p for p in item.get("phonetics") or [] if isinstance(p, dict))
+
+    def _clean(p: dict, key: str) -> str:
+        return (p.get(key) or "").strip()
+
+    for p in entries:
+        if _clean(p, "text") and _clean(p, "audio"):
+            return _clean(p, "text"), _clean(p, "audio")
+
+    ipa = next((_clean(p, "text") for p in entries if _clean(p, "text")), None)
+    audio = next((_clean(p, "audio") for p in entries if _clean(p, "audio")), None)
+    if not ipa:
+        # Some entries put it on the top-level object instead of in phonetics.
+        ipa = next(
+            (str(i.get("phonetic")).strip() for i in data or []
+             if isinstance(i, dict) and (i.get("phonetic") or "").strip()),
+            None,
+        )
+    return ipa or None, audio or None
+
+
+def _resolve_pronunciation(
+    lemma: str, language: str, pos: Optional[str] = None
+) -> tuple[Optional[str], Optional[str]]:
+    """
+    Return (ipa, audio_url) for the word that will be printed on the card.
+
+    Args:
+        lemma:    The transcript-language lemma. NEVER a translation of it.
+        language: The transcript language. NEVER the --def-lang target.
+        pos:      Part of speech, to pick the right index row.
+
+    Returns:
+        (ipa, audio_url), either of which may be None when no source has it.
+
+    The single source of pronunciation, deliberately. Sourcing it inside each
+    definition branch is what put a French word's IPA on a German card
+    (ARCHITECTURE.md 8.34): the branches differ in *which language* they hold,
+    and pronunciation must not.
+
+    Two sources, in coverage order. The offline index carries IPA on 83-99% of
+    rows for every built language, so it is preferred where it exists.
+    dictionaryapi.dev covers English, which has no index and is not going to
+    get one (8.19) -- and it is already called for English definitions, so the
+    data was arriving and being dropped.
+
+    Languages with neither -- es, ja, ko, pt, zh, which have a spaCy model but
+    no built index -- get nothing, and the card omits the section rather than
+    showing an empty one. `make dictionary LANGUAGE=<code>` is the fix.
+    """
+    if wiktdata.is_available(language):
+        entry = wiktdata.lookup(lemma, language, pos=pos)
+        if entry:
+            return entry.ipa or None, entry.audio_url or None
+        return None, None
+
+    if language == "en":
+        data = _fetch_from_dictapi(lemma, language="en")
+        if data:
+            return _parse_dictapi_phonetics(data)
+
+    return None, None
+
+
 def _fetch_from_dictapi(lemma: str, language: str = "en") -> Optional[list]:
     """
     Call dictionaryapi.dev for one word in the specified language.
@@ -1132,11 +1222,10 @@ def fetch_definition(
     # ── Step 3: Fetch definition in target language ───────────────────────────
     definition:    Optional[str] = None
     part_of_speech: str          = ""
-    # ADR-009 phase 1. Only the offline index carries these, so they stay
-    # empty for a language with no index -- the card omits the section
-    # rather than showing a blank one.
-    ipa:           Optional[str] = None
-    audio_url:     Optional[str] = None
+    # Pronunciation is not resolved here. It does not depend on which source
+    # supplies the definition, and making it depend on that is what put the
+    # wrong language's IPA on cross-language cards. See the single resolution
+    # step further down, and ARCHITECTURE.md 8.34.
 
     # Try MW first for English definitions
     _actual_source = "dictionaryapi"
@@ -1204,8 +1293,10 @@ def fetch_definition(
             definition     = entry.definition
             part_of_speech = part_of_speech or entry.part_of_speech
             _actual_source = "wiktionary"
-            ipa            = ipa or entry.ipa
-            audio_url      = audio_url or entry.audio_url
+            # Pronunciation is deliberately NOT taken here. This entry is the
+            # TRANSLATED word's, and pronunciation has to describe the word
+            # printed on the card. It is resolved once, below, against the
+            # transcript language. See ARCHITECTURE.md 8.34.
             # Examples, synonyms and antonyms only when this entry is in the
             # transcript language. CLAUDE.md 3.3 requires those three fields
             # to stay in the language the learner is hearing; the definition
@@ -1254,8 +1345,10 @@ def fetch_definition(
                 definition     = entry.definition
                 part_of_speech = part_of_speech or entry.part_of_speech
                 _actual_source = "wiktionary-native"
-                ipa            = ipa or entry.ipa
-                audio_url      = audio_url or entry.audio_url
+                # Pronunciation resolved once below, not here -- this entry
+                # happens to be the right language, but sourcing it per
+                # branch is what let the cross-language branch above ship the
+                # wrong word's IPA. One source, one place. ARCHITECTURE 8.34.
                 if not native_ex1:
                     native_ex1 = entry.example1
                     native_ex2 = entry.example2
@@ -1310,6 +1403,25 @@ def fetch_definition(
             native_syns = wn_syns
         if not native_ants:
             native_ants = wn_ants
+
+    # ── Pronunciation ────────────────────────────────────────────────────────
+    #
+    # Resolved ONCE, here, and always against `lemma` in `language` -- the
+    # word actually printed on the card. Never `query_lemma`, never
+    # `target_language`.
+    #
+    # This is a single step rather than an assignment in each source branch
+    # because the per-branch version shipped: the cross-language branch took
+    # `entry.ipa` from the TRANSLATED word's index row, so a German video with
+    # --def-lang fr put maison's /mɛ.zɔ̃/ and a French recording on a card
+    # reading "Haus". Examples, synonyms and antonyms were already gated
+    # against exactly that; pronunciation was added next to the gate without
+    # joining it.
+    #
+    # The same rule 8.30 states for inflection pointers -- the learner sees
+    # `glaube`, so the card carries glaube's own IPA while borrowing
+    # glauben's meaning -- on a second axis. ARCHITECTURE.md 8.34.
+    ipa, audio_url = _resolve_pronunciation(lemma, language, pos)
 
     # Truncate definition at first sentence boundary for cleaner cards
     def _clean_def(text):
@@ -1420,8 +1532,6 @@ def _fetch_definition_or_fallback_example(
         if wiktdata.is_available(language)
         else None
     )
-    ipa: Optional[str] = None
-    audio_url: Optional[str] = None
     if entry:
         if not example:
             example = entry.example1
@@ -1430,8 +1540,14 @@ def _fetch_definition_or_fallback_example(
             synonyms = entry.synonyms
         if not antonyms:
             antonyms = entry.antonyms
-        ipa = entry.ipa
-        audio_url = entry.audio_url
+
+    # Through the shared resolver rather than off `entry`, even though this
+    # lookup is already in the right language. Two reasons: pronunciation has
+    # exactly one source in this module now, so it cannot drift per branch
+    # again (ARCHITECTURE.md 8.34); and a fallback card in a language with no
+    # index -- English, every time -- reaches dictionaryapi.dev this way
+    # instead of shipping empty.
+    ipa, audio_url = _resolve_pronunciation(lemma, language, pos)
 
     return None, FallbackExtras(
         example=example,

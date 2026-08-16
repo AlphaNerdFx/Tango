@@ -1077,6 +1077,106 @@ class TestFetchDefinitionOrFallbackExample:
 # enable it explicitly (the autouse fixture disables it everywhere else) so
 # they behave identically whether or not a real index exists on disk.
 
+class TestPronunciationResolution:
+    """
+    ADR-009. Pronunciation describes the word PRINTED ON THE CARD, so it is
+    resolved once against (lemma, language) and never from whichever entry
+    happened to supply the definition. See ARCHITECTURE.md 8.34 for the
+    violation that produced this rule.
+    """
+
+    @staticmethod
+    def _entry(**kw):
+        from pipeline.wiktdata import DictionaryEntry
+        base = dict(word="haus", part_of_speech="noun", definition="Gebäude.",
+                    example1=None, example2=None, synonyms=[], antonyms=[],
+                    ipa="[haʊ̯s]", audio_url="https://example.invalid/de-haus.ogg")
+        base.update(kw)
+        return DictionaryEntry(**base)
+
+    def test_index_is_queried_with_the_transcript_language(self, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(
+            def_module.wiktdata, "lookup",
+            lambda w, l, pos=None: seen.update(word=w, lang=l) or self._entry(),
+        )
+        ipa, audio = def_module._resolve_pronunciation("haus", "de")
+        assert seen == {"word": "haus", "lang": "de"}
+        assert ipa == "[haʊ̯s]"
+        assert audio == "https://example.invalid/de-haus.ogg"
+
+    def test_a_language_with_no_index_and_no_api_gets_nothing(self, monkeypatch):
+        # es/ja/ko/pt/zh have a spaCy model but no built index. The card must
+        # omit the section rather than show an empty one, and nothing may
+        # reach the network on their behalf.
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: False)
+        called = []
+        monkeypatch.setattr(def_module, "_fetch_from_dictapi",
+                            lambda *a, **k: called.append(a) or None)
+        assert def_module._resolve_pronunciation("casa", "es") == (None, None)
+        assert not called, "no API call should be made for a non-English language"
+
+    def test_english_falls_through_to_dictionaryapi(self, monkeypatch):
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: False)
+        monkeypatch.setattr(def_module, "_fetch_from_dictapi", lambda *a, **k: [
+            {"phonetics": [{"text": "/haʊs/", "audio": "https://x.invalid/house.mp3"}]}
+        ])
+        assert def_module._resolve_pronunciation("house", "en") == (
+            "/haʊs/", "https://x.invalid/house.mp3"
+        )
+
+    def test_index_present_but_word_absent_does_not_fall_through(self, monkeypatch):
+        # A built index is authoritative for its language. Falling through to
+        # the English API for a German word it happens to miss would put an
+        # English pronunciation on a German card.
+        monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
+        monkeypatch.setattr(def_module.wiktdata, "lookup", lambda *a, **k: None)
+        called = []
+        monkeypatch.setattr(def_module, "_fetch_from_dictapi",
+                            lambda *a, **k: called.append(a) or None)
+        assert def_module._resolve_pronunciation("kartoffel", "de") == (None, None)
+        assert not called
+
+
+class TestParseDictapiPhonetics:
+    """
+    dictionaryapi.dev returns IPA and a complete audio URL for English, on a
+    call the pipeline already makes. Both were parsed nowhere and dropped --
+    the sixth instance of fetched-parsed-discarded.
+    """
+
+    def test_prefers_an_entry_carrying_both_text_and_audio(self):
+        # Regional variants disagree: /hʌʊs/ against /haʊs/ for "house".
+        # Stitching the transcription from one and the recording from another
+        # describes two different accents on one card.
+        data = [{"phonetics": [
+            {"text": "/hʌʊs/", "audio": ""},
+            {"text": "/haʊs/", "audio": "https://x.invalid/us.mp3"},
+        ]}]
+        assert def_module._parse_dictapi_phonetics(data) == (
+            "/haʊs/", "https://x.invalid/us.mp3"
+        )
+
+    def test_falls_back_to_separate_entries(self):
+        data = [{"phonetics": [
+            {"text": "/haʊs/", "audio": ""},
+            {"text": "", "audio": "https://x.invalid/uk.mp3"},
+        ]}]
+        assert def_module._parse_dictapi_phonetics(data) == (
+            "/haʊs/", "https://x.invalid/uk.mp3"
+        )
+
+    def test_falls_back_to_the_top_level_phonetic_field(self):
+        data = [{"phonetic": "/haʊs/", "phonetics": [{"text": "", "audio": ""}]}]
+        assert def_module._parse_dictapi_phonetics(data) == ("/haʊs/", None)
+
+    def test_empty_and_malformed_input_yields_nothing(self):
+        assert def_module._parse_dictapi_phonetics([]) == (None, None)
+        assert def_module._parse_dictapi_phonetics([{}]) == (None, None)
+        assert def_module._parse_dictapi_phonetics(["nonsense"]) == (None, None)
+
+
 class TestOfflineDictionaryIntegration:
 
     def _entry(self, **kw):
@@ -1119,6 +1219,14 @@ class TestOfflineDictionaryIntegration:
     ):
         # English keeps its existing behaviour untouched: the index is a
         # fallback for the languages that have nothing, not a new primary.
+        #
+        # This used to assert the index was never touched at all. That was a
+        # proxy for the real rule and it stopped holding in v0.5.1, when
+        # pronunciation gained a legitimate second reason to consult the
+        # index — one that has nothing to do with where the definition came
+        # from (ARCHITECTURE 8.34). The intent is unchanged and is now
+        # asserted directly: the DEFINITION must still come from
+        # Merriam-Webster.
         mock_mw.return_value = mw_response
         mock_dict.return_value = None
         mock_wikt.return_value = None
@@ -1128,8 +1236,12 @@ class TestOfflineDictionaryIntegration:
             def_module.wiktdata, "lookup",
             lambda w, l, pos=None: called.append(w) or self._entry(),
         )
-        fetch_definition("contaminate", None, use_cache=False, language="en")
-        assert called == []
+        result = fetch_definition("contaminate", None, use_cache=False, language="en")
+        assert result.source == "merriam-webster"
+        assert result.definition != self._entry().definition
+        # And any lookup that did happen asked about the word on the card,
+        # never a translation of it.
+        assert set(called) <= {"contaminate"}
 
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")

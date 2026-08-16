@@ -25,6 +25,26 @@ from pipeline import cards
 from pipeline.config import DECK_ID, MODEL_ID
 from pipeline.definition import DefinitionResult
 
+
+def _code_only(fn) -> str:
+    """
+    A function's CODE, with docstring and comments stripped.
+
+    Several constraints here are checked by reading source, and the code that
+    implements a constraint tends to *explain* the mistake it avoids. A plain
+    source scan then finds the explanation and reports the warning as the
+    defect: `_is_valid_token`'s docstring argues at length against checking
+    `token.is_alpha`, and `fetch_definition`'s comments discuss `entry.ipa`
+    for the same reason. Round-tripping through ast keeps only what executes.
+    """
+    import ast
+    import textwrap
+    tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    node = tree.body[0]
+    if ast.get_docstring(node):
+        node.body = node.body[1:]
+    return ast.unparse(node)
+
 # ── 3.1 ANKI_MODEL_ID and ANKI_DECK_ID must not change ───────────────────────
 
 class TestConstraint31StableIds:
@@ -237,6 +257,37 @@ class TestConstraint33FieldLanguage:
             "that may fill examples/synonyms/antonyms unconditionally."
         )
 
+    def test_pronunciation_is_resolved_from_the_transcript_language(self):
+        # Pronunciation joined this constraint in v0.5.1, after shipping the
+        # violation: `ipa = ipa or entry.ipa` sat next to the gate without
+        # being inside it, and `entry` in that branch is the TRANSLATED
+        # word's index row. A German video with --def-lang fr put maison's
+        # /mɛ.zɔ̃/ on a card reading "Haus". ARCHITECTURE 8.34.
+        from pipeline import definition
+        src = inspect.getsource(definition.fetch_definition)
+        call = src.split("_resolve_pronunciation(")[1].split(")")[0]
+        assert call.startswith("lemma, language"), (
+            "CLAUDE.md 3.3: pronunciation must describe the word printed on "
+            f"the card -- expected (lemma, language), got {call!r}"
+        )
+
+    def test_pronunciation_has_exactly_one_source(self):
+        # The partner, and the structural half. The bug was not a wrong
+        # argument, it was pronunciation being assigned per definition
+        # branch at all -- the branches differ in which language they hold.
+        # One assignment cannot disagree with itself.
+        from pipeline import definition
+        # Comments stripped first. This function's comments *discuss*
+        # entry.ipa at length, explaining why it must not be read there --
+        # a plain source scan finds the explanation and reports it as the
+        # defect. Same trap as the 3.4 tests above.
+        src = _code_only(definition.fetch_definition)
+        assert "entry.ipa" not in src and "entry.audio_url" not in src, (
+            "CLAUDE.md 3.3: fetch_definition must not read pronunciation off "
+            "a definition-source entry. Use _resolve_pronunciation()."
+        )
+        assert src.count("_resolve_pronunciation(") == 1
+
     def test_wordnet_receives_the_original_lemma_not_the_translation(self):
         # Same constraint, different path. Passing query_lemma here writes
         # the target language's synonyms into a native field -- the original
@@ -267,24 +318,9 @@ class TestConstraint34ValidateTheLemma:
 
     @staticmethod
     def _source() -> str:
-        """
-        The function's CODE, with the docstring and comments stripped.
-
-        Necessary, not fastidious: _is_valid_token's docstring explains at
-        length why token.is_alpha is the wrong thing to check, so a plain
-        source scan matches the prose warning against the mistake and
-        reports the mistake. Round-tripping through ast drops docstrings
-        and comments and leaves only what actually executes.
-        """
-        import ast
-        import textwrap
-
+        """The function's code, without docstring or comments — see _code_only."""
         from pipeline import nlp
-
-        fn = ast.parse(textwrap.dedent(inspect.getsource(nlp._is_valid_token))).body[0]
-        if ast.get_docstring(fn):
-            fn.body = fn.body[1:]
-        return ast.unparse(fn)
+        return _code_only(nlp._is_valid_token)
 
     def test_no_length_check_on_the_surface_form(self):
         src = self._source()

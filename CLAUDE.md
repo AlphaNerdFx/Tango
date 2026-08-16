@@ -171,22 +171,47 @@ planned web app and Chrome extension — card content keyed by name and
 independent of genanki, so another surface can consume pipeline output
 without reimplementing it.
 
-### 3.3 Examples, synonyms, and antonyms stay in the transcript language
+### 3.3 Anything describing the word shown stays in the transcript language
 
-Definitions and grammatical class may be in a different language when
-`DEF_LANG` is set. Example sentences, synonyms, and antonyms must always be in
-the original transcript language. This is the core pedagogical decision —
-learners need to see words in native context.
+**The rule is about the word on the card, not a list of field names.** The
+card's `Word` is the transcript-language lemma. Every field that *describes
+that word* must be in the transcript language:
 
-This constraint has been violated twice. The WordNet bug (see `SESSION.md`),
-and cross-language mode taking examples, synonyms and antonyms from the
-target-language index entry, so a German video with `--def-lang ru` shipped
-Russian sentences. The second shipped and was caught by a coverage sweep
-noticing an impossible number, not by a test. See ARCHITECTURE.md 8.25.
+| field | must match the word shown | may change language |
+|---|---|---|
+| Example sentences | ✅ | |
+| Synonyms, Antonyms | ✅ | |
+| IPA, Pronunciation | ✅ | |
+| Definition | | ✅ under `--def-lang` |
+| Class (part of speech) | | ✅ |
 
-Three call sites populate these fields and each needs the same gate:
-Merriam-Webster, the target-language index, and the transcript-language
-index. Only the last may fill them unconditionally.
+Learners need the word in native context, and a pronunciation that belongs
+to a different word is worse than none.
+
+**Stated as a list of three fields, this constraint was violated three
+times** — each time by someone adding a *fourth* thing beside the gate
+without putting it inside:
+
+1. The WordNet bug, passing `query_lemma` where `lemma` was meant (`SESSION.md`).
+2. Examples, synonyms and antonyms taken from the target-language entry, so a
+   German video with `--def-lang ru` shipped Russian sentences. Caught by a
+   coverage sweep noticing an impossible number, not by a test.
+   ARCHITECTURE.md 8.25.
+3. **Pronunciation**, added directly above the gate in v0.5.0 and not inside
+   it, so `--def-lang fr` put maison's `/mɛ.zɔ̃/` on a card reading `Haus`.
+   ARCHITECTURE.md 8.34.
+
+So the mechanism now matters more than the list. Pronunciation is resolved
+**once**, by `_resolve_pronunciation(lemma, language)`, and never inside a
+definition branch — the branches differ in which language they hold, and one
+assignment cannot disagree with itself. Examples, synonyms and antonyms are
+still gated per call site: Merriam-Webster, the target-language index, and
+the transcript-language index, of which only the last may fill them
+unconditionally.
+
+Before adding any new field to a card, answer one question: **does it
+describe the word shown?** If yes, it belongs on the transcript-language
+side of this table and needs a test in `TestConstraint33FieldLanguage`.
 
 ### 3.4 Validate the lemma, not the surface form
 
