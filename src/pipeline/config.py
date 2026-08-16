@@ -20,6 +20,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from pipeline import __version__
+
 # Load .env file if present — does nothing if file doesn't exist
 load_dotenv()
 
@@ -214,7 +216,7 @@ DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
 WIKTIONARY_API_BASE: str = "https://en.wiktionary.org/api/rest_v1/page/definition"
 WIKTIONARY_USER_AGENT: str = os.getenv(
     "WIKTIONARY_USER_AGENT",
-    "Tango-pipeline/0.4 (https://github.com/AlphaNerdFx/Tango)",
+    f"Tango-pipeline/{__version__} (https://github.com/AlphaNerdFx/Tango)",
 )
 
 # Seconds to wait for a definition API response before timing out

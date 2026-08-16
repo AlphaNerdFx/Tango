@@ -498,4 +498,4 @@ Before inserting a new section into a Markdown doc, print the existing heading o
 
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
-At the moment of tagging, `pyproject.toml`, the git tag, and section 1's "Current tag" must agree. They never once have — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, and `0.4.4` at v0.4.5. Treat a mismatch as a release bug. Every tag also gets GitHub release notes; v0.4.1–v0.4.5 have none.
+The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes; v0.4.1–v0.4.5 have none.
