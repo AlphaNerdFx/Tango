@@ -390,6 +390,17 @@ class TestPromptImport:
         assert model_id == cards_module.MODEL_ID
         assert tuple(fields) == cards_module.FIELDS
 
+    def test_exhausted_stdin_skips_the_import_instead_of_crashing(self, tmp_apkg):
+        # The documented non-interactive recipe is `echo "s" | make run ...`,
+        # which supplies ONE line. deck.prompt_queue consumes it, so this
+        # prompt then read from a closed pipe and raised EOFError -- killing
+        # the run with a traceback *after* the package had been written.
+        # CLAUDE.md 4.4: no traceback for an expected failure.
+        with patch("builtins.input", side_effect=EOFError), \
+             patch("requests.post") as mock_post:
+            _prompt_import(tmp_apkg)          # must not raise
+            mock_post.assert_not_called()     # and must not import unasked
+
     def test_a_failed_alignment_blocks_the_import(self, tmp_apkg, _aligned_notetype):
         # The fail-safe. If we could not confirm the notetype's shape,
         # importing is what splits the collection, so it must not happen.

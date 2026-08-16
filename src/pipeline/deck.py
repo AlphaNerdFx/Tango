@@ -602,7 +602,14 @@ def prompt_queue(queue: list[MatchResult]) -> tuple[list[str], list[str]]:
         )
 
         while True:
-            answer = input("  Add anyway? [y/n/s]: ").strip().lower()
+            # EOF -> "s": defer this and every remaining word to review.json,
+            # which is what the documented non-interactive recipe asks for
+            # and the only safe default when nobody is there to answer.
+            try:
+                answer = input("  Add anyway? [y/n/s]: ").strip().lower()
+            except EOFError:
+                print()
+                answer = "s"
             if answer == "y":
                 approved.append(match.lemma)
                 break

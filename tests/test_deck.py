@@ -532,6 +532,16 @@ class TestPromptQueue:
         assert approved == []
         assert deferred == []
 
+    def test_exhausted_stdin_defers_everything_instead_of_crashing(self):
+        # A piped run supplies a finite number of lines. Running out must
+        # behave like "s" -- defer the rest to review.json -- rather than
+        # raise EOFError and abandon the run. CLAUDE.md 4.4.
+        queue = self._make_queue()
+        with patch("builtins.input", side_effect=EOFError):
+            approved, deferred = prompt_queue(queue)
+        assert approved == []
+        assert deferred == [m.lemma for m in queue]
+
     def test_y_answer_approves_word(self):
         queue = [MatchResult("contaminate", Decision.QUEUE, "contamination", 83.3)]
         with patch("builtins.input", return_value="y"):

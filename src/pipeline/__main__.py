@@ -88,6 +88,34 @@ def _setup_logging(verbose: bool) -> None:
 
 # ── AnkiConnect import ────────────────────────────────────────────────────────
 
+def _ask(prompt: str, default: str = "") -> str:
+    """
+    Read one line from the user, returning `default` when there is no input.
+
+    Args:
+        prompt:  Text shown to the user.
+        default: Returned when stdin is exhausted or closed. Choose the
+                 answer that does the least, since it is what an automated
+                 run will get.
+
+    Returns:
+        The user's stripped, lower-cased answer, or `default`.
+
+    A bare input() raises EOFError once stdin runs out, which produced a
+    traceback in the recipe this project's own docs recommend:
+    `echo "s" | make run ...` supplies exactly one line, the queued-word
+    prompt consumes it, and the import prompt then hit EOF and killed the
+    run *after* the package had been written successfully. CLAUDE.md 4.4 --
+    no traceback for an expected failure, and stdin running out in a piped
+    or CI run is expected.
+    """
+    try:
+        return input(prompt).strip().lower()
+    except EOFError:
+        print()
+        return default
+
+
 def _is_wsl() -> bool:
     """
     Detect whether this process is running inside WSL (Windows Subsystem
@@ -141,9 +169,9 @@ def _prompt_import(apkg_path: Path) -> None:
     """
     print()
     _rule()
-    answer = input(
-        f"  Import {apkg_path.name} into Anki now? [y/N]: "
-    ).strip().lower()
+    # Default "n": an automated run must not import into a real collection
+    # just because nobody was there to say no.
+    answer = _ask(f"  Import {apkg_path.name} into Anki now? [y/N]: ", default="n")
 
     if answer != "y":
         _info(f"Skipped. Import manually: File → Import in Anki.")
@@ -256,7 +284,7 @@ def _select_deck(deck_arg: str | None, session: Session) -> str:
     print()
 
     while True:
-        choice = input("  Enter number: ").strip()
+        choice = _ask("  Enter number: ")
         if choice.isdigit() and 1 <= int(choice) <= len(decks):
             selected = decks[int(choice) - 1]
             session.set_deck(selected)
@@ -719,7 +747,7 @@ def _run_setup_wizard() -> None:
     print("  sentences than the free fallback. It's entirely optional --")
     print("  dictionaryapi.dev is used automatically with no key at all.")
     print()
-    answer = input("  Add a free Merriam-Webster API key now? [y/N]: ").strip().lower()
+    answer = _ask("  Add a free Merriam-Webster API key now? [y/N]: ", default="n")
 
     if answer != "y":
         _info("Skipping. dictionaryapi.dev will be used for definitions.")
@@ -729,7 +757,7 @@ def _run_setup_wizard() -> None:
     print("  Register for a free key (1000 requests/day) at:")
     print(f"  {CYAN}https://dictionaryapi.com/register/index.htm{RESET}")
     print()
-    key = input("  Paste your Merriam-Webster API key: ").strip()
+    key = _ask("  Paste your Merriam-Webster API key: ")
 
     if not key or any(ch.isspace() for ch in key):
         _err("That doesn't look like a valid key (empty, or contains whitespace).")
@@ -1054,7 +1082,7 @@ def _run_build_dictionary(language: str) -> None:
         for line in reason.splitlines():
             _info(line)
         try:
-            answer = input("  Build it anyway? [y/N]: ").strip().lower()
+            answer = _ask("  Build it anyway? [y/N]: ", default="n")
         except (EOFError, KeyboardInterrupt):
             answer = ""
         if answer != "y":
