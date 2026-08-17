@@ -15,9 +15,11 @@ installed environment at the time of writing, not recalled from memory. See
 **Tagged release:** v0.5.0 — pronunciation on cards, and a notetype that
 merges instead of forking. `CHANGELOG.md` has the entry and the migration.
 **In development:** v0.5.1 (pronunciation where there is no offline index)
-and v0.5.2 (audio embedded in the card) — both committed and pushed, neither
-tagged. `ROADMAP.md` has the ladder to v1.0.0 and the rule that picks the
-number; CLAUDE.md 15 is the short form.
+v0.5.2 (audio embedded in the card, and paced so the host stops
+rate-limiting it) and v0.5.3 (part of speech in the learner's language).
+All committed, none tagged. `ROADMAP.md` has the ladder to v1.0.0 and the
+rule that picks the number; CLAUDE.md 15 is the short form, and CLAUDE.md 16
+is the commit and tag format.
 **HEAD:** 5 commits ahead of `tango-origin/main`, unpushed; tags stop at
 v0.5.0. Working tree clean.
 
@@ -28,7 +30,7 @@ remote is `tango-origin` -> `AlphaNerdFx/Tango`, and `main` tracks it.
 pushed" — it is comparing against a ref that does not resolve. Use
 `git status -sb` or name `tango-origin` explicitly. The stale remote is
 worth deleting.
-**Test state:** 864 passing, 0 failing, 24 integration deselected (`make test`)
+**Test state:** 879 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 87% overall, `__main__.py` 82% (`make coverage`). The 88%
 carried here before was stale — measured at 86% immediately before the
 8.29 work, 87% after it.
