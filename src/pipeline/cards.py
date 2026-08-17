@@ -33,7 +33,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import genanki
 
@@ -298,6 +298,11 @@ IDENTITY_FIELD = "Word"
 # bug shape in this codebase -- see SESSION.md 6.12.
 MODEL_NAME = "YT Anki Pipeline — Recognition"
 
+# How often the audio download reports in. Downloads are paced to respect the
+# host's rate limit, so a first run into an empty deck can spend minutes here;
+# without this the CLI looks hung at "Building Anki package...".
+PROGRESS_EVERY = 25
+
 
 def _note_fields(payload: dict[str, str]) -> list[str]:
     """
@@ -408,7 +413,10 @@ def _audio_field(audio_url: Optional[str], media_name: Optional[str] = None) -> 
 
 
 def _download_audio(
-    wanted: dict[str, str], language: str, max_workers: int = 8
+    wanted: dict[str, str],
+    language: str,
+    max_workers: int = 4,
+    progress: Optional[Callable[[str], None]] = None,
 ) -> tuple[dict[str, str], list[Path]]:
     """
     Fetch every card's pronunciation audio, concurrently.
@@ -417,6 +425,8 @@ def _download_audio(
         wanted:      lemma (lower-cased) -> remote audio URL.
         language:    Transcript language, part of each cached filename.
         max_workers: Concurrent downloads.
+        progress:    Called with a status line every PROGRESS_EVERY files, so
+                     a long paced download is not a silent stall.
 
     Returns:
         (names, paths). `names` maps lemma -> the filename to put in a
@@ -429,12 +439,18 @@ def _download_audio(
 
     Nothing here can fail the run. The package is the expensive artefact and
     it is built either way.
+
+    Fewer workers than the definition fetcher on purpose. `media` paces
+    requests globally now because the download host rate-limits per IP, so
+    extra threads buy nothing beyond overlapping the transfers and only make
+    the queue behind the limiter longer.
     """
     if not wanted:
         return {}, []
 
     names: dict[str, str] = {}
     paths: list[Path] = []
+    done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = {
             pool.submit(media.fetch_audio, url, lemma, language): lemma
@@ -447,6 +463,10 @@ def _download_audio(
             except Exception:
                 logger.debug("Audio download raised for '%s'.", lemma, exc_info=True)
                 continue
+            finally:
+                done += 1
+                if progress and done % PROGRESS_EVERY == 0:
+                    progress(f"  audio {done}/{len(wanted)} ({len(names)} embedded)")
             if path:
                 names[lemma] = path.name
                 paths.append(path)
@@ -455,6 +475,12 @@ def _download_audio(
         "Audio: %d of %d cards will play inline; the rest link out.",
         len(names), len(wanted),
     )
+    if progress:
+        linked = len(wanted) - len(names)
+        progress(
+            f"Audio: {len(names)} of {len(wanted)} recordings embedded"
+            + (f"; {linked} card(s) link out instead." if linked else ".")
+        )
     return names, paths
 
 
@@ -635,6 +661,7 @@ def build_package(
     not_found_antonyms: Optional[dict] = None,
     not_found_ipa: Optional[dict] = None,
     not_found_audio: Optional[dict] = None,
+    progress: Optional[Callable[[str], None]] = None,
 ) -> PackageResult:
     """
     Build an Anki .apkg package from definition results.
@@ -709,7 +736,7 @@ def build_package(
     audio_wanted = {r.lemma.lower(): r.audio_url for r in found if r.audio_url}
     for lem, url in (not_found_audio or {}).items():
         audio_wanted.setdefault(lem.lower(), url)
-    media_names, media_paths = _download_audio(audio_wanted, language)
+    media_names, media_paths = _download_audio(audio_wanted, language, progress=progress)
 
     # Tracks every lemma that has already produced a note in this package,
     # independent of definition.fetch_definitions()'s own input-list dedup.

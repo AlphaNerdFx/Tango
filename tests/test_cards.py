@@ -578,6 +578,45 @@ class TestBuildPackage:
                 [], language="de")
         assert result.total_cards == 1
 
+    def test_the_embedded_count_reaches_the_caller(self):
+        """
+        The number that named the v0.5.2 rate-limit bug, put where it is seen.
+
+        `_download_audio` already logged "13 of 377 cards will play inline"
+        during the run that shipped broken -- at INFO, while the CLI
+        configures WARNING. It was computed, formatted, and dropped. The
+        count now goes to the progress callback the CLI prints, so a run
+        where almost nothing embedded says so on screen.
+        """
+        lines = []
+        with patch.object(cards_module.media, "fetch_audio", return_value=None):
+            build_package(
+                VIDEO_ID, DECK_NAME,
+                [DefinitionResult(lemma="haus", definition="Gebaeude.", example_dict="Ex.",
+                                  example_dict2=None, example_transcript="Ein Satz.",
+                                  synonyms=[], antonyms=[], part_of_speech="noun",
+                                  source="wiktionary", ipa="[haʊ̯s]",
+                                  audio_url="https://e.invalid/de-haus.mp3")],
+                [], language="de", progress=lines.append)
+        summary = " ".join(lines)
+        assert "0 of 1" in summary, f"embedded count not reported: {lines}"
+        assert "link out" in summary, f"silent fallback not reported: {lines}"
+
+    def test_a_run_with_no_audio_at_all_reports_nothing(self):
+        # The partner. Reporting unconditionally would print "0 of 0
+        # recordings embedded" on every English run without an index, which
+        # reads as a failure and is not one.
+        lines = []
+        with patch.object(cards_module.media, "fetch_audio", return_value=None):
+            build_package(
+                VIDEO_ID, DECK_NAME,
+                [DefinitionResult(lemma="haus", definition="Gebaeude.", example_dict="Ex.",
+                                  example_dict2=None, example_transcript="Ein Satz.",
+                                  synonyms=[], antonyms=[], part_of_speech="noun",
+                                  source="wiktionary", ipa=None, audio_url=None)],
+                [], language="de", progress=lines.append)
+        assert not [line for line in lines if "recordings embedded" in line]
+
     def test_fallback_without_pronunciation_leaves_both_fields_empty(self):
         # The partner. A language with no index must produce exactly the old
         # card -- empty, not the string "None", which is what a bare

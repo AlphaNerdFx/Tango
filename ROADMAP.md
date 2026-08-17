@@ -82,6 +82,26 @@ than making a new one. A stricter reading would call a new parse path a
 MINOR; if that reading wins, this becomes v0.6.0 and everything below
 shifts.
 
+### v0.5.2 — Audio that plays in the card
+
+v0.5.0 put a *link* in the Pronunciation field. Clicking it opens a browser,
+which is not reviewing, and it does nothing useful on AnkiDroid or
+AnkiMobile. The recording is downloaded at package-build time and shipped
+inside the `.apkg` as `[sound:...]`.
+
+ADR-009 rejected this on size grounds using an estimate nobody measured
+("tens of megabytes"). Real Commons files are 16–30 KB, so a 240-card German
+deck costs about 5 MB. That is the third ADR-009 estimate to be wrong in the
+same direction — see ARCHITECTURE.md 8.35 and CLAUDE.md 3.6.
+
+Downloads are paced, and this is the part worth remembering: the download
+host rate-limits per IP, and the *first* implementation embedded 13
+recordings out of 377 while reporting success. A rate limit does not fail a
+run here, it quietly degrades every card past the tenth.
+
+*Why PATCH:* no migration, no schema change. The Pronunciation field already
+exists and already held content; only what goes in it changed.
+
 ### v0.6.0 — Card quality
 
 The fields exist and are filled; this is about what is *in* them.

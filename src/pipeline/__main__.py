@@ -488,6 +488,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
             not_found_antonyms=batch.not_found_antonyms,
             not_found_ipa=batch.not_found_ipa,
             not_found_audio=batch.not_found_audio,
+            progress=_info,
         )
     except ValueError as exc:
         _err(str(exc))
@@ -610,6 +611,7 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
             not_found_antonyms=batch.not_found_antonyms,
             not_found_ipa=batch.not_found_ipa,
             not_found_audio=batch.not_found_audio,
+            progress=_info,
         )
     except ValueError as exc:
         _err(str(exc))
@@ -682,6 +684,7 @@ def _run_backlog(args: argparse.Namespace, session: Session) -> None:
             not_found_antonyms=batch.not_found_antonyms,
             not_found_ipa=batch.not_found_ipa,
             not_found_audio=batch.not_found_audio,
+            progress=_info,
         )
     except ValueError as exc:
         _err(str(exc))

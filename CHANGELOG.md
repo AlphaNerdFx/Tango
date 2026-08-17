@@ -16,7 +16,7 @@ rather than list every change.
 
 Nothing yet.
 
-## [0.5.2] — 2026-08-16
+## [0.5.2] — 2026-08-17
 
 Pronunciation audio plays inside the card instead of linking out.
 
@@ -40,6 +40,23 @@ Pronunciation audio plays inside the card instead of linking out.
   linked URL rather than losing the audio entirely. This is routine, not
   defensive padding: dictionaryapi.dev served one word's audio and returned
   502 for another in the same minute.
+
+- **Paced downloads.** Audio requests are spread across the run at
+  `MEDIA_RATE_LIMIT` per second (default 1.25) after a burst of
+  `MEDIA_BURST`, and a `429` is retried for the period the server asks for.
+
+  Without this the feature above barely worked. `upload.wikimedia.org`
+  rate-limits per IP — about ten requests, then `429` with `Retry-After: 11`
+  — so an 8-worker pool drained the allowance in under a second. A real
+  406-card German run embedded **13** recordings and linked the other 364,
+  with no error and a valid package. Going sequential did not help; only
+  spacing the requests did. ARCHITECTURE.md 8.35.
+
+- **Progress output while audio downloads.** Paced downloading of a few
+  hundred files takes minutes, and the CLI previously sat silent at
+  "Building Anki package...". The embedded-versus-linked count was already
+  being logged at `INFO`, below the default `WARNING` level, so the one
+  number that revealed the bug above was written and discarded.
 
 ### Fixed
 

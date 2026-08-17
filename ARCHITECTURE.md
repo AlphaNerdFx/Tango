@@ -1986,6 +1986,62 @@ written that way, and pronunciation's single-source structure is pinned by
 
 ---
 
+### 8.35 Audio downloads are paced, because the host rate-limits per IP
+
+Embedding the audio worked. Downloading 400 of them did not.
+
+A real run — `VIDEO_ID=loqocHC9aAU DECK="Test" LANGUAGE=de`, 406 cards, 377
+of them with a pronunciation URL — embedded **13** recordings. The other 364
+fell back to a link. No error, no warning, a valid `.apkg`, and every one of
+those URLs downloading fine when tried on its own.
+
+`upload.wikimedia.org` rate-limits per IP. Measured 17 August 2026:
+
+| how the requests were sent | result |
+|---|---|
+| 8 concurrent workers (what shipped) | 10 × 200, then 429 |
+| strictly sequential, no delay | 10 × 200, then 30 × 429 |
+| original `.ogg` instead of transcoded `.mp3` | 10 × 200, then 20 × 429 |
+| sequential, 0.7s apart | **18 × 200, no 429** |
+
+Each 429 carried `Retry-After: 11`. Sequential made no difference, so this is
+a token bucket on requests, not a cap on concurrency, and it is not specific
+to the on-demand transcoding path. The bucket is roughly ten deep and refills
+around once a second.
+
+Two independent mistakes made this total rather than partial:
+
+1. **The pool drained the bucket in under a second.** Eight workers against a
+   ten-token bucket exhausts it on the first breath, so the failure began at
+   card 14 and never recovered.
+2. **A 429 was treated as permanent.** `raise_for_status()` raises on 429
+   exactly as it does on 404, and the handler returned `None` for both. The
+   one status code that specifically means *ask again shortly* was the one
+   read as *give up*.
+
+**The fix is a leaky bucket in `media`, not a sleep in the loop.** A
+module-level `_RateLimiter` hands out time slots `1/MEDIA_RATE_LIMIT` apart
+across every thread, allowing `MEDIA_BURST` of them back-to-back after an
+idle spell so a five-word run pays nothing. Threads hold the lock only long
+enough to claim a slot and sleep outside it, so transfers still overlap — the
+limiter caps the request *rate*, it does not serialise the downloads. A 429
+is now retried up to `MEDIA_MAX_RETRIES` times, waiting the period the server
+asked for, clamped by `MEDIA_MAX_RETRY_WAIT`; every other status still fails
+the card immediately, because a 404 means the file is genuinely absent and
+waiting it out would cost minutes across a deck.
+
+A cache hit takes no slot, which is what keeps a re-run instant.
+
+**This is the same failure shape as 8.25 and 8.34: valid-looking output, no
+exception, and a number nobody looked at.** `_download_audio` had logged
+"Audio: 13 of 377 cards will play inline" the whole time, at `INFO`, while
+the CLI's default log level is `WARNING`. The line that would have given it
+away was written and then discarded — so the count now also goes to the
+`progress` callback the CLI actually prints, alongside a running tally, since
+a paced download of a few hundred files is minutes of otherwise silent work.
+
+---
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage

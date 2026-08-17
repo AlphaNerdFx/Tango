@@ -135,6 +135,37 @@ MEDIA_DIR: Path = _resolve_path("MEDIA_DIR", "media")
 # more likely a failure than a big file.
 MEDIA_TIMEOUT: int = int(os.getenv("MEDIA_TIMEOUT", "10"))
 
+# Pacing for audio downloads, in requests per second across all threads.
+#
+# Measured against upload.wikimedia.org on 17 August 2026, not guessed: a
+# burst of roughly ten requests succeeds and every one after that returns 429
+# with `Retry-After: 11`. Going sequential did not help (10 of 40 succeeded)
+# and neither did asking for the original .ogg instead of the transcoded .mp3
+# (10 of 30), so this is a per-IP token bucket on the host rather than a
+# concurrency cap or anything specific to on-demand transcoding. Spacing
+# requests 0.7s apart sustained 18 consecutive downloads with no 429 at all.
+#
+# The cost of getting this wrong is silent and total: an 8-worker pool
+# drained the bucket in under a second, so a real 406-card German run
+# embedded 13 recordings and gave the other 364 cards a link instead. Every
+# one of those URLs downloads fine on its own, which is exactly why nothing
+# looked broken -- see ARCHITECTURE.md 8.35.
+MEDIA_RATE_LIMIT: float = float(os.getenv("MEDIA_RATE_LIMIT", "1.25"))
+
+# How many requests may go out back-to-back before pacing applies. Below the
+# measured ceiling of ~10 on purpose, so a short run of a handful of new
+# words costs nothing while a long one settles to MEDIA_RATE_LIMIT.
+MEDIA_BURST: int = int(os.getenv("MEDIA_BURST", "8"))
+
+# Retries for a 429 specifically. The bucket refills, so a rate-limited
+# request is worth repeating -- unlike a 404 or a 502, where the file is
+# simply not there and the card falls back to a link immediately.
+MEDIA_MAX_RETRIES: int = int(os.getenv("MEDIA_MAX_RETRIES", "2"))
+
+# Ceiling on one `Retry-After` wait, so a server answering with an hour
+# cannot stall a run that has already done the expensive work.
+MEDIA_MAX_RETRY_WAIT: float = float(os.getenv("MEDIA_MAX_RETRY_WAIT", "30"))
+
 # Anki
 
 # AnkiConnect host — change if running Anki on a non-default port

@@ -14,11 +14,21 @@ installed environment at the time of writing, not recalled from memory. See
 
 **Tagged release:** v0.5.0 — pronunciation on cards, and a notetype that
 merges instead of forking. `CHANGELOG.md` has the entry and the migration.
-**In development:** v0.5.1 — pronunciation for languages with no offline
-index. `ROADMAP.md` has the ladder to v1.0.0 and the rule that picks the
+**In development:** v0.5.1 (pronunciation where there is no offline index)
+and v0.5.2 (audio embedded in the card) — both committed and pushed, neither
+tagged. `ROADMAP.md` has the ladder to v1.0.0 and the rule that picks the
 number; CLAUDE.md 15 is the short form.
-**HEAD:** 29 commits past the tag, 11 of them unpushed. Working tree clean.
-**Test state:** 819 passing, 0 failing, 24 integration deselected (`make test`)
+**HEAD:** 5 commits ahead of `tango-origin/main`, unpushed; tags stop at
+v0.5.0. Working tree clean.
+
+**The remote is not `origin`.** `origin` still points at
+`AlphaNerdFx/Youtube-Anki-Flashcards`, which no longer exists; the live
+remote is `tango-origin` -> `AlphaNerdFx/Tango`, and `main` tracks it.
+`git log origin/main..HEAD` therefore prints nothing and looks like "fully
+pushed" — it is comparing against a ref that does not resolve. Use
+`git status -sb` or name `tango-origin` explicitly. The stale remote is
+worth deleting.
+**Test state:** 864 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 87% overall, `__main__.py` 82% (`make coverage`). The 88%
 carried here before was stale — measured at 86% immediately before the
 8.29 work, 87% after it.
@@ -499,6 +509,42 @@ costs nothing and stays true.
 
 The rule this file needs: **an unverified cause goes in the report, never in
 the record.** A handover may say what is not known. It may not guess.
+
+### 6.23 Lesson: the diagnostic number existed, below the log level
+
+The user reported two problems in one message. One was real and one was not,
+and the useful part is that the report itself could not tell them apart.
+
+*"All definitions in french, this is a german video."* False, and checkable
+in a minute: the package for that run holds 406 notes, every one German, and
+the deck Anki created for it holds exactly those. The French cards were in a
+**different deck**, built earlier from video `92Mcmx5gVus` with `DEF_LANG=fr`
+as the cross-language proof — 154 French definitions against 43 German ones
+in the deck next to it. The feature working as designed, one deck over.
+
+Two hypotheses were formed and both were wrong. The first — that the fixed
+`DECK_ID` merged every run into whichever deck claimed it first — was
+plausible enough to be worth checking and is *structurally* true (every
+package this project has ever built declares `2059400110`, whatever name the
+user asked for), yet it did not cause this: Anki matched by name and made a
+new deck. Reading the collection took one query and killed the theory. This
+is 6.22's rule paying off in the other direction — the guess was cheap to
+have and cheap to discard, because it was never written down as a cause.
+
+*"Only the audio, no images"* — correct, and deliberate (ADR-009 phase 3).
+But checking it surfaced what the user had not reported and could not see:
+**13 of 377 cards had embedded audio.** The rest silently linked out.
+
+The failure was already counted. `_download_audio` logs "Audio: %d of %d
+cards will play inline" on every run, and had logged `13 of 377` at `INFO`,
+while the CLI configures `WARNING`. The number that names the bug was
+computed, formatted, and dropped on the floor.
+
+**A count that only appears at a log level the tool never enables is not
+instrumentation.** Three of this project's worst bugs — 8.25, 8.34, and this
+— were each found by someone eventually looking at a ratio that was true the
+whole time. The fix is not "log more"; it is that a number worth computing to
+diagnose a failure belongs where the user running the tool will see it.
 
 ---
 

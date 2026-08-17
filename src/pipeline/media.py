@@ -31,12 +31,22 @@ from __future__ import annotations
 import hashlib
 import logging
 import re
+import threading
+import time
 from pathlib import Path
 from typing import Optional
 
 import requests
 
-from pipeline.config import MEDIA_DIR, MEDIA_TIMEOUT, WIKTIONARY_USER_AGENT
+from pipeline.config import (
+    MEDIA_BURST,
+    MEDIA_DIR,
+    MEDIA_MAX_RETRIES,
+    MEDIA_MAX_RETRY_WAIT,
+    MEDIA_RATE_LIMIT,
+    MEDIA_TIMEOUT,
+    WIKTIONARY_USER_AGENT,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +66,71 @@ _UNSAFE = re.compile(r"[^\w-]+", re.UNICODE)
 
 class AudioUnavailableError(Exception):
     """The audio could not be retrieved. Callers fall back to a link."""
+
+
+class _RateLimiter:
+    """
+    Paces every request this module makes, across all threads.
+
+    A leaky bucket rather than a sleep between calls: `acquire()` hands out
+    time slots `1 / rate` apart, and after an idle spell the scheduler may be
+    up to `burst` slots behind, so a short run of a few words pays nothing and
+    a long one settles to the sustainable rate.
+
+    Threads queue on the lock only long enough to claim a slot, then sleep
+    outside it, so downloads still overlap -- the limiter caps the request
+    *rate*, it does not serialise the transfers.
+
+    This exists because the download host rate-limits per IP and answers with
+    429 rather than an error, which the previous code treated as a permanent
+    failure. See config.MEDIA_RATE_LIMIT for the measurements.
+    """
+
+    def __init__(self, rate: float, burst: int) -> None:
+        self._interval = 1.0 / rate if rate > 0 else 0.0
+        self._burst = max(1, burst)
+        self._lock = threading.Lock()
+        self._next_slot = 0.0
+
+    def acquire(self) -> None:
+        """Block until this caller's slot is due. Returns immediately when unpaced."""
+        if self._interval <= 0:
+            return
+        with self._lock:
+            now = time.monotonic()
+            # How far behind the scheduler is allowed to be, which is what
+            # turns "burst" into `burst` immediate slots after an idle spell.
+            floor = now - self._burst * self._interval
+            slot = max(floor, self._next_slot)
+            self._next_slot = slot + self._interval
+            wait = slot - now
+        if wait > 0:
+            time.sleep(wait)
+
+
+_LIMITER = _RateLimiter(MEDIA_RATE_LIMIT, MEDIA_BURST)
+
+
+def _retry_after(response: requests.Response, default: float = 5.0) -> float:
+    """
+    Seconds to wait before repeating a rate-limited request.
+
+    Args:
+        response: The 429 response, whose `Retry-After` header is preferred.
+        default:  Used when the header is absent or not a number.
+
+    Returns:
+        A delay clamped to MEDIA_MAX_RETRY_WAIT, so a server asking for an
+        hour cannot stall a run.
+
+    Only the delta-seconds form is parsed. `Retry-After` may also carry an
+    HTTP date, but the host this matters for sends "11".
+    """
+    try:
+        delay = float(response.headers.get("retry-after", ""))
+    except (TypeError, ValueError):
+        delay = default
+    return max(0.0, min(delay, MEDIA_MAX_RETRY_WAIT))
 
 
 def _extension(url: str) -> str:
@@ -128,20 +203,44 @@ def fetch_audio(url: str, lemma: str, language: str) -> Optional[Path]:
     if path.exists() and path.stat().st_size > 0:
         return path
 
-    try:
-        # Wikimedia rejects the default python-requests User-Agent with 403,
-        # per their User-Agent policy. Measured: the same URL that curl
-        # fetches happily returns 403 unheadered. The project already carries
-        # an identifying agent for the Wiktionary API; the same one applies
-        # here, since this is the same operator hitting the same foundation.
-        response = requests.get(
-            url,
-            timeout=MEDIA_TIMEOUT,
-            headers={"User-Agent": WIKTIONARY_USER_AGENT},
-        )
-        response.raise_for_status()
-    except requests.RequestException as exc:
-        logger.debug("Audio unavailable for '%s' (%s): %s", lemma, url, exc)
+    # A 429 is worth repeating and nothing else is: the bucket refills, while
+    # a 404 or a 502 means the file is simply not there and the card should
+    # fall back to a link now rather than after two pointless waits.
+    for attempt in range(MEDIA_MAX_RETRIES + 1):
+        _LIMITER.acquire()
+        try:
+            # Wikimedia rejects the default python-requests User-Agent with
+            # 403, per their User-Agent policy. Measured: the same URL that
+            # curl fetches happily returns 403 unheadered. The project already
+            # carries an identifying agent for the Wiktionary API; the same
+            # one applies here, since this is the same operator hitting the
+            # same foundation.
+            response = requests.get(
+                url,
+                timeout=MEDIA_TIMEOUT,
+                headers={"User-Agent": WIKTIONARY_USER_AGENT},
+            )
+        except requests.RequestException as exc:
+            logger.debug("Audio unavailable for '%s' (%s): %s", lemma, url, exc)
+            return None
+
+        if response.status_code == 429 and attempt < MEDIA_MAX_RETRIES:
+            delay = _retry_after(response)
+            logger.debug(
+                "Rate-limited fetching '%s'; retrying in %.1fs (attempt %d of %d).",
+                lemma, delay, attempt + 1, MEDIA_MAX_RETRIES,
+            )
+            time.sleep(delay)
+            continue
+
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            logger.debug("Audio unavailable for '%s' (%s): %s", lemma, url, exc)
+            return None
+        break
+    else:
+        # Only reachable if MEDIA_MAX_RETRIES is configured negative.
         return None
 
     # A 200 carrying an error page is the failure mode that would otherwise
