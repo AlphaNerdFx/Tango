@@ -578,6 +578,46 @@ class TestBuildPackage:
                 [], language="de")
         assert result.total_cards == 1
 
+    def test_the_class_field_is_written_in_the_transcript_language(self):
+        note = cards_module._build_note(
+            DefinitionResult(lemma="haus", definition="Gebaeude.", example_dict="Ex.",
+                             example_dict2=None, example_transcript="Ein Satz.",
+                             synonyms=[], antonyms=[], part_of_speech="noun",
+                             source="wiktionary", ipa=None, audio_url=None),
+            cards_module._build_model(), VIDEO_ID, "de")
+        at = dict(zip(cards_module.FIELDS, note.fields, strict=True))
+        assert at["Class"] == "Substantiv"
+
+    def test_the_class_field_follows_the_definition_language(self):
+        # The pair. Class labels the definition, so it moves with it: a German
+        # word defined in French reads "nom", not "Substantiv" and not "noun".
+        note = cards_module._build_note(
+            DefinitionResult(lemma="haus", definition="Bâtiment.", example_dict="Ex.",
+                             example_dict2=None, example_transcript="Ein Satz.",
+                             synonyms=[], antonyms=[], part_of_speech="noun",
+                             source="wiktionary", ipa=None, audio_url=None),
+            cards_module._build_model(), VIDEO_ID, "de", pos_language="fr")
+        at = dict(zip(cards_module.FIELDS, note.fields, strict=True))
+        assert at["Class"] == "nom"
+
+    def test_build_package_routes_def_language_to_the_class_field(self, tmp_path):
+        # The wiring, not the mapping. def_language has to reach the note
+        # builder or the rule above never applies to a real run.
+        with patch.object(cards_module.media, "fetch_audio", return_value=None):
+            result = build_package(
+                VIDEO_ID, DECK_NAME,
+                [DefinitionResult(lemma="haus", definition="Bâtiment.", example_dict="Ex.",
+                                  example_dict2=None, example_transcript="Ein Satz.",
+                                  synonyms=[], antonyms=[], part_of_speech="noun",
+                                  source="wiktionary", ipa=None, audio_url=None)],
+                [], language="de", def_language="fr")
+        extract = tmp_path / "poslang"
+        with zipfile.ZipFile(result.path) as z:
+            z.extractall(extract)
+        flds = sqlite3.connect(extract / "collection.anki2").execute(
+            "SELECT flds FROM notes").fetchone()[0].split("\x1f")
+        assert flds[1] == "nom"
+
     def test_the_embedded_count_reaches_the_caller(self):
         """
         The number that named the v0.5.2 rate-limit bug, put where it is seen.
