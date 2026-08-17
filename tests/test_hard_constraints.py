@@ -145,7 +145,10 @@ class TestConstraint32FieldOrder:
         )
         at = dict(zip(cards.FIELDS, note.fields, strict=True))
         assert at["Word"] == "Glaube"
-        assert at["Class"] == "verb"
+        # "Verb" rather than "verb": the note is built with language="de", and
+        # since v0.5.3 Class is written in the definition's language. Still a
+        # positional check, and now also proof the label reached the right slot.
+        assert at["Class"] == "Verb"
         assert at["Definition"] == "religioes sein"
         assert at["VideoID"] == "vid42"
         assert at["Source"] == "wiktionary"
