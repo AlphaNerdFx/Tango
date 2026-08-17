@@ -372,6 +372,72 @@ class TestGetSpacyModel:
                 pass
 
 
+class TestLocalisePos:
+    """
+    The part of speech is a label on the card, so it is written in the
+    language the card is written in.
+
+    wiktextract normalises the tag to English whichever edition the index came
+    from, so every German card read "noun" and every French one read "adj".
+    """
+
+    def test_a_german_card_says_substantiv(self):
+        assert language_module.localise_pos("noun", "de") == "Substantiv"
+
+    def test_the_same_word_in_french_says_nom(self):
+        # The pair. A table that only ever returned the German label would
+        # pass the test above.
+        assert language_module.localise_pos("noun", "fr") == "nom"
+
+    def test_english_expands_the_abbreviated_tags(self):
+        # "adj" and "intj" are not words. English gets no translation out of
+        # this, but it does stop showing tags.
+        assert language_module.localise_pos("adj", "en") == "adjective"
+        assert language_module.localise_pos("intj", "en") == "interjection"
+
+    def test_the_tag_is_matched_case_insensitively(self):
+        assert language_module.localise_pos("Noun", "de") == "Substantiv"
+
+    def test_a_tag_we_do_not_know_is_left_alone(self):
+        # The French index really does contain "typographic variant". Losing
+        # it would be worse than showing it: the field would silently empty.
+        assert language_module.localise_pos("typographic variant", "de") == \
+               "typographic variant"
+
+    def test_an_empty_tag_stays_empty(self):
+        # Fallback cards have no part of speech and must not gain one.
+        assert language_module.localise_pos("", "de") == ""
+
+    def test_a_language_with_no_table_falls_back_to_english(self):
+        assert language_module.localise_pos("adj", "ja") == "adjective"
+
+    def test_the_russian_indexs_own_misspelling_is_understood(self):
+        # The Russian build stores 71 entries as "onomatopeia".
+        assert language_module.localise_pos("onomatopeia", "ru") == "звукоподражание"
+
+    def test_every_table_covers_the_same_tags(self):
+        # A language added with half the tags filled in would show German for
+        # some words and English for others on the same deck.
+        english = set(language_module.POS_LABELS["en"])
+        for code, table in language_module.POS_LABELS.items():
+            assert set(table) == english, f"{code} does not cover the same tags"
+
+    def test_no_table_is_a_copy_of_the_english_one(self):
+        # Copying the English row as a starting point and forgetting to
+        # translate it would leave the cards exactly as broken as before,
+        # while looking supported. The four commonest tags account for most
+        # of every real deck, so requiring those to differ is enough to
+        # catch it without asserting on words like "symbol" that legitimately
+        # match.
+        english = language_module.POS_LABELS["en"]
+        for code, table in language_module.POS_LABELS.items():
+            if code == "en":
+                continue
+            for tag in ("noun", "adj", "adv", "pron"):
+                assert table[tag] != english[tag], \
+                    f"{code}[{tag}] is still the English label {table[tag]!r}"
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 @pytest.mark.integration
