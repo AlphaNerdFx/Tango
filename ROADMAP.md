@@ -102,6 +102,20 @@ run here, it quietly degrades every card past the tenth.
 *Why PATCH:* no migration, no schema change. The Pronunciation field already
 exists and already held content; only what goes in it changed.
 
+### v0.5.3 — Part of speech in the learner's language
+
+Every card carried an English tag in its Class field, because that is what
+wiktextract stores no matter which Wiktionary edition the index came from.
+German cards read `noun`, French ones read `adj`. Neither is a word in the
+language the learner is studying, and `adj` is not a word at all.
+
+Class now follows the definition: the transcript language normally, the
+`--def-lang` language when that is set. Labels ship for de, fr, ru, es, it,
+pt and en.
+
+*Why PATCH:* nothing migrates and no existing card changes until it is
+re-imported. This finishes a field that was already on the card.
+
 ### v0.6.0 — Card quality
 
 The fields exist and are filled; this is about what is *in* them.
