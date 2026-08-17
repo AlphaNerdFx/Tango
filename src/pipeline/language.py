@@ -515,3 +515,116 @@ def _apply_size_override(model_name: str) -> str:
         return model_name
     prefix, _, _size = model_name.rpartition("_")
     return f"{prefix}_{SPACY_MODEL_SIZE_OVERRIDE}"
+
+
+# Part-of-speech labels
+#
+# wiktextract normalises the part of speech to an English tag no matter which
+# Wiktionary edition an index was built from, so a German card read "noun" and
+# a French one read "adj". The tag is fine as a key and wrong on a card: it is
+# neither the learner's language nor, for the abbreviated ones, a word.
+#
+# Keys are the tags the indexes actually contain, counted across the German,
+# French and Russian builds. Anything not listed passes through unchanged, so
+# a tag we have not seen shows up as itself rather than disappearing.
+POS_LABELS: dict[str, dict[str, str]] = {
+    "en": {
+        "noun": "noun", "verb": "verb", "adj": "adjective", "adv": "adverb",
+        "pron": "pronoun", "prep": "preposition", "conj": "conjunction",
+        "intj": "interjection", "det": "determiner", "article": "article",
+        "num": "numeral", "name": "proper noun", "phrase": "phrase",
+        "particle": "particle", "prefix": "prefix", "suffix": "suffix",
+        "abbrev": "abbreviation", "symbol": "symbol", "character": "character",
+        "onomatopoeia": "onomatopoeia", "gerund": "gerund",
+    },
+    "de": {
+        "noun": "Substantiv", "verb": "Verb", "adj": "Adjektiv", "adv": "Adverb",
+        "pron": "Pronomen", "prep": "Präposition", "conj": "Konjunktion",
+        "intj": "Interjektion", "det": "Artikelwort", "article": "Artikel",
+        "num": "Zahlwort", "name": "Eigenname", "phrase": "Redewendung",
+        "particle": "Partikel", "prefix": "Präfix", "suffix": "Suffix",
+        "abbrev": "Abkürzung", "symbol": "Symbol", "character": "Schriftzeichen",
+        "onomatopoeia": "Lautmalerei", "gerund": "Gerundium",
+    },
+    "fr": {
+        "noun": "nom", "verb": "verbe", "adj": "adjectif", "adv": "adverbe",
+        "pron": "pronom", "prep": "préposition", "conj": "conjonction",
+        "intj": "interjection", "det": "déterminant", "article": "article",
+        "num": "numéral", "name": "nom propre", "phrase": "locution",
+        "particle": "particule", "prefix": "préfixe", "suffix": "suffixe",
+        "abbrev": "abréviation", "symbol": "symbole", "character": "caractère",
+        "onomatopoeia": "onomatopée", "gerund": "gérondif",
+    },
+    "ru": {
+        "noun": "существительное", "verb": "глагол", "adj": "прилагательное",
+        "adv": "наречие", "pron": "местоимение", "prep": "предлог",
+        "conj": "союз", "intj": "междометие", "det": "определитель",
+        "article": "артикль", "num": "числительное", "name": "имя собственное",
+        "phrase": "фраза", "particle": "частица", "prefix": "приставка",
+        "suffix": "суффикс", "abbrev": "аббревиатура", "symbol": "символ",
+        "character": "знак", "onomatopoeia": "звукоподражание",
+        "gerund": "деепричастие",
+    },
+    "es": {
+        "noun": "sustantivo", "verb": "verbo", "adj": "adjetivo", "adv": "adverbio",
+        "pron": "pronombre", "prep": "preposición", "conj": "conjunción",
+        "intj": "interjección", "det": "determinante", "article": "artículo",
+        "num": "numeral", "name": "nombre propio", "phrase": "locución",
+        "particle": "partícula", "prefix": "prefijo", "suffix": "sufijo",
+        "abbrev": "abreviatura", "symbol": "símbolo", "character": "carácter",
+        "onomatopoeia": "onomatopeya", "gerund": "gerundio",
+    },
+    "it": {
+        "noun": "sostantivo", "verb": "verbo", "adj": "aggettivo", "adv": "avverbio",
+        "pron": "pronome", "prep": "preposizione", "conj": "congiunzione",
+        "intj": "interiezione", "det": "determinante", "article": "articolo",
+        "num": "numerale", "name": "nome proprio", "phrase": "locuzione",
+        "particle": "particella", "prefix": "prefisso", "suffix": "suffisso",
+        "abbrev": "abbreviazione", "symbol": "simbolo", "character": "carattere",
+        "onomatopoeia": "onomatopea", "gerund": "gerundio",
+    },
+    "pt": {
+        "noun": "substantivo", "verb": "verbo", "adj": "adjetivo", "adv": "advérbio",
+        "pron": "pronome", "prep": "preposição", "conj": "conjunção",
+        "intj": "interjeição", "det": "determinante", "article": "artigo",
+        "num": "numeral", "name": "nome próprio", "phrase": "locução",
+        "particle": "partícula", "prefix": "prefixo", "suffix": "sufixo",
+        "abbrev": "abreviatura", "symbol": "símbolo", "character": "caractere",
+        "onomatopoeia": "onomatopeia", "gerund": "gerúndio",
+    },
+}
+
+# Spellings that reach us from the indexes and mean something already listed.
+# "onomatopeia" is how the Russian build spells it, 71 entries of it.
+_POS_ALIASES: dict[str, str] = {
+    "onomatopeia": "onomatopoeia",
+    "proper noun": "name",
+    "adjective": "adj",
+    "adverb": "adv",
+}
+
+
+def localise_pos(pos: str, language: str) -> str:
+    """
+    Translate a wiktextract part-of-speech tag into a language's own word.
+
+    Args:
+        pos:      The tag as stored, e.g. "noun" or "adj". Case-insensitive.
+        language: BCP-47 code for the language the label should be written in.
+
+    Returns:
+        The label, or `pos` unchanged when the tag is not one we know. Empty
+        input gives an empty string, which is what a fallback card needs.
+
+    Languages without a table fall back to the English one, because its job
+    there is to expand "adj" into "adjective" rather than to translate, and
+    an English word beats an abbreviation on a card either way.
+    """
+    raw = (pos or "").strip()
+    if not raw:
+        return ""
+    key = raw.lower()
+    key = _POS_ALIASES.get(key, key)
+    code = (language or "en").lower()
+    table = POS_LABELS.get(code) or POS_LABELS.get(code.split("-")[0]) or POS_LABELS["en"]
+    return table.get(key, raw)
