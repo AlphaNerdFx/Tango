@@ -39,6 +39,7 @@ import genanki
 
 from pipeline import media
 from pipeline.definition import DefinitionResult
+from pipeline.language import localise_pos
 
 logger = logging.getLogger(__name__)
 
@@ -492,6 +493,7 @@ def _build_note(
     ipa: Optional[str] = None,
     audio_url: Optional[str] = None,
     media_name: Optional[str] = None,
+    pos_language: Optional[str] = None,
 ) -> genanki.Note:
     """
     Build a recognition card. Fields match renamed Anki model fields.
@@ -508,7 +510,9 @@ def _build_note(
         model=model,
         fields=_note_fields({
             "Word":                       result.lemma.capitalize(),
-            "Class":                      result.part_of_speech,
+            "Class":                      localise_pos(
+                result.part_of_speech, pos_language or language
+            ),
             "Definition":                 result.definition,
             "1st Example Sentence":       result.example_dict or "",
             "2nd Example Sentence":       getattr(result, "example_dict2", None) or "",
@@ -662,6 +666,7 @@ def build_package(
     not_found_ipa: Optional[dict] = None,
     not_found_audio: Optional[dict] = None,
     progress: Optional[Callable[[str], None]] = None,
+    def_language: Optional[str] = None,
 ) -> PackageResult:
     """
     Build an Anki .apkg package from definition results.
@@ -722,6 +727,14 @@ def build_package(
 
     model          = _build_model()
     deck           = genanki.Deck(DECK_ID, deck_name)
+
+    # The part of speech is written in whichever language the definition is
+    # in, so a card never mixes the two: a German word defined in French
+    # reads "nom", and the same word defined natively reads "Substantiv".
+    # Constraint 3.3 permits Class to change language for exactly this
+    # reason -- it labels the definition, it does not describe how the word
+    # sounds or what it means.
+    pos_language   = def_language or language
     standard_count = 0
     fallback_count = 0
     skipped_count  = 0
@@ -761,6 +774,7 @@ def build_package(
             result, model, video_id, language,
             ipa=result.ipa, audio_url=result.audio_url,
             media_name=media_names.get(key),
+            pos_language=pos_language,
         ))
         standard_count += 1
         logger.debug("Card built: '%s' (%s)", result.lemma, result.source)
