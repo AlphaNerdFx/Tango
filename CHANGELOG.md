@@ -16,6 +16,30 @@ rather than list every change.
 
 Nothing yet.
 
+## [0.5.3] — 2026-08-17
+
+The part of speech is written in the learner's language.
+
+### Changed
+
+- **Class is localised.** wiktextract normalises the part of speech to an
+  English tag whichever Wiktionary edition an index was built from, so a
+  German card read `noun` and a French one read `adj`. Cards now read
+  `Substantiv` and `adjectif`.
+
+  The label follows the definition, so it never disagrees with the text
+  beside it: with `--def-lang fr` a German word reads `nom`, and without it
+  the same word reads `Substantiv`. Constraint 3.3 already allowed `Class`
+  to change language, and this is the reason it does.
+
+  Labels for de, fr, ru, es, it, pt and en are in `language.POS_LABELS`.
+  A language with no table falls back to English, which still expands `adj`
+  into `adjective`, and a tag with no entry is shown unchanged rather than
+  dropped. Adding a language is one row.
+
+- Existing cards keep whatever they were imported with. Re-import to update
+  them; nothing needs migrating and no review history is affected.
+
 ## [0.5.2] — 2026-08-17
 
 Pronunciation audio plays inside the card instead of linking out.
@@ -221,7 +245,8 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.2...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.3...HEAD
+[0.5.3]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.4.5...v0.5.0
