@@ -2042,6 +2042,48 @@ a paced download of a few hundred files is minutes of otherwise silent work.
 
 ---
 
+### 8.36 The part of speech is a label, so it follows the definition
+
+`wiktdata` stores whatever wiktextract wrote, and wiktextract normalises the
+part of speech to an English tag regardless of which Wiktionary edition an
+index was built from. Counted across the German, French and Russian builds,
+those tags are `noun`, `verb`, `adj`, `adv`, `name`, `phrase`, `abbrev` and
+about fifteen rarer ones. That is the right thing to store and the wrong
+thing to show: a German card read `noun`, and `adj` is not a word in any
+language.
+
+Which language should the label be in? Constraint 3.3 answers it by asking
+whether the field describes the word shown. `Class` does not describe the
+word, it labels the definition sitting beside it, which is why 3.3 always
+listed it as free to change language. So it goes in the definition's
+language, and the rule is one line in `build_package()`:
+
+```python
+pos_language = def_language or language
+```
+
+A German word defined natively reads `Substantiv`. The same word under
+`--def-lang fr` reads `nom`, matching the French text under it rather than
+contradicting it.
+
+Three details worth keeping:
+
+- **Unknown tags pass through unchanged.** The French index contains
+  `typographic variant`. Mapping missing keys to `""` would empty the field
+  and nobody would notice, which is this codebase's favourite kind of bug.
+- **A language with no table falls back to English**, whose job there is to
+  expand `adj` into `adjective` rather than to translate. The fallback is
+  therefore an improvement everywhere, not a placeholder.
+- **The Russian index spells it `onomatopeia`**, 71 entries of it. Aliases
+  handle that rather than a correction to the index, which would be undone
+  by the next rebuild.
+
+Tables cover de, fr, ru, es, it, pt and en. `test_no_table_is_a_copy_of_the_
+english_one` fails if a language is added by copying the English row and
+leaving it untranslated, which is the way this would quietly stop working.
+
+---
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
