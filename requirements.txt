@@ -17,7 +17,7 @@ youtube-transcript-api==1.2.4
 spacy==3.8.14
 
 # spaCy core transitive dependencies — pinned for stability
-thinc==8.3.13
+thinc==9.1.1
 pydantic==2.13.4
 numpy>=1.24,<2.3
 cymem==2.0.13
