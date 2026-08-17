@@ -28,7 +28,7 @@ murmurhash==1.0.15
 rapidfuzz==3.14.5
 
 # HTTP client
-requests==2.33.1
+requests==2.34.2
 
 # Anki package generation
 genanki==0.13.1
