@@ -34,10 +34,13 @@ current environment, not a target: cross-platform support is a v0.8.0 goal
 and the WSL assumptions in `__main__.py` and `ANKI_HOST` are known work.
 **Current tag:** v0.5.0 — a MINOR rather than a patch, because it migrates
 the notetype (two new fields, and Anki wants a full sync afterwards).
-**Working toward:** v0.5.1 — pronunciation for languages with no offline
-index, English first. Goals per tag through v1.0.0 are in `ROADMAP.md`; the
-rule that picks the number is in section 15; release history is in
-`CHANGELOG.md`.
+**Written but not tagged:** v0.5.1 (pronunciation where there is no offline
+index), v0.5.2 (audio embedded in the card, and paced so the host stops
+rate-limiting it), v0.5.3 (part of speech in the learner's language).
+`__version__` reads 0.5.3.
+**Working toward:** v0.6.0 — card quality. Goals per tag through v1.0.0 are
+in `ROADMAP.md`; the rule that picks the number is in section 15; the commit
+and tag format is in section 16; release history is in `CHANGELOG.md`.
 
 ---
 
@@ -183,10 +186,28 @@ that word* must be in the transcript language:
 | Synonyms, Antonyms | ✅ | |
 | IPA, Pronunciation | ✅ | |
 | Definition | | ✅ under `--def-lang` |
-| Class (part of speech) | | ✅ |
+| Class (part of speech) | | ✅ follows the definition |
 
 Learners need the word in native context, and a pronunciation that belongs
 to a different word is worse than none.
+
+`Class` is a label on the definition, not a description of the word, so it
+is written in whichever language the definition is written in: the
+transcript language normally, and the `--def-lang` language when that is
+set. A German word defined in French reads `nom`; the same word defined
+natively reads `Substantiv`. Never `noun`, which is what wiktextract stores
+and what every card showed until v0.5.3.
+
+One line does this, in `cards.build_package()`:
+
+```python
+pos_language = def_language or language
+```
+
+The labels live in `language.POS_LABELS`, keyed by the tags the indexes
+actually contain. A language with no table falls back to English, and a tag
+with no entry is shown unchanged rather than dropped. Adding a language is
+one row.
 
 **Stated as a list of three fields, this constraint was violated three
 times** — each time by someone adding a *fourth* thing beside the gate
@@ -393,7 +414,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 864 passing, 24 deselected. The count drifts as tests are added —
+Expected: 879 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
@@ -441,8 +462,7 @@ rm -f pipeline.db          # ONLY when a schema change requires it
 5. Run the relevant tests after every change. Paste the real output. Never
    report a change as working because it should work.
 6. When a test fails, diagnose before fixing.
-7. Commit with conventional-commit prefixes: `feat:`, `fix:`, `docs:`, `chore:`.
-   One concern per commit.
+7. Commit per file, with conventional-commit prefixes. Format in section 16.
 
 ---
 
@@ -499,3 +519,54 @@ Before inserting a new section into a Markdown doc, print the existing heading o
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
 The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes; v0.4.1–v0.4.5 have none.
+
+## 16. Commit and tag format
+
+### Commits
+
+One commit per file. If a change touches six files, that is six commits, not
+one. Order them so the reasoning reads top to bottom: source, then its
+tests, then the docs that describe it.
+
+Subject line only, 256 characters at the very most and far shorter when it
+can be. No body, no bullet list, no trailing footer. Conventional-commit
+prefix: `feat:`, `fix:`, `docs:`, `chore:`, `test:`, `refactor:`.
+
+Say what changed and why in one line:
+
+```
+fix: pace audio downloads so Wikimedia stops returning 429
+test: cover the 429 retry and the leaky bucket
+docs: record the rate limit measurements in 8.35
+```
+
+The long explanation belongs in `ARCHITECTURE.md` or `SESSION.md`, where it
+can be found later. A commit message is an index entry, not a report.
+
+### Tags
+
+The tag name is the version and nothing else:
+
+```
+git tag -a v0.5.3 -m "Part of speech in the learner's language"
+```
+
+`v0.5.3`, never `v0.5.3 — Part of speech...`. GitHub shows the tag name in
+the release list, so anything after the number turns into visual noise
+repeated down the page. The title goes in the tag message and in the GitHub
+release title, where there is a field for it.
+
+## 17. Writing style
+
+Applies to everything written for a person to read: replies, commit
+messages, release notes, docs, comments, CLI output.
+
+- Plain words over jargon. Use a technical term when it is the accurate one
+  and there is no shorter way to say it, not to sound precise.
+- Write like a person explaining something to a colleague. Full sentences,
+  no telegraphese, no marketing tone.
+- Never use an em dash. Use a comma, a colon, a full stop, or brackets.
+- Bold almost nothing. Reserve it for something a reader would suffer for
+  missing, roughly once per document. A page of bold has no emphasis in it.
+- Prefer a short sentence to a long one, and a concrete number to an
+  adjective.
