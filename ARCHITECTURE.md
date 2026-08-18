@@ -371,8 +371,10 @@ meaning.
 for the first sentence containing the lemma or an inflected form, using a
 word-boundary regex.
 
-The SQLite `definitions` table uses a composite `lemma::language` primary key
-so the same word can be cached separately per definition language.
+The SQLite `definitions` table uses a composite `lemma::language::pos`
+primary key, so the same word is cached separately per definition language
+and per part of speech. The `pos` segment is omitted when no part of speech
+resolves, which is why `_cache_key()` has two return shapes.
 
 ### 3.7 translation.py
 
@@ -787,8 +789,9 @@ that slips past the first layer cannot produce two cards.
 
 ### 8.7 Composite cache keys
 
-The `definitions` table uses `lemma::language` as the primary key so the same
-word can be cached separately for each definition output language. A bug where
+The `definitions` table uses `lemma::language::pos` as the primary key so the
+same word is cached separately per definition output language and per part of
+speech; the `pos` segment is dropped when none resolves. A bug where
 the batch loop used the bare lemma while `fetch_definition` used the composite
 key caused every cache lookup to miss, which manifested as repeated cards for
 the same word.
@@ -1599,8 +1602,8 @@ fetch-path fix invalidates them. Two consequences worth building on:
   stops it doing so. `fetch_definition` already takes `use_cache`; the CLI
   does not expose it.
 
-The cache key itself is `lemma::target_language`, which does not record the
-transcript language, so a contaminated row is not identifiable from the key
+The cache key itself is `lemma::target_language::pos`, which does not record
+the transcript language, so a contaminated row is not identifiable from the key
 alone -- it has to be reconstructed by joining the vocabulary table back to
 the video's language. A key carrying both languages would make invalidation a
 one-line delete, and is the obvious fix if this happens a third time.
