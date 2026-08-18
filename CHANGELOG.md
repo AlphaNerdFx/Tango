@@ -14,7 +14,28 @@ rather than list every change.
 
 ## [Unreleased]
 
-Nothing yet.
+Working toward v0.6.0, card quality.
+
+### Changed
+
+- **Filler sounds no longer become cards.** `Ah`, `Bah`, `Ouai`, `Euh` and
+  `Tss` were 3.4% of one real French run. spaCy tags them INTJ, which the
+  pipeline already drops, but it tags them NOUN and ADV often enough in real
+  sentences that they reached cards anyway.
+
+  A per-language stoplist in `language.FILLER_SOUNDS` rather than a rule on
+  the tag, because `Bonsoir` is also INTJ and is worth learning. Only sounds
+  are listed: French `bon`, German `na` and Russian `ну` are common in speech,
+  carry meaning, and are deliberately absent. Elongated spellings (`euuuh`,
+  `ahhhh`) are folded onto the listed one, at runs of three characters rather
+  than two so English `err` survives.
+
+  Lists ship for en, fr, de and ru, and only the French one has been counted
+  against a real run. A language with no list filters nothing. Each run logs
+  `Filler sounds skipped: N tokens`. See ARCHITECTURE.md 8.37.
+
+- Existing cards are untouched. The filter applies to the next run, not to a
+  deck already imported.
 
 ## [0.5.3] — 2026-08-17
 
