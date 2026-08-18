@@ -48,19 +48,22 @@ and tag format is in section 16; release history is in `CHANGELOG.md`.
 
 ## 2. Architecture summary
 
-Ten modules in a linear pipeline. One video per invocation. One `.apkg` per
-run. All state in local SQLite. No server component. No async.
+Twelve modules. Nine are stages in a linear pipeline; `media.py` is called
+by `cards.py` rather than being a stage of its own, `config.py` holds
+configuration, and `__main__.py` is the CLI. One video per invocation. One
+`.apkg` per run. All state in local SQLite. No server component. No async.
 
 ```
 YouTube video ID
   -> language.py       resolve BCP-47 code from flag or deck name
   -> transcript.py     fetch subtitles, clean text
-  -> nlp.py            spaCy tokenize, lemmatize, POS filter
+  -> nlp.py            spaCy tokenize, lemmatize, POS filter, drop fillers
   -> deck.py           AnkiConnect duplicate check, fuzzy match
   -> definition.py     dual-source definition and example fetch
   -> wiktdata.py       offline Wiktionary index, non-English definitions
   -> translation.py    (optional) translate lemma for cross-language definitions
   -> cards.py          genanki .apkg generation
+       -> media.py     download and cache pronunciation audio, paced
   -> state.py          SQLite run tracking
 ```
 
@@ -423,14 +426,17 @@ trust `make test` over this number, and update it here when it moves.
 make coverage      # unit tests plus a per-module line-coverage report
 ```
 
-Currently 87% overall, `__main__.py` at 82%. Every bug found by coverage
-work so far has been wiring between modules rather than logic inside one.
-See ARCHITECTURE.md section 10.
+Measured 18 August 2026: 88% overall, 2549 statements, 308 missed. The
+weakest modules are `translation.py` at 71%, `__main__.py` and
+`transcript.py` at 82%. Every bug found by coverage work so far has been
+wiring between modules rather than logic inside one. See ARCHITECTURE.md
+section 10.
 
-The 88% recorded here until 13 August was measured once and never
-rechecked; it was 86% by the time anyone looked. Re-measure before quoting
-it — this file has carried a stale number four times now (TASKS.md's "411
-tests", the outlined-pill entry, the `omw-1.4` instruction, this).
+Re-measure before quoting it. This file has carried a stale coverage number
+four separate times, and the 87% sitting here until today was stale again:
+roughly 1500 lines landed after it was taken. The lesson is not that the
+number moves, it is that nobody notices when it does, so treat any figure
+here without a date as unmeasured.
 
 ### Quality
 
@@ -520,7 +526,7 @@ Before inserting a new section into a Markdown doc, print the existing heading o
 
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
-The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes; v0.4.1–v0.4.5 have none.
+The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 18 August 2026 all thirteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
 
 ## 16. Commit and tag format
 
