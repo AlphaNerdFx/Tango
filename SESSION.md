@@ -1,7 +1,7 @@
 # SESSION.md — Current working state
 
-Last updated: 13 August 2026, at the close of the v0.4.5 release and
-post-release development session.
+Last updated: 18 August 2026, after the v0.5.x line was tagged and the
+repository was swept for inconsistencies.
 
 Read this to understand exactly where development stands and what was learned.
 Everything here was checked against `git log`, the working tree, and the
@@ -13,7 +13,9 @@ installed environment at the time of writing, not recalled from memory. See
 ## 1. Where the project is
 
 **Tagged release:** v0.5.3, part of speech in the learner's language. The
-0.5.x line is complete and all four tags have GitHub release notes: v0.5.0
+0.5.x line is complete. Every one of the thirteen tags now has GitHub
+release notes, v0.4.1 to v0.4.5 having been backfilled from CHANGELOG on
+18 August 2026. The 0.5.x line ran v0.5.0
 (pronunciation on cards, the migration release), v0.5.1 (pronunciation
 describes the word on the card), v0.5.2 (audio plays inside the card) and
 v0.5.3. `CHANGELOG.md` has an entry for each.
@@ -31,17 +33,17 @@ carries `[haʊ̯s]` and `tango-de-haus-*.mp3`, never maison's. The media
 filename hashes `language:lemma`, so a French recording could only ever be
 named `tango-fr-*`, and no such file appears in a German package.
 
-**The remote is not `origin`.** `origin` still points at
-`AlphaNerdFx/Youtube-Anki-Flashcards`, which no longer exists; the live
-remote is `tango-origin` -> `AlphaNerdFx/Tango`, and `main` tracks it.
-`git log origin/main..HEAD` therefore prints nothing and looks like "fully
-pushed" — it is comparing against a ref that does not resolve. Use
-`git status -sb` or name `tango-origin` explicitly. The stale remote is
-worth deleting.
+**The remote is `tango-origin`, not `origin`, and there is only one.**
+`origin` used to point at `AlphaNerdFx/Youtube-Anki-Flashcards`, which no
+longer exists, and it was removed on 18 August 2026. Keep it that way. While
+both existed, `git log origin/main..HEAD` printed nothing and read exactly
+like "fully pushed", because it compares against a ref that does not
+resolve; seventeen commits sat unpushed behind that. Prefer `git status -sb`,
+which names the real upstream.
 **Test state:** 908 passing, 0 failing, 24 integration deselected (`make test`)
-**Coverage:** 87% overall, `__main__.py` 82% (`make coverage`). The 88%
-carried here before was stale — measured at 86% immediately before the
-8.29 work, 87% after it.
+**Coverage:** 88% overall, 2549 statements, 308 missed, measured 18 August
+2026. Weakest: `translation.py` 71%, `__main__.py` and `transcript.py` 82%.
+The 87% carried here before was stale again, taken about 1500 lines ago.
 **Overall completion estimate:** roughly 85 percent toward a v1.0.0 CLI tool,
 roughly 25 percent toward the full multi-surface product vision
 
