@@ -2130,6 +2130,22 @@ checked by `language.is_filler()`. Four decisions in it are worth keeping:
   reduced to one character, and a language added later cannot reintroduce
   the gap. `test_every_sound_is_reachable_from_its_elongated_spelling`
   stretches each authored sound and fails if the lookup misses it.
+- **The test is "would a course teach it", not "is it said without
+  thinking".** The first version of these lists failed that on eleven
+  entries, all dictionary words: French `hein`, `bof`, `ouais`, `ben`,
+  German `tja`, `ach`, Russian `эй`, `ага`, `ой`, `эх`, English `yikes`.
+  They were removed and are pinned by `test_a_real_word_is_never_filtered`.
+
+  The two directions of error are not symmetric, which is why the list errs
+  towards keeping words. A filler that slips through is one bad card the
+  user deletes on sight. A word wrongly listed here is a word they are never
+  offered, never see, and have no way to notice is missing.
+
+  One asymmetry is deliberate. `ouai` is listed and `ouais` is not, though
+  they are the same word: `ouais` is the dictionary spelling of something
+  worth learning, while `Ouai` is one of the five spellings a real French run
+  actually put on a card. The measurement is kept, the word is not.
+
 - **The filter runs in `process_transcript`, not `_is_valid_token`.** It
   needs the language, which that function does not receive, and the
   corrected lemma, which does not exist until later. Skipping there also
