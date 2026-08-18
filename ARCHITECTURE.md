@@ -2115,6 +2115,21 @@ checked by `language.is_filler()`. Four decisions in it are worth keeping:
   and `ahhhh` are folded onto `euh` and `ah` before the lookup. Runs of two
   are left alone on purpose: English `err` is a real verb and would become
   `er`, a hesitation, under a two-run rule.
+
+  That asymmetry has a consequence the first version of this table got
+  wrong. Collapsing at three means `tsss` folds onto `ts` and not onto
+  `tss`, so a sound is only reachable from its elongations when the
+  single-letter-run spelling is listed as well. English, French and German
+  happened to list both (`um` and `umm`, `ts` and `tss`, `pf` and `pff`).
+  Russian listed `тсс`, `мм` and `ээ` and not their short forms, so `тссс`,
+  `ммм` and `эээ` were cards. Every list looked complete on its own terms,
+  which is why reading them found nothing.
+
+  So the short forms are derived rather than authored. `FILLER_SOUNDS` is
+  built from `_FILLER_SOUNDS_AUTHORED` by adding each sound with every run
+  reduced to one character, and a language added later cannot reintroduce
+  the gap. `test_every_sound_is_reachable_from_its_elongated_spelling`
+  stretches each authored sound and fails if the lookup misses it.
 - **The filter runs in `process_transcript`, not `_is_valid_token`.** It
   needs the language, which that function does not receive, and the
   corrected lemma, which does not exist until later. Skipping there also
