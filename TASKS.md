@@ -472,10 +472,26 @@ remaining user-visible value is; the rest is measurement and hygiene.
       constraint required anyway. Needs the OMW-style filtering: drop
       self-references, cross-language leakage and junk.
 
-- [ ] **Filler-word cards.** `Ah`, `Bah`, `Ouai`, `Euh`, `Tss` — 3.4% of
+- [x] **Filler-word cards.** `Ah`, `Bah`, `Ouai`, `Euh`, `Tss` — 3.4% of
       cards, and the ones that look broken to a user. Needs a per-language
       stoplist of filler sounds, not a POS rule: `Bonsoir` is also `INTJ` and
       is worth learning.
+
+      Shipped as `language.FILLER_SOUNDS` and `language.is_filler()`, applied
+      in `process_transcript` where both the language and the corrected lemma
+      are known. A stoplist as described, and it turned out the POS rule was
+      never the problem: `INTJ` is already excluded, and these words reach
+      cards because the tagger calls them nouns and adverbs in the sentences
+      they appear in. Elongated spellings collapse onto the listed one at
+      runs of three characters, not two, so English `err` survives.
+      ARCHITECTURE.md 8.37.
+
+      **Still to verify on a real machine:** the French list is the only one
+      counted against a run, and that count predates the fix. Re-run the
+      French video that produced the 3.4% and check the new
+      `Filler sounds skipped: N tokens` line, then do one run each in en, de
+      and ru and read the word list for sounds still getting through and, more
+      importantly, for real words that stopped appearing.
 
 - [x] **ADR-009 phase 1: IPA and Commons pronunciation audio.** Shipped for
       v0.5.0. The ADR's estimates were low for German — real coverage is

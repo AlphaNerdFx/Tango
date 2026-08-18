@@ -55,7 +55,11 @@ warnings.filterwarnings(
 # noqa: E402 throughout -- these must follow the filter above to take effect.
 import spacy  # noqa: E402,I001
 from spacy.language import Language  # noqa: E402
-from pipeline.language import SpacyModelUnavailableError, get_spacy_model  # noqa: E402
+from pipeline.language import (  # noqa: E402
+    SpacyModelUnavailableError,
+    get_spacy_model,
+    is_filler,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -318,6 +322,9 @@ def process_transcript(
     the count of how many times that lemma appeared across all its forms
     (e.g. "running", "ran", "run" all increment the key "run").
 
+    Filler sounds for this language are dropped (see language.is_filler),
+    so "euh" and "tss" never reach a card while "bonsoir" still does.
+
     Args:
         text: Clean transcript string from get_snippets()["_full_text"].
               Must be non-empty.
@@ -382,10 +389,22 @@ def process_transcript(
 
     vocabulary: dict[str, int] = {}
     pos_counts: dict[str, Counter] = {}
+    fillers_skipped = 0
     for token in doc:
         if not _is_valid_token(token):
             continue
         lemma = _corrected_lemma(token, language, known).lower()
+
+        # Filler sounds are dropped here rather than in _is_valid_token,
+        # for two reasons. The answer depends on the language, which that
+        # function does not receive, and it depends on the corrected lemma,
+        # which does not exist until this line. Skipping before the counters
+        # below also keeps "euh" out of surface_forms and parts_of_speech,
+        # not merely off the card.
+        if is_filler(lemma, language):
+            fillers_skipped += 1
+            continue
+
         if lemma in vocabulary:
             vocabulary[lemma] += 1
         else:
@@ -419,6 +438,10 @@ def process_transcript(
         len(vocabulary),
         len(doc),
     )
+    if fillers_skipped:
+        # Reported so a real run can be checked against the 3.4% that
+        # prompted the stoplist, instead of the effect being invisible.
+        logger.info("Filler sounds skipped: %d tokens (language: %s)", fillers_skipped, language)
 
     return vocabulary
 

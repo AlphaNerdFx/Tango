@@ -2084,6 +2084,82 @@ leaving it untranslated, which is the way this would quietly stop working.
 
 ---
 
+### 8.37 Filler sounds are a stoplist, because the tag they carry is not reliable
+
+`Ah`, `Bah`, `Ouai`, `Euh` and `Tss` were 3.4% of the cards in one real
+French run. They are the cards that look broken to a user: there is nothing
+to learn on them, and their presence suggests the rest of the deck was not
+checked either.
+
+The obvious fix is wrong twice over. spaCy tags these INTJ, and `ACCEPTED_POS`
+never included INTJ, so a POS rule is already in place and these words got
+past it anyway: the tagger reads `Euh` as a noun and `Bah` as an adverb in
+the sentences they actually appear in, and a tag that is wrong is not a tag
+you can filter on. Going the other way and dropping every INTJ costs real
+vocabulary, because `Bonsoir` carries the same tag and belongs on a card.
+
+So it is a stoplist of sounds, per language, in `language.FILLER_SOUNDS`,
+checked by `language.is_filler()`. Four decisions in it are worth keeping:
+
+- **Sounds only.** A word with a dictionary entry a learner would want is
+  not filler however filler-ish it sounds in speech. French `bon`, German
+  `na` and Russian `ну` are all common discourse markers, all carry meaning,
+  and are all deliberately absent. The cost of a wrong entry here is a word
+  the learner never sees and no message saying so.
+- **Nothing is shared between languages.** `ah` is noise in French and noise
+  in German, but one language's list must never decide what another filters.
+  A language with no table filters nothing, which is the state of 20 of the
+  24 codes in `SPACY_MODELS`.
+- **Elongation is collapsed, at three characters and not two.** A transcript
+  spells a drawn-out hesitation with as many letters as it likes, so `euuuh`
+  and `ahhhh` are folded onto `euh` and `ah` before the lookup. Runs of two
+  are left alone on purpose: English `err` is a real verb and would become
+  `er`, a hesitation, under a two-run rule.
+
+  That asymmetry has a consequence the first version of this table got
+  wrong. Collapsing at three means `tsss` folds onto `ts` and not onto
+  `tss`, so a sound is only reachable from its elongations when the
+  single-letter-run spelling is listed as well. English, French and German
+  happened to list both (`um` and `umm`, `ts` and `tss`, `pf` and `pff`).
+  Russian listed `тсс`, `мм` and `ээ` and not their short forms, so `тссс`,
+  `ммм` and `эээ` were cards. Every list looked complete on its own terms,
+  which is why reading them found nothing.
+
+  So the short forms are derived rather than authored. `FILLER_SOUNDS` is
+  built from `_FILLER_SOUNDS_AUTHORED` by adding each sound with every run
+  reduced to one character, and a language added later cannot reintroduce
+  the gap. `test_every_sound_is_reachable_from_its_elongated_spelling`
+  stretches each authored sound and fails if the lookup misses it.
+- **The test is "would a course teach it", not "is it said without
+  thinking".** The first version of these lists failed that on eleven
+  entries, all dictionary words: French `hein`, `bof`, `ouais`, `ben`,
+  German `tja`, `ach`, Russian `эй`, `ага`, `ой`, `эх`, English `yikes`.
+  They were removed and are pinned by `test_a_real_word_is_never_filtered`.
+
+  The two directions of error are not symmetric, which is why the list errs
+  towards keeping words. A filler that slips through is one bad card the
+  user deletes on sight. A word wrongly listed here is a word they are never
+  offered, never see, and have no way to notice is missing.
+
+  One asymmetry is deliberate. `ouai` is listed and `ouais` is not, though
+  they are the same word: `ouais` is the dictionary spelling of something
+  worth learning, while `Ouai` is one of the five spellings a real French run
+  actually put on a card. The measurement is kept, the word is not.
+
+- **The filter runs in `process_transcript`, not `_is_valid_token`.** It
+  needs the language, which that function does not receive, and the
+  corrected lemma, which does not exist until later. Skipping there also
+  keeps the sound out of `surface_forms` and `parts_of_speech`, so nothing
+  downstream can resurrect it.
+
+The French list is the measured one. English, German and Russian are the
+standard written spellings of the same kinds of sound and have not been
+counted against a real run, which is the next thing to do rather than
+something to assume. The run reports `Filler sounds skipped: N tokens` so
+the effect can be checked instead of guessed at.
+
+---
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
