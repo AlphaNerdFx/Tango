@@ -12,16 +12,24 @@ installed environment at the time of writing, not recalled from memory. See
 
 ## 1. Where the project is
 
-**Tagged release:** v0.5.0 — pronunciation on cards, and a notetype that
-merges instead of forking. `CHANGELOG.md` has the entry and the migration.
-**In development:** v0.5.1 (pronunciation where there is no offline index)
-v0.5.2 (audio embedded in the card, and paced so the host stops
-rate-limiting it) and v0.5.3 (part of speech in the learner's language).
-All committed, none tagged. `ROADMAP.md` has the ladder to v1.0.0 and the
-rule that picks the number; CLAUDE.md 15 is the short form, and CLAUDE.md 16
-is the commit and tag format.
-**HEAD:** 5 commits ahead of `tango-origin/main`, unpushed; tags stop at
-v0.5.0. Working tree clean.
+**Tagged release:** v0.5.3, part of speech in the learner's language. The
+0.5.x line is complete and all four tags have GitHub release notes: v0.5.0
+(pronunciation on cards, the migration release), v0.5.1 (pronunciation
+describes the word on the card), v0.5.2 (audio plays inside the card) and
+v0.5.3. `CHANGELOG.md` has an entry for each.
+**In development:** v0.6.0, card quality. Filler sounds no longer become
+cards, which is one of the four items on that rung; antonyms, inflection
+glosses and the two-language cache key remain. `ROADMAP.md` has the ladder
+to v1.0.0 and the rule that picks the number; CLAUDE.md 15 is the short
+form, and CLAUDE.md 16 is the commit and tag format.
+**HEAD:** in sync with `tango-origin/main`. Working tree clean.
+
+**Both audio behaviours are confirmed on real cards, by ear, not inferred.**
+Embedded audio plays on opening a card and can be replayed. Cross-language
+keeps the transcript language throughout: a German word defined in French
+carries `[haʊ̯s]` and `tango-de-haus-*.mp3`, never maison's. The media
+filename hashes `language:lemma`, so a French recording could only ever be
+named `tango-fr-*`, and no such file appears in a German package.
 
 **The remote is not `origin`.** `origin` still points at
 `AlphaNerdFx/Youtube-Anki-Flashcards`, which no longer exists; the live
