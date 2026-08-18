@@ -595,11 +595,13 @@ def _cache_row_to_result(
 ) -> DefinitionResult:
     """Reconstruct a DefinitionResult from a SQLite cache row.
 
-    cache_key may be a composite "lemma::language" string.
+    cache_key may be a composite "lemma::language::pos" string, with the
+    trailing part-of-speech segment absent when none resolved.
     The lemma field in the result always returns the bare word only.
     """
     import json
-    # Strip the "::language" suffix if present to restore bare lemma
+    # Take the first segment, which is the bare lemma however many
+    # "::"-joined parts the key has.
     lemma = cache_key.split("::")[0]
     return DefinitionResult(
         lemma=lemma,
