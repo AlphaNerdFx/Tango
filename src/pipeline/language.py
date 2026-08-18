@@ -628,3 +628,98 @@ def localise_pos(pos: str, language: str) -> str:
     code = (language or "en").lower()
     table = POS_LABELS.get(code) or POS_LABELS.get(code.split("-")[0]) or POS_LABELS["en"]
     return table.get(key, raw)
+
+
+# =============================================================================
+# Filler sounds
+# =============================================================================
+#
+# Hesitation noises and the other non-lexical sounds a transcript writes down
+# as if they were words. spaCy usually tags them INTJ, which nlp.py already
+# drops, but usually is not always: one real French run put Ah, Bah, Ouai,
+# Euh and Tss on cards, 3.4% of the deck, because the tagger read them as
+# nouns and adverbs in the sentences they appeared in.
+#
+# A stoplist rather than a POS rule, and that is the whole reason this table
+# exists: "Bonsoir" is also INTJ and is worth learning, so dropping the tag
+# would cost real vocabulary. Only sounds are listed. A word a learner would
+# want a card for does not belong here however filler-ish it feels in speech
+# -- French "bon", German "na", Russian "ну" all carry meaning and are all
+# deliberately absent.
+#
+# Per language, with nothing shared between them. "ah" is noise in French and
+# noise in German, but one language's list must never decide what another
+# filters. A language with no entry filters nothing, which is the default for
+# the 20 codes in SPACY_MODELS whose transcripts nobody has listened to.
+#
+# Measured for French only (ARCHITECTURE.md 8.37). The other three lists are
+# the standard written spellings of the same kinds of sound, and want a real
+# run before anyone quotes a number for them.
+#
+# Entries are stored the way is_filler() normalises a lemma, so no entry may
+# contain a run of three or more identical characters -- "ahhh" would be
+# unreachable, since the lemma reaching the lookup has already collapsed to
+# "ah". A test pins that.
+FILLER_SOUNDS: dict[str, frozenset[str]] = {
+    "en": frozenset({
+        "ah", "aha", "ahem", "eh", "er", "erm", "ha", "haha", "heh",
+        "hm", "hmm", "huh", "mhm", "mm", "oh", "ooh", "psst", "shh",
+        "ugh", "uh", "uh-huh", "um", "umm", "yikes",
+    }),
+    "fr": frozenset({
+        "ah", "aha", "bah", "beh", "ben", "bof", "eh", "euh", "hein",
+        "hm", "hmm", "hum", "mmh", "oh", "ouah", "ouai", "ouais",
+        "pf", "pff", "ts", "tss",
+    }),
+    "de": frozenset({
+        "ach", "ah", "aha", "äh", "ähem", "ähm", "hä", "hm", "hmm",
+        "mhm", "oh", "ooh", "öh", "pf", "pff", "puh", "tja", "uff",
+    }),
+    "ru": frozenset({
+        "ага", "ай", "ах", "гм", "мм", "ой", "ох", "тсс", "угу", "уф",
+        "фух", "ух", "хм", "эй", "эм", "эх", "ээ",
+    }),
+}
+
+# A transcript writes a drawn-out sound with as many letters as it feels
+# like: "euuuh", "ahhhh", "тссс". Runs of three or more are collapsed to
+# one so the table does not have to list every length.
+#
+# Three, not two, and the difference is a real word: English "err" would
+# collapse to "er" under a two-run rule and be filtered as a hesitation.
+# No ordinary word triples a letter, so three is safe where two is not.
+_ELONGATION = re.compile(r"(.)\1{2,}")
+
+
+def _collapse_elongation(word: str) -> str:
+    """Collapse every run of three or more identical characters to one."""
+    return _ELONGATION.sub(r"\1", word)
+
+
+def is_filler(lemma: str, language: str) -> bool:
+    """
+    Return True if this lemma is a filler sound in this language.
+
+    Args:
+        lemma:    The lemma as nlp.py keys it. Case-insensitive.
+        language: BCP-47 code of the transcript's language. A code with no
+                  table filters nothing, and a base code ("fr") answers for
+                  its regional variants ("fr-FR").
+
+    Returns:
+        True when the lemma, or the lemma with elongated letter runs
+        collapsed, is one of that language's filler sounds. False for an
+        empty lemma, an unknown language, and every real word.
+
+    There is deliberately no fallback to another language's table: filtering
+    a French transcript against the German list would drop words nobody
+    measured.
+    """
+    word = (lemma or "").strip().lower()
+    if not word:
+        return False
+    code = (language or "").strip().lower()
+    sounds = FILLER_SOUNDS.get(code) or FILLER_SOUNDS.get(code.split("-")[0])
+    if not sounds:
+        return False
+    return word in sounds or _collapse_elongation(word) in sounds
