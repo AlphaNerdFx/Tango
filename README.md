@@ -3,7 +3,7 @@
 [![CI](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml/badge.svg)](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.5.0-orange)](https://github.com/AlphaNerdFx/Tango/releases/tag/v0.5.0)
+[![Version](https://img.shields.io/badge/version-v0.5.3-orange)](https://github.com/AlphaNerdFx/Tango/releases/tag/v0.5.3)
 
 Turn any YouTube video into Anki flashcards, automatically.
 
@@ -165,17 +165,22 @@ Sentence-structured decks skip fuzzy matching entirely and use exact match only.
 Each card contains:
 
 - Word (front)
-- Class (part of speech)
+- Class (part of speech, written in the same language as the Definition)
 - Definition (in DEF_LANG or native language)
 - 1st Example Sentence (from dictionary, in original language)
 - 2nd Example Sentence (from dictionary, in original language)
 - Example from Youtube Video (transcript sentence)
 - Synonyms (in original language)
 - Antonyms (in original language)
-- IPA (pronunciation transcription, where a dictionary index is built)
-- Pronunciation (link to a Wikimedia Commons recording, where one exists)
+- VideoID and Source (where the card came from)
+- IPA (pronunciation transcription, in the original language)
+- Pronunciation (the recording itself, embedded so it plays in the card)
 
-Fields are **appended, never reordered** — indices 0-9 are what every
+Everything describing the word stays in the transcript language, including
+the recording. A German word defined in French is still pronounced in
+German.
+
+Fields are appended, never reordered. Indices 0-11 are what every
 already-imported card is bound to. Adding one is a notetype schema change:
 Tango aligns your collection's notetype before importing, and Anki will ask
 for one full sync afterwards. See `CHANGELOG.md` for the v0.5.0 migration.
