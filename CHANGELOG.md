@@ -28,7 +28,10 @@ Working toward v0.6.0, card quality.
   are listed: French `bon`, German `na` and Russian `ну` are common in speech,
   carry meaning, and are deliberately absent. Elongated spellings (`euuuh`,
   `ahhhh`) are folded onto the listed one, at runs of three characters rather
-  than two so English `err` survives.
+  than two so English `err` survives. Because folding at three maps `tsss`
+  onto `ts` rather than `tss`, each sound's short spelling is derived from
+  the table rather than written by hand, so no list can be complete-looking
+  and still miss its own elongations.
 
   Lists ship for en, fr, de and ru, and only the French one has been counted
   against a real run. A language with no list filters nothing. Each run logs
