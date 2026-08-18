@@ -462,9 +462,16 @@ remaining user-visible value is; the rest is measurement and hygiene.
       still, `form_of` names the target word, so `glaube` could instead
       resolve to `glauben`'s definition rather than being skipped.
 
-- [ ] **Antonyms, the weakest field everywhere.** Native German 59%, French
-      23%, and cross-language collapses to 3% because 3.3 keeps them in the
-      transcript language. ConceptNet's bulk dump is the evaluated candidate:
+- [ ] **Antonyms, the weakest field everywhere.** Cross-language collapses
+      to 3% because 3.3 keeps them in the transcript language.
+
+      **The coverage numbers here are not trustworthy and need re-measuring
+      before anyone plans against them.** This entry recorded native German
+      at 59%; the second antonyms entry further down records 51% for German
+      and 46% for Russian, and French as 23.2% against this one's 23%. Two
+      figures for the same field cannot both be right, and neither says what
+      it counted or when. Re-measure both against real cards before quoting
+      either. Noted 18 August 2026. ConceptNet's bulk dump is the evaluated candidate:
       free, no key, CC BY-SA, one 475 MB download covering every language,
       real French antonyms for `grand` (petit, court, faible, minime...), and
       9 of 12 languages sampled returned data. Its live API is 502 on every
@@ -508,7 +515,15 @@ remaining user-visible value is; the rest is measurement and hygiene.
       before importing. ARCHITECTURE 8.32, and 8.33 for why it must resolve
       the notetype by ID rather than name.
 
-- [ ] **Pronunciation for languages with no offline index.** v0.5.0 gives
+- [x] **Pronunciation for languages with no offline index.** Shipped in
+      v0.5.1: English pronunciation now comes from the `phonetics` block
+      dictionaryapi.dev was already returning, and pronunciation is resolved
+      once by `_resolve_pronunciation` so it cannot disagree with the word on
+      the card. es/ja/ko/pt/zh still have no index and so still get nothing;
+      that is the index build, tracked separately. ARCHITECTURE.md 8.34.
+      Original note follows.
+
+      v0.5.0 gives
       IPA and audio only where an index exists — de, fr, ru. English gets
       nothing, and es/ja/ko/pt/zh have a spaCy model but no index. Three
       groups, one goal, and the English half is nearly free:
@@ -603,9 +618,20 @@ remaining user-visible value is; the rest is measurement and hygiene.
       had been silently producing native output for want of a translation
       model.
 
-- [ ] **ADR-009: card media enrichment (audio, IPA, images).** Written and
-      proposed; see `docs/ADR-009-card-media-enrichment.md`. Four phases in
-      dependency order, each independently shippable.
+- [x] **ADR-009 phases 1 and 2: IPA and audio.** Shipped in v0.5.0 through
+      v0.5.2. IPA and Pronunciation are fields 10 and 11, audio is embedded
+      as `[sound:...]` and plays in the card, and downloads are paced because
+      the host rate-limits per IP. Two of the ADR's estimates were measured
+      and found wrong: audio size by roughly an order of magnitude, and the
+      claim that embedding was too heavy. ARCHITECTURE.md 8.30 to 8.35.
+
+      **Phase 3, images, is deliberately not built.** Sampling measured 2 of
+      5 usable, with `laufen` returning a coin from the town of Laufen. It
+      needs a relevance gate before it is worth having. Phase 4 is untouched
+      and still needs the ToS decision below.
+
+      Original note follows; see `docs/ADR-009-card-media-enrichment.md`.
+      Four phases in dependency order, each independently shippable.
 
       Phase 1 is the clear first move: 91.5% of German entries in the kaikki
       data already carry IPA and 65.7% carry a Wikimedia Commons audio URL —
@@ -635,11 +661,9 @@ remaining user-visible value is; the rest is measurement and hygiene.
 - [x] **Add a --no-cache flag for measurement runs.** Shipped; duplicate of
       the entry above.
 
-- [ ] **Consider a cache key carrying both languages.** Today it is
-      `lemma::target_language`, so a row contaminated by a cross-language run
-      cannot be identified from the key -- invalidation had to reconstruct it
-      by joining the vocabulary table back to each video's language. Both
-      cache-poisoning incidents would have been a one-line delete.
+- [ ] **Consider a cache key carrying both languages.** Still open;
+      duplicate of the entry under "High — next up" above. It is one of the
+      four items on the v0.6.0 rung.
 
 - [x] **Re-run the sweep and record the corrected baseline.** Done;
       duplicate of the entry above. SESSION.md section 5.
@@ -1066,7 +1090,10 @@ remaining user-visible value is; the rest is measurement and hygiene.
       `is_alpha` to block those three would also throw away `aujourd'hui`,
       `peut-être`, `bien-être` and `au-dessus`, four of the most common words
       in French. No action needed.
-- [ ] Audio on cards. Requires a TTS source and genanki media file handling.
+- [x] Audio on cards. Shipped in v0.5.2, and the premise recorded here was
+      wrong: no TTS source was needed. Wiktionary already carries Wikimedia
+      Commons URLs for real human recordings, which is better than synthesis
+      and was sitting in data the pipeline already downloaded.
 - [ ] User vocabulary profiles from Anki review history. Requires at least 30
       days of review data before the model has anything to learn from.
 - [ ] Video recommendations by vocabulary domain and level. Depends on the
