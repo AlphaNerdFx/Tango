@@ -32,13 +32,15 @@ code.
 **Python:** 3.10. Developed under WSL2 on Windows 11, but that is the
 current environment, not a target: cross-platform support is a v0.8.0 goal
 and the WSL assumptions in `__main__.py` and `ANKI_HOST` are known work.
-**Current tag:** v0.5.0 — a MINOR rather than a patch, because it migrates
-the notetype (two new fields, and Anki wants a full sync afterwards).
-**Written but not tagged:** v0.5.1 (pronunciation where there is no offline
-index), v0.5.2 (audio embedded in the card, and paced so the host stops
-rate-limiting it), v0.5.3 (part of speech in the learner's language).
-`__version__` reads 0.5.3.
-**Working toward:** v0.6.0 — card quality. Goals per tag through v1.0.0 are
+**Current tag:** v0.5.3, part of speech in the learner's language. The 0.5.x
+line ran v0.5.0 (pronunciation on cards, the one release needing a
+migration), v0.5.1 (pronunciation describes the word on the card), v0.5.2
+(audio plays inside the card) and v0.5.3. All four have GitHub release
+notes; v0.4.1 to v0.4.5 still have none.
+**On main and unreleased:** filler sounds no longer become cards, the first
+of four items on the v0.6.0 rung. `__version__` still reads 0.5.3 and bumps
+when that rung is finished, not per item.
+**Working toward:** v0.6.0, card quality. Goals per tag through v1.0.0 are
 in `ROADMAP.md`; the rule that picks the number is in section 15; the commit
 and tag format is in section 16; release history is in `CHANGELOG.md`.
 
