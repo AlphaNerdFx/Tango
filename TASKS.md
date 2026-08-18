@@ -18,13 +18,14 @@ verification session.
 - [x] SQLite backlog when Anki is unavailable
 - [x] Dual-source definition strategy (native examples, target definitions)
 - [x] Merriam-Webster primary with dictionaryapi.dev fallback
-- [x] SQLite definition cache with composite `lemma::language` key
+- [x] SQLite definition cache with composite `lemma::target_language::pos` key
 - [x] Translation mode via community mirrors and local argostranslate
 - [x] Per-word translation timeout to prevent CPU hangs
 - [x] Per-run translation choice caching (prompt once, not per word)
 - [x] genanki card generation with stable GUIDs
 - [x] Card template with Anki CSS variables for light and dark mode
-- [x] Ten-field card model with `FallbackNote` removed
+- [x] Twelve-field card model with `FallbackNote` removed (ten at the time
+      this line was written; IPA and Pronunciation were appended in v0.5.0)
 - [x] 256-character caps with sentence-boundary truncation
 - [x] Two dictionary example sentences plus transcript example
 - [x] WordNet synonym and antonym supplementation for English
@@ -562,10 +563,17 @@ remaining user-visible value is; the rest is measurement and hygiene.
       while looking correct.
 
 - [ ] **Consider a cache key carrying both languages.** Today it is
-      `lemma::target_language`, so a row contaminated by a cross-language run
-      cannot be identified from the key — invalidation had to reconstruct it
+      `lemma::target_language::pos`, per `_cache_key()`, with the `pos`
+      segment omitted when no part of speech resolves. The transcript
+      language is still absent, so a row contaminated by a cross-language run
+      cannot be identified from the key: invalidation had to reconstruct it
       by joining the vocabulary table back to each video's language. Both
       cache-poisoning incidents would have been a one-line delete.
+
+      Note this entry described a two-part `lemma::target_language` key until
+      18 August 2026. The `pos` segment arrived with sense selection (8.29)
+      and no task describing the key was updated, so the item was planning
+      against a shape the code had already left.
 
 - [ ] **Build the missing dictionary indexes.** `make doctor` reports es, ja,
       ko, pt and zh as having a spaCy model but no index, which is exactly
