@@ -476,6 +476,31 @@ class TestIsFiller:
         # if runs of two were collapsed as well as runs of three.
         assert not language_module.is_filler("err", "en")
 
+    @pytest.mark.parametrize("language,word", [
+        ("fr", "hein"),    # tag question, taught in any beginner course
+        ("fr", "bof"),     # indifference, a dictionary word
+        ("fr", "ouais"),   # "yeah", and one of the commonest words in speech
+        ("fr", "ben"),     # discourse marker, but a word
+        ("de", "tja"),     # "well then", carries meaning
+        ("de", "ach"),     # "oh", a real interjection
+        ("ru", "эй"),      # "hey"
+        ("ru", "ага"),     # "yeah"
+        ("ru", "ой"),      # surprise or pain, a real interjection
+        ("ru", "эх"),      # regret
+        ("en", "yikes"),   # an interjection, but a lexical one
+    ])
+    def test_a_real_word_is_never_filtered(self, language, word):
+        """
+        The eleven entries the first version of these lists got wrong.
+
+        Every one is a dictionary word a course would teach, and listing it
+        meant the learner silently never got a card for it. That is the
+        expensive direction of this feature: a filler that slips through is
+        one bad card the user deletes, while a word wrongly listed here is a
+        word they are never offered and never know was missing.
+        """
+        assert not language_module.is_filler(word, language)
+
     def test_an_elongation_of_a_doubled_sound_is_recognised(self):
         # The bug in the first version of this table. Russian listed "тсс",
         # "мм" and "ээ" but not their single-letter spellings, and a lemma is
