@@ -438,6 +438,68 @@ class TestLocalisePos:
                     f"{code}[{tag}] is still the English label {table[tag]!r}"
 
 
+# ── Filler sounds ─────────────────────────────────────────────────────────────
+
+class TestIsFiller:
+    """
+    The stoplist behind CLAUDE.md's v0.6.0 card-quality goal: filler sounds
+    reach cards because spaCy tags them NOUN or ADV in some sentences, so a
+    POS rule cannot catch them and would cost real interjections if it did.
+    """
+
+    def test_a_measured_french_filler_is_recognised(self):
+        assert language_module.is_filler("euh", "fr")
+
+    def test_a_french_interjection_worth_learning_is_not_filtered(self):
+        # The reason this is a stoplist and not a rule on INTJ: bonsoir
+        # carries the same tag as euh and belongs on a card.
+        assert not language_module.is_filler("bonsoir", "fr")
+
+    def test_a_word_with_meaning_is_not_filtered_however_filler_ish(self):
+        # "bon" is a discourse marker in speech and an adjective in the
+        # dictionary. Filtering it would lose a word a learner wants.
+        assert not language_module.is_filler("bon", "fr")
+
+    def test_one_languages_sounds_do_not_filter_another_language(self):
+        # euh is French. Nobody has measured whether it appears in English
+        # transcripts, so English must not act on it.
+        assert not language_module.is_filler("euh", "en")
+
+    def test_an_elongated_sound_is_recognised(self):
+        # A transcript spells a drawn-out hesitation with as many letters
+        # as it likes; the table lists one spelling.
+        assert language_module.is_filler("euuuh", "fr")
+        assert language_module.is_filler("ahhhh", "de")
+
+    def test_a_doubled_letter_is_not_collapsed(self):
+        # "err" is a real English verb and would become "er", a hesitation,
+        # if runs of two were collapsed as well as runs of three.
+        assert not language_module.is_filler("err", "en")
+
+    def test_case_and_surrounding_space_do_not_matter(self):
+        assert language_module.is_filler("  EUH ", "fr")
+
+    def test_a_regional_code_uses_its_base_languages_table(self):
+        assert language_module.is_filler("euh", "fr-FR")
+
+    def test_a_language_with_no_table_filters_nothing(self):
+        # 20 of the 24 spaCy languages have no list. They must keep every
+        # word rather than borrow another language's.
+        assert not language_module.is_filler("ah", "pl")
+
+    def test_an_empty_lemma_or_language_is_not_filler(self):
+        assert not language_module.is_filler("", "fr")
+        assert not language_module.is_filler("euh", "")
+
+    def test_no_listed_sound_is_unreachable(self):
+        # is_filler collapses runs of three or more before looking up, so an
+        # entry containing one could never be matched by anything.
+        for code, sounds in language_module.FILLER_SOUNDS.items():
+            for sound in sounds:
+                assert language_module.is_filler(sound, code), \
+                    f"{code} lists {sound!r}, which its own lookup cannot match"
+
+
 # ── Integration ───────────────────────────────────────────────────────────────
 
 @pytest.mark.integration
