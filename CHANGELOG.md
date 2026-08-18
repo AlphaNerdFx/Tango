@@ -37,6 +37,12 @@ Working toward v0.6.0, card quality.
   against a real run. A language with no list filters nothing. Each run logs
   `Filler sounds skipped: N tokens`. See ARCHITECTURE.md 8.37.
 
+  The bar for listing a sound is whether a course would teach it, not
+  whether a speaker says it without thinking. Words that fail that bar are
+  kept out on purpose, because the two mistakes are not equally cheap: a
+  filler that slips through is one card you delete, while a word listed here
+  by accident is one you are never offered and cannot tell is missing.
+
 - Existing cards are untouched. The filter applies to the next run, not to a
   deck already imported.
 
