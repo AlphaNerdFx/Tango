@@ -731,3 +731,63 @@ class TestPartsOfSpeechOutParameter:
         process_transcript("text", surface_forms=forms, parts_of_speech=pos)
         assert forms["run"] == ["running", "run"]
         assert pos["run"] == "VERB"
+
+
+# ── Filler sounds ─────────────────────────────────────────────────────────────
+#
+# Ah, Bah, Ouai, Euh and Tss were 3.4% of one real French run. They get past
+# the POS filter because the tagger calls them nouns and adverbs in the
+# sentences they appear in, so the tokens below are tagged the way spaCy
+# actually tagged them, not INTJ.
+
+class TestFillerSounds:
+
+    def test_french_filler_sounds_do_not_become_words(self, mock_spacy_model):
+        tokens = [
+            _make_token("Euh",     "euh",     "NOUN"),
+            _make_token("Bah",     "bah",     "ADV"),
+            _make_token("maison",  "maison",  "NOUN"),
+        ]
+        mock_spacy_model.return_value = _make_doc(tokens)
+        assert process_transcript("text", language="fr") == {"maison": 1}
+
+    def test_an_interjection_worth_learning_survives(self, mock_spacy_model):
+        # The other half of the pair. A rule that dropped the tag instead of
+        # the sound would pass the test above and fail this one.
+        tokens = [
+            _make_token("Euh",      "euh",      "NOUN"),
+            _make_token("Bonsoir",  "bonsoir",  "NOUN"),
+        ]
+        mock_spacy_model.return_value = _make_doc(tokens)
+        assert process_transcript("text", language="fr") == {"bonsoir": 1}
+
+    def test_a_filler_in_one_language_is_kept_in_another(self, mock_spacy_model):
+        # "euh" is on the French list only. An English transcript has not
+        # been measured, so the word stays.
+        tokens = [_make_token("Euh", "euh", "NOUN")]
+        mock_spacy_model.return_value = _make_doc(tokens)
+        assert process_transcript("text", language="en") == {"euh": 1}
+
+    def test_an_elongated_filler_is_dropped(self, mock_spacy_model):
+        tokens = [
+            _make_token("Euuuh",   "euuuh",   "NOUN"),
+            _make_token("maison",  "maison",  "NOUN"),
+        ]
+        mock_spacy_model.return_value = _make_doc(tokens)
+        assert process_transcript("text", language="fr") == {"maison": 1}
+
+    def test_a_filler_leaves_no_surface_form_or_pos_behind(self, mock_spacy_model):
+        # It is skipped before the out-parameters are written, so nothing
+        # downstream can resurrect it: definition.py reads parts_of_speech
+        # and cards.py reads surface_forms.
+        tokens = [
+            _make_token("Euh",     "euh",     "NOUN"),
+            _make_token("maison",  "maison",  "NOUN"),
+        ]
+        mock_spacy_model.return_value = _make_doc(tokens)
+        forms: dict = {}
+        pos: dict = {}
+        process_transcript("text", language="fr", surface_forms=forms, parts_of_speech=pos)
+        assert "euh" not in forms
+        assert "euh" not in pos
+        assert forms["maison"] == ["maison"]
