@@ -35,8 +35,8 @@ and the WSL assumptions in `__main__.py` and `ANKI_HOST` are known work.
 **Current tag:** v0.5.3, part of speech in the learner's language. The 0.5.x
 line ran v0.5.0 (pronunciation on cards, the one release needing a
 migration), v0.5.1 (pronunciation describes the word on the card), v0.5.2
-(audio plays inside the card) and v0.5.3. All four have GitHub release
-notes; v0.4.1 to v0.4.5 still have none.
+(audio plays inside the card) and v0.5.3. Every one of the thirteen tags
+has GitHub release notes as of 18 August 2026.
 **On main and unreleased:** filler sounds no longer become cards, the first
 of four items on the v0.6.0 rung. `__version__` still reads 0.5.3 and bumps
 when that rung is finished, not per item.
@@ -151,8 +151,10 @@ What this buys, and why the old rule is retired:
 Two things that still hold. `Word` must stay at index 0 — Anki treats a
 note's first field as its identity, and `deck.py`'s duplicate check reads
 the lowest-`order` field (ARCHITECTURE.md 8.22). And new fields are still
-**appended**: indices 0-9 are what every already-imported card in every
-user's collection is bound to.
+**appended**: indices 0-11 are what every already-imported card in every
+user's collection is bound to. That range was 0-9 until v0.5.0 shipped IPA
+and Pronunciation and collections were migrated onto the 12-field notetype,
+so a new field is index 12.
 
 **Appending is safe for the indices. It is not, by itself, safe for the
 notetype.** Anki matches an incoming notetype by ID, and when that ID
