@@ -647,6 +647,19 @@ def localise_pos(pos: str, language: str) -> str:
 # -- French "bon", German "na", Russian "ну" all carry meaning and are all
 # deliberately absent.
 #
+# The test for an entry is not "does a speaker say this without thinking" but
+# "would a course teach it". The first version of these lists failed that on
+# eleven entries, all of which are dictionary words a learner wants: French
+# "hein", "bof", "ouais" and "ben", German "tja" and "ach", Russian "эй",
+# "ага", "ой" and "эх", English "yikes". They were removed, and
+# TestRealWordsAreNotFiltered pins them so they cannot come back by hand.
+#
+# One asymmetry is deliberate and looks like a mistake. "ouai" is listed and
+# "ouais" is not. They are the same word, but "ouais" is the dictionary
+# spelling of a word worth learning, while "Ouai" is one of the five that a
+# real French run actually put on a card. The measurement stays; the word
+# does not.
+#
 # Per language, with nothing shared between them. "ah" is noise in French and
 # noise in German, but one language's list must never decide what another
 # filters. A language with no entry filters nothing, which is the default for
@@ -668,20 +681,20 @@ _FILLER_SOUNDS_AUTHORED: dict[str, frozenset[str]] = {
     "en": frozenset({
         "ah", "aha", "ahem", "eh", "er", "erm", "ha", "haha", "heh",
         "hm", "hmm", "huh", "mhm", "mm", "oh", "ooh", "psst", "shh",
-        "ugh", "uh", "uh-huh", "um", "umm", "yikes",
+        "ugh", "uh", "uh-huh", "um", "umm",
     }),
     "fr": frozenset({
-        "ah", "aha", "bah", "beh", "ben", "bof", "eh", "euh", "hein",
-        "hm", "hmm", "hum", "mmh", "oh", "ouah", "ouai", "ouais",
+        "ah", "aha", "bah", "beh", "eh", "euh",
+        "hm", "hmm", "hum", "mmh", "oh", "ouah", "ouai",
         "pf", "pff", "ts", "tss",
     }),
     "de": frozenset({
-        "ach", "ah", "aha", "äh", "ähem", "ähm", "hä", "hm", "hmm",
-        "mhm", "oh", "ooh", "öh", "pf", "pff", "puh", "tja", "uff",
+        "ah", "aha", "äh", "ähem", "ähm", "hä", "hm", "hmm",
+        "mhm", "oh", "ooh", "öh", "pf", "pff", "puh", "uff",
     }),
     "ru": frozenset({
-        "ага", "ай", "ах", "гм", "мм", "ой", "ох", "тсс", "угу", "уф",
-        "фух", "ух", "хм", "эй", "эм", "эх", "ээ",
+        "ай", "ах", "гм", "мм", "ох", "тсс", "угу", "уф",
+        "фух", "ух", "хм", "эм", "ээ",
     }),
 }
 
