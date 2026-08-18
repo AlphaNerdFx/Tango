@@ -660,7 +660,11 @@ def localise_pos(pos: str, language: str) -> str:
 # contain a run of three or more identical characters -- "ahhh" would be
 # unreachable, since the lemma reaching the lookup has already collapsed to
 # "ah". A test pins that.
-FILLER_SOUNDS: dict[str, frozenset[str]] = {
+#
+# This is what is written by hand. FILLER_SOUNDS below is derived from it and
+# is what the lookup uses; see _with_collapsed_forms for the one case an
+# author cannot be expected to remember.
+_FILLER_SOUNDS_AUTHORED: dict[str, frozenset[str]] = {
     "en": frozenset({
         "ah", "aha", "ahem", "eh", "er", "erm", "ha", "haha", "heh",
         "hm", "hmm", "huh", "mhm", "mm", "oh", "ooh", "psst", "shh",
@@ -690,10 +694,48 @@ FILLER_SOUNDS: dict[str, frozenset[str]] = {
 # No ordinary word triples a letter, so three is safe where two is not.
 _ELONGATION = re.compile(r"(.)\1{2,}")
 
+# Runs of two or more. Used only to derive an entry's fully collapsed form,
+# never on a lemma being looked up, because collapsing runs of two there is
+# exactly what would eat "err".
+_ANY_RUN = re.compile(r"(.)\1+")
+
 
 def _collapse_elongation(word: str) -> str:
     """Collapse every run of three or more identical characters to one."""
     return _ELONGATION.sub(r"\1", word)
+
+
+def _with_collapsed_forms(sounds: frozenset[str]) -> frozenset[str]:
+    """
+    Add each sound's fully collapsed spelling to the set.
+
+    Args:
+        sounds: The spellings written by hand for one language.
+
+    Returns:
+        Those spellings plus, for any containing a doubled letter, the same
+        sound with every run reduced to a single character.
+
+    A lemma is looked up by collapsing runs of three or more to one, which
+    means a listed sound is only reachable from its elongations if the
+    one-letter-run spelling is listed too. "tss" and "ts" both appear in the
+    French set and both are needed: "tsss" collapses to "ts", not to "tss".
+
+    Russian was listed as "тсс", "мм" and "ээ" without their short forms, so
+    "тссс", "ммм" and "эээ" collapsed to spellings the table did not hold and
+    became cards. Nothing failed and no test caught it, because every list
+    looked complete on its own terms.
+
+    Deriving the short forms rather than asking an author to remember them is
+    the point: the next language added cannot reintroduce this.
+    """
+    return frozenset(sounds | {_ANY_RUN.sub(r"\1", sound) for sound in sounds})
+
+
+# What the lookup actually reads.
+FILLER_SOUNDS: dict[str, frozenset[str]] = {
+    code: _with_collapsed_forms(sounds) for code, sounds in _FILLER_SOUNDS_AUTHORED.items()
+}
 
 
 def is_filler(lemma: str, language: str) -> bool:
