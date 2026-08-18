@@ -476,6 +476,26 @@ class TestIsFiller:
         # if runs of two were collapsed as well as runs of three.
         assert not language_module.is_filler("err", "en")
 
+    def test_an_elongation_of_a_doubled_sound_is_recognised(self):
+        # The bug in the first version of this table. Russian listed "тсс",
+        # "мм" and "ээ" but not their single-letter spellings, and a lemma is
+        # looked up by collapsing runs of three or more down to one. So
+        # "тссс" became "тс", which the table did not hold, and the card was
+        # made. English and French happened to list both spellings, so they
+        # worked and the Russian list looked just as complete.
+        assert language_module.is_filler("тссс", "ru")
+        assert language_module.is_filler("ммм", "ru")
+        assert language_module.is_filler("эээ", "ru")
+
+    def test_every_sound_is_reachable_from_its_elongated_spelling(self):
+        # The general form, so a language added later cannot reintroduce it.
+        # A transcript stretches the last sound, which is what this builds.
+        for code, sounds in language_module._FILLER_SOUNDS_AUTHORED.items():
+            for sound in sounds:
+                stretched = sound + sound[-1] * 2
+                assert language_module.is_filler(stretched, code), \
+                    f"{code}: {sound!r} is listed but {stretched!r} is not caught"
+
     def test_case_and_surrounding_space_do_not_matter(self):
         assert language_module.is_filler("  EUH ", "fr")
 
