@@ -29,3 +29,24 @@ jobs:
         run: python -m nltk.downloader wordnet omw-2.0
       - name: Run unit tests
         run: pytest tests/ -m "not integration"
+
+  # requirements.txt and requirements-dev.txt are not what the job above
+  # installs, so nothing used to check them. Dependabot bumped thinc to 9.1.1
+  # in requirements.txt, CI went green on all three Python versions, and the
+  # file was uninstallable: spaCy 3.8 requires thinc<8.4.0.
+  pins:
+    name: pinned requirements
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.10"
+      - name: Install the checker's own dependencies
+        run: pip install packaging tomli
+      - name: requirements.txt resolves
+        run: pip install --dry-run --quiet -r requirements.txt
+      - name: requirements-dev.txt resolves
+        run: pip install --dry-run --quiet -r requirements-dev.txt
+      - name: Pins agree with pyproject.toml
+        run: python scripts/check_pins.py
