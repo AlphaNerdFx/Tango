@@ -19,9 +19,10 @@ release notes, v0.4.1 to v0.4.5 having been backfilled from CHANGELOG on
 (pronunciation on cards, the migration release), v0.5.1 (pronunciation
 describes the word on the card), v0.5.2 (audio plays inside the card) and
 v0.5.3. `CHANGELOG.md` has an entry for each.
-**In development:** v0.6.0, card quality. Filler sounds no longer become
-cards, which is one of the four items on that rung; antonyms, inflection
-glosses and the two-language cache key remain. `ROADMAP.md` has the ladder
+**In development:** v0.6.0, card quality. Two of the four items on that rung
+are done: filler sounds no longer become cards, and inflection pointers
+resolve to a real definition in Russian as they already did in German and
+French. Antonyms and the two-language cache key remain. `ROADMAP.md` has the ladder
 to v1.0.0 and the rule that picks the number; CLAUDE.md 15 is the short
 form, and CLAUDE.md 16 is the commit and tag format.
 **HEAD:** in sync with `tango-origin/main`. Working tree clean.
@@ -40,7 +41,7 @@ both existed, `git log origin/main..HEAD` printed nothing and read exactly
 like "fully pushed", because it compares against a ref that does not
 resolve; seventeen commits sat unpushed behind that. Prefer `git status -sb`,
 which names the real upstream.
-**Test state:** 908 passing, 0 failing, 24 integration deselected (`make test`)
+**Test state:** 915 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 88% overall, 2549 statements, 308 missed, measured 18 August
 2026. Weakest: `translation.py` 71%, `__main__.py` and `transcript.py` 82%.
 The 87% carried here before was stale again, taken about 1500 lines ago.
