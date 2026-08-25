@@ -634,3 +634,67 @@ class TestFollowingFormOfPointers:
                     senses=[_sense("Schmerzen verspueren.")]),
         ]))
         assert lookup("leide", "de", pos="VERB").definition == "Schmerzen verspueren."
+
+
+class TestFormOfSpellings:
+    """
+    An inflection pointer's target is not always spelled the way the index
+    stores the headword, and until 18 August 2026 that cost Russian one card
+    in twenty-two. Measured on the real builds: 12 of 14 unresolved pointers
+    in a 300-word Russian sample were one of these two shapes, while German
+    and French carried neither across 2.3 million pointers.
+    """
+
+    def test_the_literal_target_is_tried_first(self):
+        # Order is the safety property: anything after the literal can only
+        # add a hit, never move one that already worked. Asserted on a target
+        # that actually normalises, since one that does not makes every
+        # ordering look identical.
+        assert wiktdata._form_of_spellings("нача́ло") == ["нача́ло", "начало"]
+        assert wiktdata._form_of_spellings("кома#I") == ["кома#i", "кома"]
+
+    def test_a_homograph_disambiguator_is_dropped(self):
+        # Russian Wiktionary disambiguates in the pointer itself, so the
+        # target arrives as "толк#(существительное I)" and matches nothing.
+        assert "толк" in wiktdata._form_of_spellings("толк#(существительное I)")
+
+    def test_a_cyrillic_stress_mark_is_stripped(self):
+        # The index stores headwords unstressed, so the marked spelling
+        # cannot find them.
+        assert "начало" in wiktdata._form_of_spellings("нача́ло")
+
+    def test_a_french_accent_is_never_stripped(self):
+        """
+        The partner, and the reason the strip is scoped to Cyrillic.
+
+        A combining acute on Cyrillic is stress notation and means nothing.
+        The identical codepoint on Latin spells a different word: "a" and
+        "à" are separate French entries, as are "eleve" and "élève".
+        Stripping everywhere measurably resolved a French pointer to the
+        wrong word, so this is a real regression guard, not a hypothetical.
+        """
+        for word in ("à", "élève", "déjà"):
+            assert wiktdata._form_of_spellings(word) == [word]
+
+    def test_no_spelling_is_offered_twice(self):
+        # A target needing no normalisation must produce one candidate, not
+        # three identical queries against the index.
+        assert wiktdata._form_of_spellings("gehen") == ["gehen"]
+
+    def test_a_pointer_with_a_disambiguator_resolves(self, tmp_path):
+        build_index("ru", archive=_archive(tmp_path, [
+            _record("кому", lang_code="ru", pos="noun",
+                    senses=[_sense("дательный падеж", form_of="кома#I")]),
+            _record("кома", lang_code="ru", pos="noun",
+                    senses=[_sense("глубокое бессознательное состояние")]),
+        ]))
+        assert lookup("кому", "ru").definition == "глубокое бессознательное состояние"
+
+    def test_a_pointer_with_a_stress_mark_resolves(self, tmp_path):
+        build_index("ru", archive=_archive(tmp_path, [
+            _record("начала", lang_code="ru", pos="noun",
+                    senses=[_sense("родительный падеж", form_of="нача́ло")]),
+            _record("начало", lang_code="ru", pos="noun",
+                    senses=[_sense("первый момент чего-либо")]),
+        ]))
+        assert lookup("начала", "ru").definition == "первый момент чего-либо"
