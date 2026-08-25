@@ -444,7 +444,24 @@ remaining user-visible value is; the rest is measurement and hygiene.
       lesson is that cached rows outlive the fix that corrected them.
       Verified by mutation: five separate reversions each fail a test.
 
-- [ ] **Inflection-pointer glosses reach cards as definitions.** Found while
+- [x] **Inflection-pointer glosses reach cards as definitions.** Done, and
+      most of it was already done without anyone re-measuring: `form_of` and
+      `_follow_form_of` shipped with the ADR-009 schema bump, which this
+      entry correctly predicted would pair with it. Re-measured 18 August
+      2026 on the real indexes, 300 inflected forms sampled per language:
+      German 299 of 300 resolved, French 297, Russian 286.
+
+      Russian's shortfall was the only remaining work, and it was two
+      spellings rather than a mechanism: the target arrives as
+      `толк#(существительное I)` or carries a stress mark, `нача́ло`, and
+      neither matches a headword. Normalising both took Russian to 298 of
+      300. The strip is scoped to Cyrillic on purpose, because doing it to
+      Latin resolved a French pointer to the wrong word. ARCHITECTURE.md
+      8.38.
+
+      Original note follows.
+
+      Found while
       measuring 8.29, filed rather than folded into it. German Wiktionary
       indexes every inflected form as its own entry, so a card can read
       "1. Person Singular Indikativ Präsens Aktiv des Verbs haben" — a
