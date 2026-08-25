@@ -483,13 +483,30 @@ remaining user-visible value is; the rest is measurement and hygiene.
 - [ ] **Antonyms, the weakest field everywhere.** Cross-language collapses
       to 3% because 3.3 keeps them in the transcript language.
 
-      **The coverage numbers here are not trustworthy and need re-measuring
-      before anyone plans against them.** This entry recorded native German
-      at 59%; the second antonyms entry further down records 51% for German
-      and 46% for Russian, and French as 23.2% against this one's 23%. Two
-      figures for the same field cannot both be right, and neither says what
-      it counted or when. Re-measure both against real cards before quoting
-      either. Noted 18 August 2026. ConceptNet's bulk dump is the evaluated candidate:
+      **Re-measured 25 August 2026, and the two figures this entry used to
+      carry were both wrong.** Counted by reading fields back out of the
+      406-card German deck built from `loqocHC9aAU`, the most recent deck
+      built with current code:
+
+      | field | German native | French native |
+      |---|---|---|
+      | Definition | 93.1% | 98.6% |
+      | Synonyms | 63.1% | 84.5% |
+      | Antonyms | **53.9%** | **22.7%** |
+
+      So German is 53.9%, not the 59% recorded here or the 51% recorded in
+      the second antonyms entry below. French is 22.7%, close to the 23% both
+      entries carried.
+
+      The cross-language claim was the badly wrong one. This entry said
+      antonyms "collapse to 3%" under `--def-lang`; measured on the 283-card
+      de->fr deck it is **17.3%**, against 18.0% for synonyms in the same
+      deck. Cross-language does cost roughly two thirds of the antonyms, but
+      not the near-total loss recorded here, and a plan built on 3% would
+      have been solving a problem that size.
+
+      Antonyms remain the weakest field, which is the point of this item and
+      is unchanged. ConceptNet's bulk dump is the evaluated candidate:
       free, no key, CC BY-SA, one 475 MB download covering every language,
       real French antonyms for `grand` (petit, court, faible, minime...), and
       9 of 12 languages sampled returned data. Its live API is 502 on every
@@ -717,10 +734,12 @@ remaining user-visible value is; the rest is measurement and hygiene.
       live. `__main__.py` 55% → 82%, suite 83% → 88%, 692 passing.
       See ARCHITECTURE.md 8.24.
 
-- [ ] **Antonyms, the one visibly thin field.** Measured on real cards read
-      back out of Anki: 23.2% against Definition's 98.6% and Synonyms' 85%.
-      German and Russian measure 51% and 46%, so this is per-language, not a
-      global ceiling.
+- [ ] **Antonyms, the one visibly thin field.** French 23.2% against
+      Definition's 98.6% and Synonyms' 85%, and German 51%, both as recorded
+      when this was written. Re-measured 25 August 2026 the German figure is
+      53.9% and the French 22.7%; see the fuller table under the other
+      antonyms entry above, which is the one to trust. Either way this is
+      per-language, not a global ceiling.
 
       **Fact-checked the "no worthwhile antonym source" claim.** It was
       right about the sources it had actually tested, and wrong as a general
