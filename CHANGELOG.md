@@ -16,6 +16,25 @@ rather than list every change.
 
 Working toward v0.6.0, card quality.
 
+### Fixed
+
+- **CI checked a requirements file it never installed.** A Dependabot bump of
+  `thinc` to 9.1.1 passed on all three Python versions while making
+  `requirements.txt` unresolvable, because CI installs `pip install -e
+  ".[dev]"` from `pyproject.toml` and never read the pinned files. A `pins`
+  job now resolves both of them and checks each pin against the range
+  `pyproject.toml` declares, which catches the case pip cannot: a pin that
+  installs cleanly on its own but contradicts the project's own metadata.
+  ARCHITECTURE.md 8.39.
+
+### Dependencies
+
+- spacy 3.8.14 to 3.8.15, requests 2.33.1 to 2.34.2, actions/checkout 4 to 7,
+  actions/setup-python 5 to 7, and the dev group (black, ruff, mypy,
+  types-requests) brought up to what the environment already ran.
+- thinc stays at 8.3.13. spaCy 3.8 requires `thinc<8.4.0`, so it moves when
+  spaCy does.
+
 ### Changed
 
 - **Filler sounds no longer become cards.** `Ah`, `Bah`, `Ouai`, `Euh` and
