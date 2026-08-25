@@ -9,9 +9,10 @@ under (`0.1.0` at v0.4.3 and v0.4.4, `0.4.4` at v0.4.5), five tags carry no
 release notes, and no document said what a release *was*. A number chosen
 per release is a guess; a number that follows from a rule is a decision.
 
-**Draft.** The goals below are proposed from the open items in `TASKS.md`
-and the gaps in `ARCHITECTURE.md` §9. Reorder freely — the ladder matters
-more than the contents of any one rung.
+The goals below started as proposals from the open items in `TASKS.md` and
+the gaps in `ARCHITECTURE.md` §9. Everything through v0.5.3 has shipped and
+is tagged; v0.6.0 onward is still open to reordering, since the ladder
+matters more than the contents of any one rung.
 
 ---
 
@@ -40,14 +41,15 @@ field is.
 `CLAUDE.md`'s "Current tag" must agree at the moment of tagging. They never
 have. `scripts/verify-release.sh` is where that check belongs.
 
-**Every tag gets GitHub release notes.** v0.4.1–v0.4.5 have none, so the
-only record of what shipped is the tag message and `git log`.
+**Every tag gets GitHub release notes.** All thirteen have them as of
+18 August 2026; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG
+entries, having previously had only a tag message and `git log`.
 
 ---
 
 ## 2. The ladder
 
-### v0.5.0 — Pronunciation, and a notetype that merges  ← this release
+### v0.5.0 — Pronunciation, and a notetype that merges
 
 - IPA and Commons audio on cards, sourced from the offline index (ADR-009
   phase 1)
@@ -120,11 +122,23 @@ re-imported. This finishes a field that was already on the card.
 
 The fields exist and are filled; this is about what is *in* them.
 
-- Filler-word cards (`Ah`, `Bah`, `Euh`, `Tss` — 3.4% of one real French run)
-- Antonyms, the weakest field everywhere
-- Inflection-pointer glosses that still reach cards as definitions
+- Filler-word cards (`Ah`, `Bah`, `Euh`, `Tss` — 3.4% of one real French run).
+  Done.
+- Inflection-pointer glosses that still reach cards as definitions. Done;
+  Russian was the last language still leaking them.
+- Antonyms, the weakest field everywhere. Measured at 53.9% German and 22.7%
+  French. Issue #25.
 - Cache key carrying both languages, so a cross-language fix invalidates the
-  rows it should
+  rows it should. Issue #26.
+- Words that get no definition at all, 6.9% of a real German deck. Added to
+  this rung on 26 August 2026 rather than planned into it, because measuring
+  the previous item surfaced it. Issue #27.
+
+The last one is deliberately not a filter. Three signals were measured and
+none separates transcript damage from real words, so the run names them and
+the learner decides. Guessing here is the expensive direction: a filler that
+slips through costs one card, a word wrongly filtered is never offered and
+cannot be missed.
 
 ### v0.7.0 — The command line as a product
 
