@@ -227,6 +227,39 @@ def _prompt_import(apkg_path: Path) -> None:
 
 # ── Summary block ─────────────────────────────────────────────────────────────
 
+def _wrap_words(words: list[str], width: int = 62, cap: int = 40) -> list[str]:
+    """
+    Lay a word list out as comma-separated lines for the run summary.
+
+    Args:
+        words: Already-sorted words to print.
+        width: Characters per line before wrapping.
+        cap:   Stop after this many and say how many were left.
+
+    Returns:
+        Lines to print, or [] for no words.
+
+    Capped because the point is triage, not a dump: a run against a badly
+    transcribed video can put hundreds of words here, and a wall of them is
+    read as noise and skipped.
+    """
+    shown, remainder = words[:cap], len(words) - cap
+    lines: list[str] = []
+    current = ""
+    for word in shown:
+        candidate = f"{current}, {word}" if current else word
+        if len(candidate) > width and current:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    if remainder > 0:
+        lines.append(f"and {remainder} more")
+    return lines
+
+
 def _print_summary(
     video_id: str,
     deck_name: str,
@@ -235,6 +268,7 @@ def _print_summary(
     fallback_count: int,
     skipped_count: int,
     not_found_count: int,
+    not_found_words: Optional[list[str]] = None,
 ) -> None:
     _rule()
     print(f"  {GREEN}{BOLD}Done.{RESET}")
@@ -246,6 +280,16 @@ def _print_summary(
         print(f"  {YELLOW}Dropped:  {skipped_count} word(s) had no definition and no transcript example.{RESET}")
     if not_found_count:
         print(f"  {YELLOW}No definition found for {not_found_count} word(s) — fallback cards created where possible.{RESET}")
+        # Naming them, not just counting them. Measured on a real 406-card
+        # German run, 28 words landed here and 25 of them were transcript
+        # damage or names ("Bissch", "Herauszufinde", "Barack") that a
+        # learner deletes on sight. Printed so they can be found and removed
+        # in one pass in Anki's browser instead of one at a time during
+        # review. They are NOT filtered automatically: three signals were
+        # measured and none separates these from real words. See
+        # ARCHITECTURE.md 8.40.
+        for line in _wrap_words(sorted(not_found_words or [])):
+            print(f"            {DIM}{line}{RESET}")
     print(f"  Package:  {apkg_path}")
     _rule()
 
@@ -513,6 +557,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
         fallback_count=result.fallback_count,
         skipped_count=result.skipped_count,
         not_found_count=len(batch.not_found),
+        not_found_words=batch.not_found,
     )
     _prompt_import(result.path)
 
@@ -629,6 +674,7 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
         fallback_count=result.fallback_count,
         skipped_count=result.skipped_count,
         not_found_count=len(batch.not_found),
+        not_found_words=batch.not_found,
     )
     _prompt_import(result.path)
 
@@ -703,6 +749,7 @@ def _run_backlog(args: argparse.Namespace, session: Session) -> None:
         fallback_count=result.fallback_count,
         skipped_count=result.skipped_count,
         not_found_count=len(batch.not_found),
+        not_found_words=batch.not_found,
     )
     _prompt_import(result.path)
 
