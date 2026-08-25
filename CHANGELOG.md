@@ -46,6 +46,15 @@ Working toward v0.6.0, card quality.
 - Existing cards are untouched. The filter applies to the next run, not to a
   deck already imported.
 
+- **Russian inflected words get a real definition.** A card could read
+  "дательный падеж от кома", which points at another word instead of
+  defining this one. Following the pointer already worked for German and
+  French; Russian failed because the target carries a homograph
+  disambiguator (`толк#(существительное I)`) or a stress mark (`нача́ло`),
+  and neither matches a headword. Measured on the real index over 300
+  sampled inflected forms, Russian went from 286 resolved to 298. German and
+  French were already at 299 and 297 and are unchanged. ARCHITECTURE.md 8.38.
+
 ## [0.5.3] — 2026-08-17
 
 The part of speech is written in the learner's language.
