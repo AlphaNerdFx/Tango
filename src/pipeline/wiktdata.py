@@ -34,6 +34,7 @@ import json
 import logging
 import sqlite3
 import threading
+import unicodedata
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -253,6 +254,65 @@ def _select_row(rows: list, pos: Optional[str]):
     return rows[0]
 
 
+# Combining acute and grave. Russian Wiktionary marks stress with these, and
+# the index stores headwords without them, so a pointer to "нача́ло" cannot
+# find "начало" until the mark comes off.
+#
+# Stripped only from Cyrillic letters, and that restriction is the whole
+# point. On Cyrillic these are a stress notation and carry no meaning; on
+# Latin the identical codepoints spell different words. Stripping them
+# everywhere turned French "à" into "a" and "élève" into "eleve", which is
+# not a near miss but a pointer to a different entry.
+_STRESS_MARKS = "́̀"
+
+
+def _strip_cyrillic_stress(word: str) -> str:
+    """Remove combining stress marks that sit on Cyrillic letters only."""
+    out: list[str] = []
+    for char in unicodedata.normalize("NFD", word):
+        if char in _STRESS_MARKS and out and "CYRILLIC" in unicodedata.name(out[-1], ""):
+            continue
+        out.append(char)
+    return unicodedata.normalize("NFC", "".join(out))
+
+
+def _form_of_spellings(target: str) -> list[str]:
+    """
+    Spellings to try for an inflection pointer's target, most literal first.
+
+    Args:
+        target: The `form_of` value as the index stores it.
+
+    Returns:
+        Lower-cased candidates, without duplicates, in the order to try.
+
+    The literal value is always first, so this can only add hits, never
+    move one. Two transformations follow it, both measured against the real
+    builds and both Russian in practice:
+
+    - Everything from "#" is dropped. Russian Wiktionary disambiguates
+      homographs in the pointer itself, so the target arrives as
+      "толк#(существительное I)" or "кома#I", which matches no headword.
+      595 of the Russian index's 11836 pointers carry one, and the German
+      and French builds carry none across 2.3 million pointers.
+    - Stress marks are stripped from Cyrillic, which recovers "нача́ло" ->
+      "начало". Latin is left alone: the same codepoints spell French "à"
+      and "élève", and stripping them there points at a different word.
+
+    Both are safe for languages that do not need them, since neither "#" nor
+    a Cyrillic stress mark appears in a German or French pointer.
+    """
+    bare = target.split("#")[0].strip()
+    unstressed = _strip_cyrillic_stress(bare)
+
+    spellings: list[str] = []
+    for candidate in (target, bare, unstressed):
+        lowered = candidate.strip().lower()
+        if lowered and lowered not in spellings:
+            spellings.append(lowered)
+    return spellings
+
+
 def _follow_form_of(conn: sqlite3.Connection, row, pos: Optional[str]):
     """
     Resolve an inflection pointer to the entry it points at.
@@ -275,16 +335,17 @@ def _follow_form_of(conn: sqlite3.Connection, row, pos: Optional[str]):
     target = (row["form_of"] or "").strip()
     if not target:
         return row
-    try:
-        candidates = conn.execute(
-            "SELECT * FROM entries WHERE word = ?", (target.lower(),)
-        ).fetchall()
-    except sqlite3.Error:
-        return row
-    real = [r for r in candidates if not (r["form_of"] or "").strip()]
-    if not real:
-        return row
-    return _select_row(real, pos)
+    for spelling in _form_of_spellings(target):
+        try:
+            candidates = conn.execute(
+                "SELECT * FROM entries WHERE word = ?", (spelling,)
+            ).fetchall()
+        except sqlite3.Error:
+            return row
+        real = [r for r in candidates if not (r["form_of"] or "").strip()]
+        if real:
+            return _select_row(real, pos)
+    return row
 
 
 def _lookup_variants(word: str) -> list[str]:
