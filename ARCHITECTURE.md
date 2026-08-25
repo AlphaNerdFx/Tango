@@ -2163,6 +2163,48 @@ the effect can be checked instead of guessed at.
 
 ---
 
+### 8.38 An inflection pointer's target is not spelled like the headword
+
+8.30 shipped `form_of` and `_follow_form_of`, and it worked: measured on the
+real indexes, 299 of 300 sampled German inflected forms and 297 of 300 French
+now resolve to a real definition instead of printing a pointer. The task that
+asked for this was still open, because nobody re-measured after the ADR-009
+schema landed.
+
+Russian did not do as well: 286 of 300, one card in twenty-two still reading
+"дательный падеж от кома" instead of a definition. The cause is that the
+pointer's target is not always spelled the way the index stores the headword,
+and there are exactly two shapes:
+
+| target as stored | headword | why it misses |
+|---|---|---|
+| `толк#(существительное I)` | `толк` | homograph disambiguator in the pointer |
+| `кома#I` | `кома` | same |
+| `нача́ло` | `начало` | combining stress mark |
+
+595 of the Russian index's 11836 pointers carry a `#`, and 244 carry a stress
+mark. German and French carry neither, across 2.3 million pointers between
+them.
+
+`_form_of_spellings()` returns the literal target first and then those two
+normalisations, so it can only add a hit and never move one that already
+worked. Russian went from 286 to 298 of 300; German and French are unchanged.
+
+**The stress strip is scoped to Cyrillic, and that restriction is the fix's
+real content.** On Cyrillic a combining acute is stress notation and carries
+no meaning. The identical codepoint on Latin spells a different word: `a` and
+`à` are separate French entries, as are `eleve` and `élève`. The first
+implementation stripped everywhere and appeared to *improve* French by one
+card, which was the tell. That card had resolved to the wrong word. Scoping
+it to Cyrillic put French back to its true 297 and the wrong match went away.
+`test_a_french_accent_is_never_stripped` pins it.
+
+The lesson is the one 8.25 and 8.35 already record. A number moving the right
+way is not evidence on its own, and an unexplained improvement in a language
+the change was not supposed to touch is a bug report.
+
+---
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
