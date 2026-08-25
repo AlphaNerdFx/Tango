@@ -19,6 +19,7 @@ from pipeline.__main__ import (
     _build_parser,
     _prompt_import,
     _print_summary,
+    _wrap_words,
     _run_setup_wizard,
     _select_deck,
     main,
@@ -473,6 +474,67 @@ class TestTranslateWslPath:
         with patch("pipeline.__main__._is_wsl", return_value=True):
             path = "/home/user/output/file.apkg"
             assert _translate_wsl_path(path) == path
+
+
+class TestUndefinedWordsAreNamed:
+    """
+    A run reported "No definition found for 28 word(s)" and stopped there,
+    which is a number you cannot act on.
+
+    Measured on a real 406-card German run, 25 of those 28 were transcript
+    damage or names -- "Bissch", "Herauszufinde", "Barack" -- the cards a
+    learner deletes on sight. They are named rather than filtered: three
+    signals were measured against that deck and none separates them from real
+    words, so the user triages and the pipeline does not guess.
+    """
+
+    def test_the_words_are_printed_not_just_counted(self, tmp_apkg, capsys):
+        _print_summary(
+            video_id=VIDEO_ID, deck_name=DECK_NAME, apkg_path=tmp_apkg,
+            card_count=10, fallback_count=2, skipped_count=0,
+            not_found_count=2, not_found_words=["Bissch", "Herauszufinde"],
+        )
+        out = capsys.readouterr().out
+        assert "Bissch" in out and "Herauszufinde" in out
+
+    def test_nothing_is_printed_when_every_word_resolved(self, tmp_apkg, capsys):
+        # The partner. A clean run must not grow an empty list under it.
+        _print_summary(
+            video_id=VIDEO_ID, deck_name=DECK_NAME, apkg_path=tmp_apkg,
+            card_count=10, fallback_count=0, skipped_count=0,
+            not_found_count=0, not_found_words=[],
+        )
+        assert "No definition found" not in capsys.readouterr().out
+
+    def test_an_older_caller_that_passes_no_words_still_works(self, tmp_apkg, capsys):
+        # The argument is optional, so review and backlog modes could not be
+        # broken by adding it.
+        _print_summary(
+            video_id=VIDEO_ID, deck_name=DECK_NAME, apkg_path=tmp_apkg,
+            card_count=1, fallback_count=1, skipped_count=0, not_found_count=1,
+        )
+        assert "No definition found" in capsys.readouterr().out
+
+
+class TestWrapWords:
+
+    def test_a_long_list_wraps_instead_of_running_off_the_line(self):
+        lines = _wrap_words([f"wort{i:02d}" for i in range(20)], width=30)
+        assert len(lines) > 1
+        assert all(len(line) <= 30 for line in lines)
+
+    def test_a_very_long_list_is_capped_and_says_how_many_were_left(self):
+        # A badly transcribed video can put hundreds here, and a wall of words
+        # is read as noise and skipped, which defeats the point.
+        lines = _wrap_words([f"wort{i:03d}" for i in range(100)], cap=40)
+        assert lines[-1] == "and 60 more"
+
+    def test_a_short_list_is_not_capped(self):
+        # The partner: the cap must not fire on an ordinary run.
+        assert "more" not in " ".join(_wrap_words(["ah", "bissch"], cap=40))
+
+    def test_no_words_produces_no_lines(self):
+        assert _wrap_words([]) == []
 
 
 class TestPrintSummary:
