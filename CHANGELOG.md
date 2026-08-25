@@ -16,6 +16,20 @@ rather than list every change.
 
 Working toward v0.6.0, card quality.
 
+### Added
+
+- **The run summary names the words that got no definition**, instead of only
+  counting them. On a real 406-card German run that is 28 words, 6.9% of the
+  deck, and most are transcript damage or names (`Bissch`, `Herauszufinde`,
+  `Barack`) that you would delete on sight. Naming them means finding and
+  deleting them in one pass rather than meeting them during review.
+
+  They are deliberately not filtered out. Three signals were measured against
+  that deck and none separates them from real vocabulary: index absence drops
+  real German compounds like `Rüberbringen`, prefix matching flags `Barack`
+  as a truncation of `Baracke`, and 63% of words that *do* get a definition
+  also appear only once. See issue #27.
+
 ### Fixed
 
 - **CI checked a requirements file it never installed.** A Dependabot bump of
