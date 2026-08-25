@@ -26,6 +26,12 @@ French. Antonyms and the two-language cache key remain. `ROADMAP.md` has the lad
 to v1.0.0 and the rule that picks the number; CLAUDE.md 15 is the short
 form, and CLAUDE.md 16 is the commit and tag format.
 **HEAD:** in sync with `tango-origin/main`. Working tree clean.
+**Pull requests and issues: none open.** All six Dependabot pull requests were
+handled on 25 August 2026 (five merged, thinc 9.1.1 closed as unresolvable
+against spaCy 3.8), and issues #1, #13 and #16 were closed against measured
+evidence rather than assumption. #13's exact reported cases were re-run: the
+pipeline collapses `joue`/`jouent` to one `jouer` and `sors`/`sortir` to one
+`sortir`.
 
 **Both audio behaviours are confirmed on real cards, by ear, not inferred.**
 Embedded audio plays on opening a card and can be replayed. Cross-language
