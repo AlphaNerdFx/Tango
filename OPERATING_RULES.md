@@ -1,11 +1,22 @@
 # Operating Rules
 
-Paste this at the start of a Claude Code session, or append it to CLAUDE.md.
+> **Superseded. `CLAUDE.md` is authoritative and is read first in every
+> session.** Almost everything below was folded into it: rule 1 is CLAUDE.md
+> 7.1 and 7.2, rule 2 is 7.3, rule 4 is 7.5 and section 5, rule 5 is 7.4,
+> rule 9 is section 3, and the writing rules are section 17. Where the two
+> disagree, CLAUDE.md wins.
+>
+> This file is kept because it states the working relationship in one place
+> and in a tone CLAUDE.md does not. It drifted while nothing pointed at it:
+> until 18 August 2026 it cited an ADR filename that does not exist and
+> listed four of the six hard constraints. Both are corrected below. If it
+> drifts again, delete it rather than repair it, because a second copy of a
+> rule is this project's most reliable source of bugs.
 
 ---
 
 You are working on a codebase I built deliberately. Every architectural choice
-has a reason recorded in `docs/ADR_Tango_v0.4.0.pdf`. Follow these rules.
+has a reason recorded in `docs/ADR_v0.4.0.pdf`. Follow these rules.
 
 ## 1. Read before you write
 
@@ -78,9 +89,14 @@ read, or a constraint you did not know about is new information.
 
 ## 9. Never touch the hard constraints
 
-Listed in CLAUDE.md. `MODEL_ID`, `DECK_ID`, card field order, native-language
-example sourcing, unit test independence from external services. If a task
-seems to require violating one of these, stop and tell me before proceeding.
+There are six, and `CLAUDE.md` section 3 is the list: the Anki model and deck
+IDs, the single source of truth for card fields, keeping anything that
+describes the word in the transcript language, validating the lemma rather
+than the surface form, unit tests that need no external service, and no heavy
+dependency in the base install. Every one has a test in
+`tests/test_hard_constraints.py` that fails on the specific mistake it
+describes. If a task seems to require violating one, stop and tell me before
+proceeding.
 
 ## 10. Kill filler
 
