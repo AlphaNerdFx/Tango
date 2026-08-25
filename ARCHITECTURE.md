@@ -2205,6 +2205,47 @@ the change was not supposed to touch is a bug report.
 
 ---
 
+### 8.39 CI was green on a requirements file it never installed
+
+Dependabot raised six pull requests. Five were fine. One bumped `thinc` from
+8.3.13 to 9.1.1 in `requirements.txt`, passed CI on Python 3.10, 3.11 and
+3.12, and produced a file that cannot be installed:
+
+```
+ERROR: ResolutionImpossible
+    The user requested thinc==9.1.1
+    spacy 3.8.14 depends on thinc<8.4.0 and >=8.3.12
+```
+
+`thinc` is spaCy's own tensor library, pinned here only for reproducibility,
+so it cannot move ahead of what spaCy allows. Nothing about that is subtle.
+The reason it looked mergeable is:
+
+**CI installs `pip install -e ".[dev]"`, which reads `pyproject.toml`.
+Nothing installed `requirements.txt` or `requirements-dev.txt` at all.**
+
+So every check was honestly reporting on a file the pull request had not
+touched. The three green ticks were true statements about something else.
+
+The two files also drift for the same reason. `pyproject.toml` declares
+ranges (`black>=24.0`, `mypy>=1.9`) and the pin files record exact versions,
+and since only the ranges are ever installed, the pins quietly fall behind:
+measured before this work, the venv had black 26.5.1 and mypy 2.1.0 against
+pins of 25.1.0 and 1.15.0.
+
+The `pins` job now resolves both files with `pip install --dry-run` and runs
+`scripts/check_pins.py`, which catches the failure pip cannot. A pin that
+resolves on its own can still contradict the declared range: `spacy==4.1.0`
+installs happily and silently disagrees with `spacy>=3.8,<4.0`, meaning the
+two files describe different projects. The job takes 16 seconds.
+
+**The general shape is 8.35 again.** A number or a signal that is technically
+correct about the wrong thing is worse than a missing one, because it stops
+anybody looking. There the count was logged below the level the CLI prints;
+here the check ran against a file the change did not touch.
+
+---
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
