@@ -120,7 +120,8 @@ re-imported. This finishes a field that was already on the card.
 
 ### v0.6.0 — Card quality
 
-The fields exist and are filled; this is about what is *in* them.
+The fields exist and are filled; this is about what is *in* them. **All five
+items are done on main as of 26 August 2026, unreleased.**
 
 - Filler-word cards (`Ah`, `Bah`, `Euh`, `Tss` — 3.4% of one real French run).
   Done.
@@ -132,12 +133,13 @@ The fields exist and are filled; this is about what is *in* them.
 - Words that get no definition at all, 6.9% of a real German deck. Added to
   this rung on 26 August 2026 rather than planned into it, because measuring
   the previous item surfaced it. Done; the run names them. Issue #27.
-- Antonyms, the weakest field everywhere. Measured at 53.9% German and 22.7%
-  French. Issue #25. **The one item on this rung still open**, and the only
-  one needing a data source the project does not already have. The candidate
-  is measured and written up in `docs/ADR-010-conceptnet-antonyms.md`, which
-  is Proposed: it would take French from 22.5% to 35.0% for a 3 MB artifact,
-  and move German and Russian by 3.7 and 0.6 points.
+- Antonyms, the weakest field everywhere. Done, and the rung with it.
+  ADR-010 was accepted and implemented on 26 August 2026: a 4.3 MB
+  ConceptNet index covering 22 languages, built by `make antonyms`, filling
+  the field when nothing else can. Measured end to end, French went from
+  19.7% to 34.8%, German 56.2% to 60.3%, Russian 47.8% to 48.8%. The gain is
+  concentrated in French because the gap was between Wiktionary editions
+  rather than between sources. Issue #25.
 
 The last one is deliberately not a filter. Three signals were measured and
 none separates transcript damage from real words, so the run names them and
