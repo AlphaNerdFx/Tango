@@ -596,13 +596,17 @@ remaining user-visible value is; the rest is measurement and hygiene.
       combined parameter would have disabled caching for the normal path
       while looking correct.
 
-- [ ] **Consider a cache key carrying both languages.** Today it is
-      `lemma::target_language::pos`, per `_cache_key()`, with the `pos`
-      segment omitted when no part of speech resolves. The transcript
-      language is still absent, so a row contaminated by a cross-language run
-      cannot be identified from the key: invalidation had to reconstruct it
-      by joining the vocabulary table back to each video's language. Both
-      cache-poisoning incidents would have been a one-line delete.
+- [x] **Consider a cache key carrying both languages.** Shipped. The key is
+      `lemma::source::target::pos`, built in one place by `_cache_key()`, and
+      `_migrate_cache_keys()` sets the old table aside as `definitions_v0`
+      rather than guessing a source language for rows that never recorded
+      one. It was `lemma::target_language::pos`, with the `pos` segment
+      omitted when no part of speech resolved. The transcript language being
+      absent meant a row contaminated by a cross-language run could not be
+      identified from the key: invalidation had to reconstruct it by joining
+      the vocabulary table back to each video's language. Both
+      cache-poisoning incidents would have been a one-line delete, and now
+      are. ARCHITECTURE.md 8.40, issue #26.
 
       Note this entry described a two-part `lemma::target_language` key until
       18 August 2026. The `pos` segment arrived with sense selection (8.29)
@@ -703,9 +707,8 @@ remaining user-visible value is; the rest is measurement and hygiene.
 - [x] **Add a --no-cache flag for measurement runs.** Shipped; duplicate of
       the entry above.
 
-- [ ] **Consider a cache key carrying both languages.** Still open;
-      duplicate of the entry under "High — next up" above. It is one of the
-      four items on the v0.6.0 rung.
+- [x] **Consider a cache key carrying both languages.** Shipped; duplicate
+      of the entry under "High — next up" above, which carries the detail.
 
 - [x] **Re-run the sweep and record the corrected baseline.** Done;
       duplicate of the entry above. SESSION.md section 5.
