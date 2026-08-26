@@ -1,6 +1,6 @@
 # ADR-010: ConceptNet as a supplementary antonym source
 
-Status: Proposed
+Status: Accepted, 26 August 2026, and implemented the same day
 
 Continues the numbering from ADR-009. Written after a measurement spike on
 26 August 2026, so the numbers below are measured on this repository's own
@@ -47,8 +47,16 @@ ConceptNet 5.7.0 assertions, `conceptnet-assertions-5.7.0.csv.gz`:
 | antonym edges after streaming the gzip through a filter | 65 910 |
 | same-language, non-self pairs in languages Tango supports | 49 416 |
 | words those cover | 52 156 across 22 languages |
-| **shipped artifact** | **3.06 MB SQLite** |
+| **shipped artifact** | **4.3 MB SQLite** |
 | edges carrying a part of speech | 88.5% |
+
+That last row was 3.06 MB while this ADR was a proposal, measured from a
+spike that merged every sense of a word into one row. The shipped index
+keeps one row per part of speech, because preferring the sense the word was
+used in turned out to be worth having, and that costs 1.2 MB. Corrected here
+rather than left to be discovered: a stale number in this repository has
+usually been a number nobody re-measured after the thing it described
+changed.
 
 The dump never has to touch disk: `curl | zcat | grep` filters it in flight,
 which matters given ROADMAP v0.9.0 and a repository whose largest single
@@ -164,6 +172,36 @@ What this decision does **not** claim: that antonyms are solved. French would
 sit at 35.0%, still the weakest field on the card and still below German's
 current 53.9%. This closes about half of French's gap to German, and leaves
 German and Russian effectively where they are.
+
+## Measured after building it
+
+The prediction above was made from a spike. These are the numbers the
+shipped code produces, which is the only version that matters:
+
+| deck | before | after | |
+|---|---|---|---|
+| French, 1054 lemmas | 19.7% | **34.8%** | +15.1 points |
+| German, 406 lemmas | 56.2% | 60.3% | +4.2 points |
+| Russian, 701 lemmas | 47.8% | 48.8% | +1.0 points |
+
+French landed at 34.8% against 35.0% predicted. The baselines moved by a
+couple of points in both directions because these read the index through
+`wiktdata.lookup` with the part of speech the word was used in, the way a
+real run does, rather than asking whether any row for that spelling has an
+antonym. That is the more honest baseline and it was worth the difference.
+
+The real index holds 72 858 rows across 22 languages and takes 4.3 MB. It
+was built end to end with `make antonyms`, and `grand` in French returns
+bref, court, exigu, faible and minime.
+
+**One thing this broke, worth recording.** Three tests in
+`test_definition.py` asserted an empty antonym field. They mock `wiktdata`,
+so they had nothing to say about a source that did not exist when they were
+written, and they began failing the moment the index was built on this
+machine while passing anywhere it had not been. A unit test whose result
+depends on whether someone ran a setup command is the thing CLAUDE.md 3.5
+exists to prevent, so `tests/conftest.py` now points the index at an empty
+directory for every test that does not build its own.
 
 ## Consequences
 
