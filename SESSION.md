@@ -1,7 +1,9 @@
 # SESSION.md — Current working state
 
 Last updated: 18 August 2026, after the v0.5.x line was tagged and the
-repository was swept for inconsistencies.
+repository was swept for inconsistencies. Sections 3 and 7 were revised on
+26 August 2026 for the torch install size; nothing else in this file was
+re-verified that day, so read the rest as of the 18th.
 
 Read this to understand exactly where development stands and what was learned.
 Everything here was checked against `git log`, the working tree, and the
@@ -132,6 +134,16 @@ by the tag spaCy gave the word in its own sentence, and a `name` row is never
 selected. Measured on three real videos first: 60 of 1209 picks change,
 roughly 39 better to 14 worse, against word-overlap's 1 to 14. ARCHITECTURE
 8.29.
+
+**The install lost 3.7 GB of CUDA nobody could call.** `argostranslate ->
+stanza -> torch>=1.3.0` names no wheel variant, so pip took the CUDA build
+and its `nvidia` and `triton` companions: 4.5 GB, 76% of `.tangovenv`, and
+`torch.cuda.is_available()` was False here the whole time because the driver
+was too old. `make translate-setup` installs the CPU build from PyTorch's own
+index, and as of 26 August 2026 it also repairs an environment that already
+has the CUDA build, which installing from the index alone does not do.
+Applied here the same day: 5.9 GB to 2.2 GB, `make test` still green.
+ARCHITECTURE 8.41.
 
 ---
 
@@ -583,12 +595,18 @@ ANKI_HOST:       http://172.28.144.1:8765 (WSL gateway, changes on WSL restart)
 Run `make doctor` for the live picture. At the time of writing:
 
 - spaCy models for de, en, es, fr, ja, ko, pt, ru, zh
-- Dictionary indexes for **de (159 MB), fr (323 MB), ru (116 MB) only**.
-  es, ja, ko, pt and zh have a spaCy model but no index, which is exactly the
-  state that produces cards with no definitions. `make dictionary LANGUAGE=es`
+- Dictionary indexes for **de, fr, ru only**. Measured 26 August 2026: fr
+  404 MB, de 292 MB, ru 126 MB, 820 MB in total. es, ja, ko, pt and zh have a
+  spaCy model but no index, which is exactly the state that produces cards
+  with no definitions. `make dictionary LANGUAGE=es`
 - Translation models: de→en, en→de, fr→en, en→fr, ru→en, en→ru. Those six
   cover all 12 pairs, because argostranslate pivots through English
 - `MW_API_KEY` set, AnkiConnect reachable
+- **`.tangovenv` is 2.2 GB**, down from 5.9 GB on 26 August 2026 when the
+  CUDA torch build was replaced by the CPU one and `nvidia` and `triton` were
+  removed. `torch 2.13.0+cpu`, 725 MB, still the largest single package.
+  `--doctor` reports the build, and re-running `make translate-setup` repairs
+  a machine that still has the CUDA one
 
 Known environment issues:
 
