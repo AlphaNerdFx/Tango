@@ -19,6 +19,7 @@ from pipeline.__main__ import (
     _build_parser,
     _prompt_import,
     _print_summary,
+    _report_torch_build,
     _wrap_words,
     _run_setup_wizard,
     _select_deck,
@@ -1009,3 +1010,75 @@ class TestIntegration:
         ]):
             with patch("builtins.input", return_value="n"):  # skip import prompt
                 main()
+
+class TestTorchBuildReport:
+    """
+    4.5 GB of CUDA libraries, 76% of the virtualenv, on a machine that cannot
+    call them.
+
+    torch arrives through argostranslate -> stanza -> `torch>=1.3.0`, which
+    names no variant, so pip takes the default PyPI wheel. Since torch 2.x
+    that wheel bundles CUDA and pulls nvidia-* and triton. Nothing about the
+    pipeline reveals this: it runs correctly either way, just four gigabytes
+    larger, which is why `--doctor` reports it.
+    """
+
+    @staticmethod
+    def _fake_torch(cuda_version, available):
+        torch = MagicMock()
+        torch.version.cuda = cuda_version
+        torch.cuda.is_available.return_value = available
+        return torch
+
+    def test_a_cuda_build_with_no_usable_gpu_is_reported(self, capsys):
+        with patch.dict("sys.modules", {"torch": self._fake_torch("13.0", False)}):
+            counted = _report_torch_build()
+        out = capsys.readouterr().out
+        assert counted == 1
+        assert "no usable GPU" in out
+        assert "download.pytorch.org/whl/cpu" in out
+
+    def test_a_cuda_build_with_a_working_gpu_is_left_alone(self, capsys):
+        # The partner. Someone with a real GPU is not wasting anything and
+        # must not be told to reinstall a CPU build over the top of it.
+        with patch.dict("sys.modules", {"torch": self._fake_torch("13.0", True)}):
+            counted = _report_torch_build()
+        out = capsys.readouterr().out
+        assert counted == 0
+        assert "download.pytorch.org/whl/cpu" not in out
+
+    def test_a_cpu_build_is_not_flagged(self, capsys):
+        with patch.dict("sys.modules", {"torch": self._fake_torch(None, False)}):
+            counted = _report_torch_build()
+        assert counted == 0
+        assert "CPU build" in capsys.readouterr().out
+
+    def test_a_broken_cuda_probe_counts_as_no_gpu(self, capsys):
+        # torch.cuda.is_available() raises on some driver mismatches rather
+        # than returning False, and that must read as "cannot use it" instead
+        # of crashing the one command meant to diagnose the machine.
+        torch = self._fake_torch("13.0", False)
+        torch.cuda.is_available.side_effect = RuntimeError("driver too old")
+        with patch.dict("sys.modules", {"torch": torch}):
+            counted = _report_torch_build()
+        assert counted == 1
+        assert "no usable GPU" in capsys.readouterr().out
+
+    def test_torch_absent_is_not_a_problem(self, capsys):
+        # Translation is optional, so no torch at all is the smallest install
+        # there is and must not be reported as something to fix.
+        import builtins
+        import sys
+        real_import = builtins.__import__
+
+        def no_torch(name, *args, **kwargs):
+            if name == "torch":
+                raise ImportError("no module named torch")
+            return real_import(name, *args, **kwargs)
+
+        with patch.dict("sys.modules", {}, clear=False):
+            sys.modules.pop("torch", None)
+            with patch.object(builtins, "__import__", no_torch):
+                counted = _report_torch_build()
+        assert counted == 0
+        assert capsys.readouterr().out == ""
