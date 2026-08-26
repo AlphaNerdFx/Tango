@@ -47,7 +47,7 @@ both existed, `git log origin/main..HEAD` printed nothing and read exactly
 like "fully pushed", because it compares against a ref that does not
 resolve; seventeen commits sat unpushed behind that. Prefer `git status -sb`,
 which names the real upstream.
-**Test state:** 922 passing, 0 failing, 24 integration deselected (`make test`)
+**Test state:** 932 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 88% overall, 2549 statements, 308 missed, measured 18 August
 2026. Weakest: `translation.py` 71%, `__main__.py` and `transcript.py` 82%.
 The 87% carried here before was stale again, taken about 1500 lines ago.
