@@ -144,6 +144,14 @@ The offline dictionary is built from Wiktionary data and works with no network a
 
 Do not build it for English. English already scores 98% from Merriam-Webster, whose definitions are better curated; the index would add nothing and costs a 475 MB download.
 
+The antonym column above is what the Wiktionary index alone gives. Antonyms have their own optional index, built once for every language at the same time:
+
+```bash
+make antonyms
+```
+
+It is a 498 MB download that is streamed rather than stored, leaving 4.3 MB on disk. Measured end to end on real decks, it takes French from 19.7% to 34.8%, German from 56.2% to 60.3% and Russian from 47.8% to 48.8%. The gain is concentrated in French because the data comes from the English and French Wiktionary editions, and the dictionary index above is built from the English one. Without it, every card is exactly what it was.
+
 ---
 
 ## How duplicate detection works
