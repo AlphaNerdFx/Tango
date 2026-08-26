@@ -274,20 +274,35 @@ on top.
 `argostranslate -> stanza -> torch>=1.3.0`, and that constraint names a
 version but not a variant, so pip takes the default PyPI wheel, which since
 torch 2.x is the CUDA build. `make translate-setup` now installs torch from
-PyTorch's CPU index first, so pip sees the requirement satisfied. Verified in
-a clean virtualenv: 733 MB instead of 4515 MB, no `nvidia`, no `triton`, and
-the projected `.tangovenv` drops from 5.9 GB to 2.2 GB.
+PyTorch's CPU index first, so pip sees the requirement satisfied.
+
+**`.tangovenv` is now 2.2 GB, measured after the repair, not projected.**
+The same day it was applied to this machine's existing environment:
+`torch 2.13.0+cu130` replaced by `torch 2.13.0+cpu` (725 MB installed), and
+`triton` plus sixteen `nvidia-*` distributions removed, freeing 3.7 GB.
+`make test` passes and argostranslate and stanza import normally on the CPU
+build.
+
+Installing from the CPU index only helps a machine that has no torch yet. On
+one that already has the CUDA build, pip reports "already satisfied" and
+changes nothing, which is why `make translate-setup` now checks for a CUDA
+build with no usable GPU and replaces it with `--force-reinstall --no-deps`,
+then removes the orphans pip leaves behind. A CUDA build with a *working* GPU
+is left alone. `--doctor` prints the same two commands for anyone repairing
+an environment by hand.
 
 A variant cannot be chosen in `pyproject.toml`, because choosing one means
 choosing an index and PEP 508 has no way to say that. It belongs in the
-install command. `--doctor` reports which build is installed and whether the
-GPU is usable. ARCHITECTURE.md 8.41.
+install command. ARCHITECTURE.md 8.41.
 
-Two things still follow. The optional group is doing less than it appears: it
-keeps the dependency undeclared, not uninstalled, once anyone runs
-`make translate-setup`. And a number in this file that nobody re-measured
-was wrong by 3x for months — see ROADMAP.md v0.9.0, where shrinking this
-is a release goal with acceptance targets.
+Three things still follow. The optional group is doing less than it appears:
+it keeps the dependency undeclared, not uninstalled, once anyone runs
+`make translate-setup`. Nothing pins the variant, so a later plain
+`pip install torch`, or any resolve of stanza's `torch>=1.3.0` in an
+environment without torch, brings the CUDA wheel and its 3.7 GB straight
+back. And a number in this file that nobody re-measured was wrong by 3x for
+months, so see ROADMAP.md v0.9.0, where shrinking this is a release goal
+with acceptance targets.
 
 ---
 
