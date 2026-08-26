@@ -442,7 +442,14 @@ _schema_lock: threading.Lock = threading.Lock()
 _initialized_dbs: set = set()
 
 
-def _init_schema(conn: sqlite3.Connection) -> None:
+def _create_definitions_table(conn: sqlite3.Connection) -> None:
+    """
+    Create the definition cache table if it is not there.
+
+    `lemma` holds the composite cache key, not a bare word; `_cache_key()`
+    builds it. Shared with the key migration so a rebuilt cache cannot end up
+    with a different shape from a fresh one.
+    """
     conn.execute("""
         CREATE TABLE IF NOT EXISTS definitions (
             lemma               TEXT PRIMARY KEY,
@@ -453,9 +460,15 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             antonyms            TEXT,
             part_of_speech      TEXT,
             source              TEXT NOT NULL,
-            fetched_at          TEXT NOT NULL DEFAULT (datetime('now'))
+            fetched_at          TEXT NOT NULL DEFAULT (datetime('now')),
+            ipa                 TEXT,
+            audio_url           TEXT
         )
     """)
+
+
+def _init_schema(conn: sqlite3.Connection) -> None:
+    _create_definitions_table(conn)
     # Migrate existing databases that predate the example_dict2 column
     try:
         conn.execute("ALTER TABLE definitions ADD COLUMN example_dict2 TEXT")
@@ -469,7 +482,57 @@ def _init_schema(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE definitions ADD COLUMN {column} TEXT")
         except Exception:
             pass  # Column already exists — safe to ignore
+    _migrate_cache_keys(conn)
     conn.commit()
+
+
+# Bumped when the shape of a cache key changes. Read from PRAGMA user_version,
+# which SQLite stores in the file header and leaves entirely to the
+# application, so this costs no table and no extra query.
+_CACHE_KEY_VERSION = 1
+
+
+def _migrate_cache_keys(conn: sqlite3.Connection) -> None:
+    """
+    Set aside cache rows written before the source language joined the key.
+
+    A v0 key is `lemma::target[::pos]` and records nothing about the
+    transcript the word came from, which is what this migration exists to
+    fix. The old rows cannot simply be rewritten: recovering a row's source
+    language means knowing which video it came from, and nothing stores that.
+    Checked on the real database, only 6 of 25 videos have a deck name a
+    language can even be inferred from, so 76% would have to be guessed.
+
+    Guessing wrong is the expensive direction. A row re-keyed as native when
+    it actually came from a cross-language run is exactly the collision the
+    new key prevents, so a wrong guess would preserve the bug while looking
+    migrated.
+
+    So the old table is renamed rather than deleted or rewritten. Nothing is
+    lost, `definitions_v0` stays readable for anyone who wants to inspect or
+    hand-recover it, and the live cache refills lazily as words are met
+    again. CLAUDE.md warns against deleting `pipeline.db` because this cache
+    is expensive to rebuild; renaming honours that while still starting
+    clean.
+    """
+    if conn.execute("PRAGMA user_version").fetchone()[0] >= _CACHE_KEY_VERSION:
+        return
+
+    row = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='definitions'"
+    ).fetchone()
+    has_rows = bool(row) and conn.execute("SELECT 1 FROM definitions LIMIT 1").fetchone()
+
+    if has_rows:
+        conn.execute("DROP TABLE IF EXISTS definitions_v0")
+        conn.execute("ALTER TABLE definitions RENAME TO definitions_v0")
+        _create_definitions_table(conn)
+        logger.info(
+            "Definition cache keys changed; previous rows kept in "
+            "'definitions_v0' and the cache will refill as words are met."
+        )
+
+    conn.execute(f"PRAGMA user_version = {_CACHE_KEY_VERSION}")
 
 
 def _get_db() -> sqlite3.Connection:
@@ -487,29 +550,64 @@ def _get_db() -> sqlite3.Connection:
     return conn
 
 
-def _cache_key(lemma: str, language: str, pos: Optional[str] = None) -> str:
+def _cache_key(
+    lemma: str,
+    source_language: str,
+    target_language: str,
+    pos: Optional[str] = None,
+) -> str:
     """
     Build the cache key for one lemma.
+
+    Args:
+        lemma:           The word, as nlp.py keys it.
+        source_language: The transcript's language. Decides the examples,
+                         synonyms and antonyms, per constraint 3.3.
+        target_language: The language the definition is written in. Equal to
+                         source_language unless --def-lang is set.
+        pos:             spaCy UPOS tag for the word in its own sentence.
+
+    Returns:
+        A four-segment key, `lemma::source::target::pos`.
 
     Both the batch loop in fetch_definitions() and fetch_definition() itself
     key the same rows, and they used to build the string separately -- they
     drifted, and a cache seeded by one was invisible to the other. One
     function so that cannot happen again.
 
-    The part of speech joins the key because it now decides which sense the
-    offline index returns (see wiktdata._select_row). Without it a cached
-    row would serve the sense chosen for whichever video happened to get
-    there first -- "fait" cached as an adjective, then read back for a video
-    using it as a noun. That is the failure ARCHITECTURE.md 8.27 records
-    twice: the cache stores assembled fields, so nothing about a
-    sense-selection fix reaches a row already written.
+    **The source language is in the key because it changes the row's
+    contents.** Constraint 3.3 keeps examples, synonyms and antonyms in the
+    transcript language, so a German video with `--def-lang en` writes a row
+    holding German sentences. Keyed only by target, that row is what an
+    English video gets back for the same spelling: `hand`, `arm`, `band` and
+    `wild` are words in both languages, and the English card would quietly
+    receive German examples. Measured on a real 5408-row cache, 265 rows
+    keyed `::en` already hold German examples; none has collided yet only
+    because no English run has met one of those spellings.
 
-    Only a POS the index can actually distinguish is included. One that
-    cannot change the selected row must not split the cache into rows that
-    differ in nothing.
+    It also makes invalidation a query rather than a reconstruction. Both
+    cache-poisoning incidents needed the vocabulary table joined back to each
+    video's language to find the affected rows, and nothing records that
+    language. `DELETE ... WHERE lemma LIKE '%::de::en::%'` is now the whole
+    job.
+
+    The part of speech joins the key because it decides which sense the
+    offline index returns (see wiktdata._select_row). Without it a cached row
+    would serve the sense chosen for whichever video got there first --
+    "fait" cached as an adjective, then read back for a video using it as a
+    noun. That is the failure ARCHITECTURE.md 8.27 records twice: the cache
+    stores assembled fields, so nothing about a sense-selection fix reaches a
+    row already written.
+
+    A POS the index cannot distinguish collapses to "-" rather than being
+    dropped from the key. Every key therefore has four segments, which is
+    what lets a `LIKE '%::de::en::%'` match every row from a pairing instead
+    of only the ones that happened to resolve a part of speech. It also keeps
+    the original rule: tags that cannot change the selected row still share
+    one row instead of splitting the cache into rows differing in nothing.
     """
-    resolved = wiktdata.pos_for_upos(pos)
-    return f"{lemma}::{language}::{resolved}" if resolved else f"{lemma}::{language}"
+    resolved = wiktdata.pos_for_upos(pos) or "-"
+    return f"{lemma}::{source_language}::{target_language}::{resolved}"
 
 
 def _cache_get(lemma: str) -> Optional[dict]:
@@ -1141,7 +1239,7 @@ def fetch_definition(
     # "haus::en", so a later run with translation working read German text
     # back believing it was English. The key is therefore rebuilt after the
     # fallback decision; this one is only for the read.
-    cache_key       = _cache_key(lemma, target_language, pos)
+    cache_key       = _cache_key(lemma, language, target_language, pos)
 
     if use_cache:
         cached = _cache_get(cache_key)
@@ -1217,7 +1315,7 @@ def fetch_definition(
                 # Translation unavailable: the definition will be native, so
                 # the cache key has to say so too.
                 target_language = language
-                cache_key = _cache_key(lemma, target_language, pos)
+                cache_key = _cache_key(lemma, language, target_language, pos)
         except TranslationUnavailableError:
             raise
 
@@ -1635,7 +1733,7 @@ def fetch_definitions(
     to_fetch: list[str] = []
     for lemma in lemmas:
         cached = _cache_get(
-            _cache_key(lemma, def_language or language, pos_map.get(lemma))
+            _cache_key(lemma, language, def_language or language, pos_map.get(lemma))
         ) if use_cache else None
         if cached:
             result = _cache_row_to_result(lemma, cached, snippets)
