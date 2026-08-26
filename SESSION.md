@@ -27,7 +27,11 @@ resolve to a real definition in Russian as they already did in German and
 French, the definition cache key carries the transcript language as well as
 the definition language, and the run names the words that got no definition.
 Antonyms is the one left, and the only item on the rung that needs a data
-source the project does not have. `ROADMAP.md` has the ladder to v1.0.0 and
+source the project does not have. That source was measured on 26 August 2026
+and written up as ADR-010, Proposed: ConceptNet takes French from 22.5% to
+35.0% and German and Russian almost nowhere, because it carries the English
+and French Wiktionary editions and the index is already built from the
+English one. Nothing is built yet; the ADR needs a decision first. `ROADMAP.md` has the ladder to v1.0.0 and
 the rule that picks the number; CLAUDE.md 15 is the short form, and
 CLAUDE.md 16 is the commit and tag format.
 **HEAD:** ahead of `tango-origin/main` by the CPU-torch work of
