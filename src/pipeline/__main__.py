@@ -996,9 +996,35 @@ def _report_torch_build() -> int:
     print(f"    {YELLOW}torch          CUDA {build} build, but no usable GPU on this machine{RESET}")
     print("                   That costs roughly 4.5 GB in nvidia and triton")
     print("                   packages nothing can call. The CPU build is 733 MB.")
-    print("    -> pip install --index-url https://download.pytorch.org/whl/cpu \\")
-    print("         --force-reinstall torch && pip uninstall -y triton")
+    # Spelled "python -m pip", not "pip", and with this interpreter's own
+    # path. A virtualenv built by `make venv` has no pip script in bin/, only
+    # python, so the bare form fails at the first line for exactly the people
+    # most likely to run this.
+    #
+    # --no-deps is required rather than tidy: the CPU index is flat and does
+    # not carry torch's other dependencies, so a full resolve against it
+    # fails outright. Those packages are already installed and unaffected.
+    #
+    # The orphans need their own command because pip never removes them.
+    # Replacing torch alone leaves 3.4 GB of nvidia and triton in place with
+    # nothing able to call it, which is the worst of both.
+    print(f"    -> {sys.executable} -m pip install --no-deps --force-reinstall \\")
+    print("         --index-url https://download.pytorch.org/whl/cpu torch")
+    print("       then remove the orphans, which pip does not do on its own:")
+    print(f"       {sys.executable} -m pip uninstall -y triton {_nvidia_packages()}")
     return 1
+
+
+def _nvidia_packages() -> str:
+    """Space-separated names of every installed nvidia-* distribution."""
+    from importlib.metadata import distributions
+
+    names = sorted(
+        d.metadata["Name"]
+        for d in distributions()
+        if (d.metadata["Name"] or "").lower().startswith("nvidia")
+    )
+    return " ".join(names)
 
 
 def _run_doctor() -> int:
