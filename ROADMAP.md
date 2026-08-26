@@ -120,8 +120,8 @@ re-imported. This finishes a field that was already on the card.
 
 ### v0.6.0 — Card quality
 
-The fields exist and are filled; this is about what is *in* them. **All five
-items are done on main as of 26 August 2026, unreleased.**
+The fields exist and are filled; this is about what is *in* them. **Released
+27 August 2026, all five items.**
 
 - Filler-word cards (`Ah`, `Bah`, `Euh`, `Tss` — 3.4% of one real French run).
   Done.
