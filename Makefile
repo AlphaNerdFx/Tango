@@ -204,6 +204,28 @@ spacy-model: venv
 
 translate-setup: venv
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Setting up translation dependencies...\n"
+# torch is installed first, and from PyTorch's CPU index on purpose.
+#
+# argostranslate needs stanza, stanza needs torch, and stanza asks only for
+# "torch>=1.3.0" with no variant. pip therefore takes the default PyPI wheel,
+# which since torch 2.x bundles CUDA and drags in nvidia-* and triton:
+# measured on this repo, 1.1 GB of torch plus 2.7 GB of nvidia plus 689 MB of
+# triton, 4.5 GB in total, 76% of the whole virtualenv.
+#
+# None of it is usable without an NVIDIA GPU and a current driver, and it is
+# dead weight on an AMD card, an integrated one, or a machine with none.
+# Measured on the developer machine, which has an NVIDIA card:
+# torch.cuda.is_available() returned False because the driver was too old, so
+# 4.5 GB was installed and never once used.
+#
+# The CPU build is 733 MB installed and brings no nvidia or triton at all,
+# taking the virtualenv from 5.9 GB to 2.2 GB. Installing it first means pip
+# sees torch as already satisfied when argostranslate asks.
+#
+# Anyone who does have a working GPU can install the CUDA or ROCm build over
+# the top afterwards; nothing here prevents that. See ARCHITECTURE.md 8.41.
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Installing CPU-only torch (the CUDA build is 4.5 GB and unusable without an NVIDIA GPU)...\n"
+	@$(VENV_PIP) install --quiet --index-url https://download.pytorch.org/whl/cpu torch
 	@$(VENV_PIP) install --quiet argostranslate libretranslate
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  argostranslate and libretranslate installed.\n"
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Translation models will be downloaded on first use.\n"
