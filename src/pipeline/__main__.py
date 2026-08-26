@@ -924,6 +924,15 @@ examples:
              "which no online source provides. e.g. --build-dictionary fr",
     )
     parser.add_argument(
+        "--build-antonyms",
+        action="store_true",
+        dest="build_antonyms",
+        help="Download and index ConceptNet's antonyms, then exit. One 498 MB "
+             "download, streamed rather than stored, producing a 4.3 MB index "
+             "that covers every supported language at once. Antonyms are the "
+             "weakest card field; see ADR-010.",
+    )
+    parser.add_argument(
         "--deck",
         metavar="DECK_NAME",
         help='Target Anki deck. Supports sub-decks: "Language::English::Vocabulary". '
@@ -1085,6 +1094,21 @@ def _run_doctor() -> int:
             print(f"    {code:<6} missing  -> make dictionary LANGUAGE={code}")
     print()
 
+    # ── Antonym index: optional everywhere, and absent is a normal state ──
+    print("  Offline antonyms (optional, ADR-010)")
+    from pipeline import antonyms as antonym_index
+
+    if antonym_index.is_available():
+        size = antonym_index.index_path().stat().st_size / 1e6
+        print(f"    built    {size:>5.1f} MB, every supported language")
+    else:
+        # Not counted as missing. A run without it produces the same cards
+        # it produced before the index existed, so this is a suggestion.
+        print("    absent   -> make antonyms")
+        print("             Antonyms are the weakest card field: 19.7% on a")
+        print("             real French deck. This takes it to 34.8%.")
+    print()
+
     # ── Translation: only needed for --def-lang ──
     print("  Translation models (only needed for --def-lang)")
     try:
@@ -1232,6 +1256,33 @@ def _run_build_dictionary(language: str) -> None:
     _info("Runs in this language will now include real native-language definitions.")
 
 
+def _run_build_antonyms() -> None:
+    """
+    Build the offline antonym index.
+
+    One index for every language, unlike the per-language dictionaries, so
+    this takes no argument. Nothing in the pipeline requires it: without it
+    the antonym field is filled exactly as it is today.
+    """
+    from pipeline import antonyms
+
+    if antonyms.is_available():
+        _warn("An antonym index already exists.")
+        _info(f"Rebuilding it. Delete {antonyms.index_path()} to skip.")
+
+    _info("Building the offline antonym index.")
+    _info("Streams a 498 MB download without storing it; the index is about 4 MB.")
+    try:
+        count = antonyms.build_index(progress=_info)
+    except antonyms.AntonymError as exc:
+        _err(str(exc))
+        sys.exit(1)
+
+    _ok(f"Indexed antonyms for {count:,} words.")
+    _info(f"Stored at {antonyms.index_path()}")
+    _info("Runs will now fill the antonym field from it when nothing else can.")
+
+
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -1258,6 +1309,10 @@ def main() -> None:
 
     if args.build_dictionary:
         _run_build_dictionary(args.build_dictionary)
+        sys.exit(0)
+
+    if args.build_antonyms:
+        _run_build_antonyms()
         sys.exit(0)
 
     if args.list_languages:
