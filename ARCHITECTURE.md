@@ -2246,6 +2246,54 @@ here the check ran against a file the change did not touch.
 
 ---
 
+### 8.40 The cache key recorded the wrong language
+
+`_cache_key()` built `lemma::target_language::pos`. The target language is
+the language the definition is written in, and it is not what decides the
+row's contents.
+
+Constraint 3.3 keeps examples, synonyms and antonyms in the **transcript**
+language, so a German video run with `--def-lang en` writes a row holding
+English definitions and German sentences. Keyed only by target, that row is
+what an English video gets back for the same spelling. `hand`, `arm`, `band`,
+`wild`, `blind` and `gift` are words in both languages, and the English card
+would have received German examples with nothing raised.
+
+Measured on the real 5408-row cache: **265 rows keyed `::en` already hold
+German example sentences.** None has collided yet, only because no English
+run has met one of those spellings. The bug was latent, not absent.
+
+The key is now `lemma::source::target::pos`, four segments always, with `-`
+where the part of speech did not resolve. The placeholder is not cosmetic: a
+three-segment key for unresolved rows would escape a
+`LIKE '%::de::en::%'` and invalidation would silently miss exactly the rows
+nobody chose a sense for.
+
+That query is the second half of the point. Both cache-poisoning incidents
+needed the vocabulary table joined back to each video's language to find the
+affected rows, and no table records that language. Invalidating a pairing is
+now one `DELETE`.
+
+**Old rows are renamed, not rewritten, and that is the interesting decision.**
+Rewriting means knowing each row's source language, which means knowing which
+video it came from, which nothing stores. Deck names are the only hint and
+only 6 of 25 videos have one a language can be inferred from. Guessing native
+for the remaining 76% would re-key cross-language rows as native, which is
+precisely the collision the new key prevents: the migration would preserve
+the bug while looking like it had fixed it. So `definitions` becomes
+`definitions_v0`, nothing is lost, and the live cache refills as words are
+met again.
+
+**The failure it caused on the way in is worth keeping.** Two tests spelled
+the old key out as a literal, and when the key changed they stopped matching,
+missed the cache, and fell through to a real network call with no mock: the
+suite hung rather than failed. Those tests now derive their key through
+`_cache_key()`, which is the same reason that function exists. It also means
+a unit test could reach the network when a fixture missed, which constraint
+3.5 forbids and which nothing currently detects.
+
+---
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
