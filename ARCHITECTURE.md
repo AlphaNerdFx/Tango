@@ -31,7 +31,10 @@ Tango/
 │   ├── PRD_v0.4.0.pdf
 │   ├── Code_Walkthrough.pdf
 │   ├── Initial Python Libraries and APIs.pdf
-│   └── Prototype Diagram.pdf
+│   ├── Prototype Diagram.pdf
+│   ├── ADR-008-per-language-dictionary-sources.md
+│   ├── ADR-009-card-media-enrichment.md
+│   └── ADR-010-conceptnet-antonyms.md
 ├── src/
 │   ├── images/                     UI icon assets, unused by the pipeline
 │   └── pipeline/
@@ -45,7 +48,9 @@ Tango/
 │       ├── definition.py
 │       ├── translation.py
 │       ├── cards.py
+│       ├── media.py
 │       ├── wiktdata.py
+│       ├── antonyms.py
 │       └── state.py
 ├── tests/
 │   ├── test_transcript.py
@@ -56,7 +61,12 @@ Tango/
 │   ├── test_translation.py
 │   ├── test_cards.py
 │   ├── test_wiktdata.py
+│   ├── test_antonyms.py
+│   ├── test_media.py
+│   ├── test_config.py
+│   ├── test_hard_constraints.py
 │   ├── test_state.py
+│   ├── conftest.py
 │   └── test_main.py
 ├── output/                         generated .apkg files, gitignored
 ├── dictionaries/                   offline Wiktionary indexes, gitignored
@@ -2382,6 +2392,61 @@ pipeline behaves identically either way, just four gigabytes larger.
 passed, and nothing anywhere was wrong enough to look at. CLAUDE.md 3.6 said
 PyTorch adds "roughly 1.5 GB" for months while the real figure was three
 times that, because nobody re-measured a number that had no date on it.
+
+---
+
+### 8.42 The antonym gap was between Wiktionary editions
+
+Antonyms were the weakest field on a card by a wide margin: 19.7% on a real
+1054-lemma French deck, against 98.6% for definitions. TASKS.md had already
+established that the index was not throwing anything away, since 0 of 40000
+kaikki French entries carry sense-level antonyms and all 1682 top-level ones
+are read. The conclusion drawn from that was that 22.7% is Wiktionary's
+ceiling for French.
+
+It is the ceiling of **one edition** of Wiktionary. Tango's index comes from
+`kaikki.org/dictionary/downloads/{lang}`, the English edition's entries for
+that language. ConceptNet's antonym data comes from two editions, and the
+split is the whole finding:
+
+| language | edges from the English edition | from the French edition |
+|---|---|---|
+| French | 875 | 10 635 |
+| German | 2 526 | 869 |
+| Russian | 980 | 330 |
+
+So ConceptNet hands German and Russian back data they already have, and
+hands French an edition this project has never read. Measured end to end
+after building the index:
+
+| deck | before | after |
+|---|---|---|
+| French | 19.7% | 34.8% |
+| German | 56.2% | 60.3% |
+| Russian | 47.8% | 48.8% |
+
+`antonyms.py` holds it: one 4.3 MB SQLite for 22 languages, built by
+streaming a 498 MB dump through a filter without ever storing it.
+`definition.py` calls it last, only when nothing else filled the field, at
+both call sites that fill it.
+
+**Constraint 3.3 is enforced in the build rather than at the call site.**
+Only pairs whose two ends are in the same language are stored, so a
+cross-language antonym cannot reach a card even if a caller asks for one.
+That is deliberate: 3.3 has been violated three times, every time by
+something added beside the gate rather than inside it, and a filter in the
+data cannot be walked around by the next person to add a call site.
+
+Two things this does not fix. Antonyms remain the weakest field: French at
+34.8% is still below German, and the union of both sources is still a long
+way from the definition field. And the filter removes self-references,
+cross-language leakage and other relations, but not a wrong antonym asserted
+as an antonym: `es/grande` still lists `irrelevante` beside the correct
+`pequeño`.
+
+ADR-010 has the full evaluation, including the alternative that was measured
+and not taken: reading the French edition directly is 3.17 GB uncompressed
+for one language, against 498 MB once for all of them.
 
 ---
 
