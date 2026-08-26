@@ -14,7 +14,11 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working toward v0.6.0, card quality.
+Working toward v0.7.0, the command line as a product.
+
+## [0.6.0] — 2026-08-27
+
+Card quality: what is *in* the fields, rather than which fields exist.
 
 ### Added
 
