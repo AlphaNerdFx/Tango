@@ -43,6 +43,18 @@ make run VIDEO_ID=dQw4w9WgXcQ DECK="English"
 
 Replace `dQw4w9WgXcQ` with any YouTube video ID that has English captions. Replace `English` with the name of an existing Anki deck.
 
+## Optional: better antonyms
+
+Antonyms are the weakest field on a card. One index covers every language, unlike the dictionaries, so this is a single command:
+
+```bash
+make antonyms
+```
+
+The download is 498 MB and is streamed through a filter rather than saved, so what stays on disk is 4.3 MB. Measured on real decks it takes French antonym coverage from 19.7% to 34.8%, German from 56.2% to 60.3% and Russian from 47.8% to 48.8%.
+
+Skip it and nothing breaks: every card is exactly what it would have been. `python -m pipeline --doctor` reports whether it is built.
+
 ## Optional: translation support
 
 If you want English definitions of non-English words, install the translation module.
