@@ -224,8 +224,33 @@ translate-setup: venv
 #
 # Anyone who does have a working GPU can install the CUDA or ROCm build over
 # the top afterwards; nothing here prevents that. See ARCHITECTURE.md 8.41.
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Installing CPU-only torch (the CUDA build is 4.5 GB and unusable without an NVIDIA GPU)...\n"
-	@$(VENV_PIP) install --quiet --index-url https://download.pytorch.org/whl/cpu torch
+#
+# Two branches, because a machine that already has the CUDA build needs a
+# different command from one that has no torch at all. Installing from the
+# CPU index is enough for the second: pip sees the requirement satisfied
+# when argostranslate asks. For the first it is a no-op: pip reports
+# "already satisfied" and the 4.5 GB stays exactly where it was. That is
+# the trap this target had until 26 August 2026: it read as the fix and
+# changed nothing for everyone who had already run it once.
+#
+# Replacing an installed build needs --force-reinstall, and --no-deps with
+# it because the CPU index is flat and a full resolve against it fails.
+# Torch's other dependencies are already installed and are not touched.
+# The orphans need a second command: pip never removes them, and torch
+# alone leaves 3.4 GB of nvidia and triton with nothing able to call it.
+#
+# The condition is the same one --doctor reports, and deliberately not just
+# "is this a CUDA build". A CUDA build on a machine with a working GPU is
+# someone's deliberate choice, and this target must not undo it.
+	@if $(VENV_PYTHON) -c "import torch, sys; sys.exit(0 if torch.version.cuda and not torch.cuda.is_available() else 1)" >/dev/null 2>&1; then \
+		printf "$(YELLOW)$(BOLD)[warn]$(RESET)  A CUDA torch build is installed but no GPU here can use it. Replacing it...\n"; \
+		$(VENV_PIP) install --quiet --no-deps --force-reinstall --index-url https://download.pytorch.org/whl/cpu torch; \
+		$(VENV_PIP) uninstall -y -q triton $$($(VENV_PIP) list --format=freeze 2>/dev/null | grep -i "^nvidia" | cut -d= -f1 | tr "\n" " "); \
+		printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  CPU-only torch installed, nvidia and triton removed (3.7 GB freed here).\n"; \
+	else \
+		printf "$(CYAN)$(BOLD)[info]$(RESET)  Installing CPU-only torch (the CUDA build is 4.5 GB and unusable without an NVIDIA GPU)...\n"; \
+		$(VENV_PIP) install --quiet --index-url https://download.pytorch.org/whl/cpu torch; \
+	fi
 	@$(VENV_PIP) install --quiet argostranslate libretranslate
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  argostranslate and libretranslate installed.\n"
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Translation models will be downloaded on first use.\n"
