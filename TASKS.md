@@ -967,11 +967,17 @@ remaining user-visible value is; the rest is measurement and hygiene.
       For cloud deployment and reproducible environments. Base
       `python:3.11-slim`, layer system deps, pip install, spaCy model download.
 
-- [ ] **Dependency size reduction.**
-      Base install should not pull PyTorch. Verify the `[translation]` optional
-      group actually isolates argostranslate. Consider three tiers: core
-      (~100MB), `[nlp]` adding spaCy (~600MB), `[translation]` adding
-      argostranslate (~2.5GB).
+- [ ] **Dependency size reduction.** Partly done, 26 August 2026.
+      `make translate-setup` installs the CPU-only torch wheel and repairs an
+      environment that already has the CUDA one, which took `.tangovenv` from
+      5.9 GB to 2.2 GB. What remains: the `[translation]` group keeps the
+      dependency undeclared rather than uninstalled, so verify it actually
+      isolates argostranslate; torch is still 725 MB, the largest single
+      package, and only an upstream change to the unguarded `import stanza`
+      removes it; and nine spaCy models are installed where one is used.
+      Consider three tiers: core (~100MB), `[nlp]` adding spaCy (~600MB),
+      `[translation]` adding argostranslate. ROADMAP.md v0.9.0 has the staged
+      plan and the measurements.
 
 - [x] **Outlined pill CSS.** Already shipped; this entry was stale.
       `.vocab-pill` and `.antonym-pill` both carry `background: transparent`
