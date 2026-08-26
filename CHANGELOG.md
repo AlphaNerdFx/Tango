@@ -30,6 +30,22 @@ Working toward v0.6.0, card quality.
   as a truncation of `Baracke`, and 63% of words that *do* get a definition
   also appear only once. See issue #27.
 
+- **Antonyms have an offline source of their own.** The field was the
+  weakest on the card by a wide margin: 19.7% on a real 1054-lemma French
+  deck against 98.6% for definitions. `make antonyms` builds a 4.3 MB index
+  from ConceptNet covering 22 languages at once, and the field is filled
+  from it when nothing else can.
+
+  Measured end to end: French 19.7% to 34.8%, German 56.2% to 60.3%,
+  Russian 47.8% to 48.8%. The asymmetry is the point. ConceptNet's antonyms
+  come from two Wiktionary editions, English and French, and Tango's index
+  is built from the English one, so French gains an edition it never had
+  while German and Russian mostly get back what they already hold. The gap
+  was between editions rather than between sources. ADR-010.
+
+  Entirely optional. Without the index every card is exactly what it was,
+  and `--doctor` reports it as absent rather than missing.
+
 ### Changed
 
 - **Translation setup installs CPU-only torch, cutting the install by 3.8 GB.**
