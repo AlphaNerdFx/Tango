@@ -37,9 +37,14 @@ line ran v0.5.0 (pronunciation on cards, the one release needing a
 migration), v0.5.1 (pronunciation describes the word on the card), v0.5.2
 (audio plays inside the card) and v0.5.3. Every one of the thirteen tags
 has GitHub release notes as of 18 August 2026.
-**On main and unreleased:** filler sounds no longer become cards, the first
-of four items on the v0.6.0 rung. `__version__` still reads 0.5.3 and bumps
-when that rung is finished, not per item.
+**On main and unreleased:** four of the five items on the v0.6.0 rung.
+Filler sounds no longer become cards, inflection pointers no longer reach
+cards as definitions, the definition cache key carries both languages, and
+the run names the words that got no definition instead of only counting
+them. Antonyms is the one left. Also on main and not part of that rung: the
+translation install no longer pulls 4.5 GB of CUDA nobody can call.
+`__version__` still reads 0.5.3 and bumps when the rung is finished, not per
+item.
 **Working toward:** v0.6.0, card quality. Goals per tag through v1.0.0 are
 in `ROADMAP.md`; the rule that picks the number is in section 15; the commit
 and tag format is in section 16; release history is in `CHANGELOG.md`.
