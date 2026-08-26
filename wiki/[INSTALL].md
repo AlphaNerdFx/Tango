@@ -51,4 +51,6 @@ If you want English definitions of non-English words, install the translation mo
 make translate-setup
 ```
 
-This installs argostranslate and PyTorch, which adds approximately 2GB to the installation size. Skip this if you only process English videos or want native-language definitions.
+This installs argostranslate and PyTorch, which adds roughly 950 MB to the installation, 725 MB of it PyTorch (measured 26 August 2026). Skip it if you only process English videos or want native-language definitions.
+
+PyTorch comes in a CPU build and a CUDA build, and pip picks the CUDA one by default even on a machine with no NVIDIA card. That build is 4.5 GB once `nvidia` and `triton` come with it, so `make translate-setup` installs the CPU build deliberately. Run `python -m pipeline --doctor` if you want to know which one you have.
