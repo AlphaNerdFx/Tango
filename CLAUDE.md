@@ -32,23 +32,27 @@ code.
 **Python:** 3.10. Developed under WSL2 on Windows 11, but that is the
 current environment, not a target: cross-platform support is a v0.8.0 goal
 and the WSL assumptions in `__main__.py` and `ANKI_HOST` are known work.
-**Current tag:** v0.5.3, part of speech in the learner's language. The 0.5.x
-line ran v0.5.0 (pronunciation on cards, the one release needing a
-migration), v0.5.1 (pronunciation describes the word on the card), v0.5.2
-(audio plays inside the card) and v0.5.3. Every one of the thirteen tags
-has GitHub release notes as of 18 August 2026.
-**On main and unreleased:** all five items on the v0.6.0 rung. Filler sounds
-no longer become cards, inflection pointers no longer reach cards as
-definitions, the definition cache key carries both languages, the run names
-the words that got no definition instead of only counting them, and the
-antonym field has an offline source of its own (ADR-010, which took a real
-French deck from 19.7% to 34.8%). Also on main and not part of that rung:
-the translation install no longer pulls 4.5 GB of CUDA nobody can call.
-`__version__` still reads 0.5.3 and bumps when the rung is released, not per
-item.
-**Working toward:** v0.6.0, card quality. Goals per tag through v1.0.0 are
-in `ROADMAP.md`; the rule that picks the number is in section 15; the commit
-and tag format is in section 16; release history is in `CHANGELOG.md`.
+**Current tag:** v0.6.0, card quality, released 27 August 2026. It carries
+five items, all about what is *in* a field rather than which fields exist:
+filler sounds no longer become cards, inflection pointers no longer reach
+cards as definitions, the definition cache key carries both languages, the
+run names the words that got no definition instead of only counting them,
+and the antonym field has an offline source of its own (ADR-010, which took
+a real French deck from 19.7% to 34.8%). No migration: the notetype is
+unchanged and an existing collection needs nothing done to it.
+
+The 0.5.x line before it ran v0.5.0 (pronunciation on cards, the one release
+needing a migration), v0.5.1 (pronunciation describes the word on the card),
+v0.5.2 (audio plays inside the card) and v0.5.3 (part of speech in the
+learner's language). Every tag has GitHub release notes.
+**Also on main, and not part of that rung:** the translation install no
+longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
+5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.9.0,
+where the rest of the size work lives.
+**Working toward:** v0.7.0, the command line as a product. Goals per tag
+through v1.0.0 are in `ROADMAP.md`; the rule that picks the number is in
+section 15; the commit and tag format is in section 16; release history is
+in `CHANGELOG.md`.
 
 ---
 
