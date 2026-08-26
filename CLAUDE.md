@@ -537,6 +537,7 @@ docs/PRD_v0.4.0.pdf              Product requirements, user stories
 docs/Code_Walkthrough.pdf        Function-by-function explanation
 docs/ADR-008-per-language-dictionary-sources.md
 docs/ADR-009-card-media-enrichment.md
+docs/ADR-010-conceptnet-antonyms.md
 ARCHITECTURE.md                  This repo, full system detail
 SESSION.md                       Current working state
 TASKS.md                         Prioritised remaining work
@@ -546,8 +547,9 @@ CONTRIBUTING.md                  Setup and workflow for outside contributors
 OPERATING_RULES.md               Superseded by this file; kept for its tone
 ```
 
-The two markdown ADRs are the live ones and are cited throughout the code;
-the v0.4.0 PDF set is the historical record.
+The three markdown ADRs are the live ones and are cited throughout the code;
+the v0.4.0 PDF set is the historical record. ADR-010 is Proposed, not
+accepted, and nothing in the code depends on it yet.
 
 ## 10. Pre-commit gate
 Never commit unless `make check` exits 0. Run it as a bare command (`make check`) — do NOT pipe to `tail`, `head`, or any filter, since pipes mask the real exit code. If output is long, redirect to a file and grep it: `make check > /tmp/check.log 2>&1; echo "exit=$?"; tail -50 /tmp/check.log`.
