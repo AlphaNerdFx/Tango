@@ -693,8 +693,11 @@ authentication, no guaranteed uptime.
 Local models downloaded from `argos-net.com`, roughly 100 to 200MB per language
 pair. Installed permanently via `install_from_path`.
 
-argostranslate pulls in PyTorch, adding roughly 1.5GB to the environment. This
-is why it is an optional dependency group rather than a base dependency.
+argostranslate pulls in PyTorch, which is why it is an optional dependency
+group rather than a base dependency. This section said "roughly 1.5GB" for
+months; the CUDA wheel pip took by default is 4.5 GB with its `nvidia` and
+`triton` companions, and the CPU build `make translate-setup` now installs is
+733 MB. See 8.41.
 
 ### 6.6 WordNet via NLTK
 
@@ -2326,13 +2329,44 @@ reasoned about:
 
 | | size |
 |---|---|
-| current `.tangovenv` | 5993 MB |
+| `.tangovenv` before | 5993 MB |
 | torch + nvidia + triton within it | 4515 MB |
 | CPU-only torch replacing all three | 733 MB |
-| **projected `.tangovenv`** | **2211 MB** |
+| **`.tangovenv` after** | **2211 MB** |
 
 A saving of 3.8 GB, 63%, with `nvidia` and `triton` absent entirely and
 argostranslate and stanza importing normally.
+
+**The last row was projected until 26 August 2026, when the repair was
+applied to this machine's own environment and it came out at 2.2 GB.** What
+was replaced: `torch 2.13.0+cu130` by `torch 2.13.0+cpu`, a 191.8 MB wheel
+that installs to 725 MB, and sixteen `nvidia-*` distributions plus
+`triton 3.7.1` removed. 3.7 GB freed. `torch` computes, `stanza` and
+`argostranslate` import, `make test` exits 0.
+
+**Installing from the CPU index fixes a fresh machine and nothing else.**
+Where torch is already present, pip answers "already satisfied" and the CUDA
+build stays, so the target read as the fix while changing nothing for anyone
+who had run it once before. Repairing an existing environment takes two
+commands rather than one:
+
+```
+pip install --no-deps --force-reinstall --index-url .../whl/cpu torch
+pip uninstall -y triton <every installed nvidia-*>
+```
+
+`--no-deps` is required rather than tidy: the CPU index is flat and a full
+resolve against it fails, and torch's other dependencies are already
+installed. The second command is required because pip does not remove
+orphans, and replacing torch alone would leave 3.4 GB of `nvidia` and
+`triton` behind with nothing able to call it.
+
+`make translate-setup` now runs both when it finds a CUDA build with no
+usable GPU, and `--doctor` prints both, spelled `python -m pip` with the
+interpreter's own path because a virtualenv built by `make venv` has no `pip`
+script in `bin/`. The condition is "CUDA build **and** no usable GPU", not
+"CUDA build": someone with a working card chose that install, and neither
+the target nor the advice may undo it.
 
 **This cannot be expressed in `pyproject.toml`.** Choosing a wheel variant
 means choosing an index, and PEP 508 requirements have no way to say that. So
