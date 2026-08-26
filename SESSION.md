@@ -21,21 +21,21 @@ release notes, v0.4.1 to v0.4.5 having been backfilled from CHANGELOG on
 (pronunciation on cards, the migration release), v0.5.1 (pronunciation
 describes the word on the card), v0.5.2 (audio plays inside the card) and
 v0.5.3. `CHANGELOG.md` has an entry for each.
-**In development:** v0.6.0, card quality. Four of the five items on that
-rung are done: filler sounds no longer become cards, inflection pointers
+**In development:** v0.6.0, card quality, and the rung is complete on main
+though not released. All five items: filler sounds no longer become cards, inflection pointers
 resolve to a real definition in Russian as they already did in German and
 French, the definition cache key carries the transcript language as well as
 the definition language, and the run names the words that got no definition.
-Antonyms is the one left, and the only item on the rung that needs a data
-source the project does not have. That source was measured on 26 August 2026
-and written up as ADR-010, Proposed: ConceptNet takes French from 22.5% to
-35.0% and German and Russian almost nowhere, because it carries the English
-and French Wiktionary editions and the index is already built from the
-English one. Nothing is built yet; the ADR needs a decision first. `ROADMAP.md` has the ladder to v1.0.0 and
+Antonyms, the last of them, shipped on 26 August 2026 as ADR-010: an
+offline ConceptNet index, `make antonyms`, French 19.7% to 34.8% measured
+end to end. The gain is concentrated in French because ConceptNet carries
+the English and French Wiktionary editions and Tango's index is built from
+the English one, so the gap was between editions rather than between
+sources. `ROADMAP.md` has the ladder to v1.0.0 and
 the rule that picks the number; CLAUDE.md 15 is the short form, and
 CLAUDE.md 16 is the commit and tag format.
-**HEAD:** ahead of `tango-origin/main` by the CPU-torch work of
-26 August 2026, unpushed. Working tree clean.
+**HEAD:** ahead of `tango-origin/main` by the CPU-torch work and the whole
+antonym item of 26 August 2026, unpushed. Working tree clean.
 **Pull requests and issues: none open.** All six Dependabot pull requests were
 handled on 25 August 2026 (five merged, thinc 9.1.1 closed as unresolvable
 against spaCy 3.8), and issues #1, #13 and #16 were closed against measured
@@ -57,7 +57,7 @@ both existed, `git log origin/main..HEAD` printed nothing and read exactly
 like "fully pushed", because it compares against a ref that does not
 resolve; seventeen commits sat unpushed behind that. Prefer `git status -sb`,
 which names the real upstream.
-**Test state:** 937 passing, 0 failing, 24 integration deselected (`make test`)
+**Test state:** 972 passing, 0 failing, 24 integration deselected (`make test`)
 **Coverage:** 88% overall, 2549 statements, 308 missed, measured 18 August
 2026. Weakest: `translation.py` 71%, `__main__.py` and `transcript.py` 82%.
 The 87% carried here before was stale again, taken about 1500 lines ago.
