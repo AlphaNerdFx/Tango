@@ -10,7 +10,11 @@ Each vocabulary word requires at least one API call to a definition source. As o
 
 ## Why are antonyms often missing?
 
-Free dictionary APIs rarely return antonyms. dictionaryapi.dev includes them occasionally. Merriam-Webster's free tier almost never does. Tango supplements antonyms from WordNet when the APIs return nothing, which improves coverage for English. For non-English languages, antonym coverage remains sparse.
+Free dictionary APIs rarely return antonyms. dictionaryapi.dev includes them occasionally. Merriam-Webster's free tier almost never does. Tango supplements antonyms from WordNet when the APIs return nothing, which improves coverage for English, and from the offline Wiktionary index for other languages.
+
+If you have not run `make antonyms`, run it. It builds a 4.3 MB index from ConceptNet covering every supported language, and it is the last source tried when nothing else filled the field. Measured on real decks it takes French from 19.7% to 34.8% and German from 56.2% to 60.3%.
+
+Antonyms remain the thinnest field even so. Roughly two words in three still have none, because Wiktionary simply does not record one for most words.
 
 ## Why is my deck not recognised by name?
 
