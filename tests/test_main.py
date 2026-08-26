@@ -777,6 +777,40 @@ class TestSetupCommands:
         mock_doc.assert_called_once()
         assert exc.value.code == 1
 
+    def test_build_antonyms_is_reachable_without_a_video_id(self):
+        """Same standalone-mode guard as --doctor, for the ADR-010 index."""
+        with patch("pipeline.antonyms.build_index", return_value=52156) as mock_build:
+            with patch("sys.argv", ["pipeline", "--build-antonyms"]):
+                with pytest.raises(SystemExit) as exc:
+                    main()
+        mock_build.assert_called_once()
+        assert exc.value.code == 0
+
+    def test_build_antonyms_reports_a_failure_as_a_message_not_a_traceback(self, capsys):
+        """CLAUDE.md 4.4: an expected failure is a message and an exit code."""
+        from pipeline.antonyms import AntonymDownloadError
+
+        with patch("pipeline.antonyms.build_index", side_effect=AntonymDownloadError("no network")):
+            with patch("sys.argv", ["pipeline", "--build-antonyms"]):
+                with pytest.raises(SystemExit) as exc:
+                    main()
+        assert exc.value.code == 1
+        # _err writes to stderr, which is where a message a script might
+        # redirect belongs.
+        assert "no network" in capsys.readouterr().err
+
+    def test_doctor_reports_the_antonym_index_without_counting_it_missing(self, capsys):
+        """
+        The index is optional: a run without it produces the cards it
+        produced before the index existed. Reporting it as missing would
+        make --doctor exit non-zero on a perfectly working install.
+        """
+        with patch("pipeline.antonyms.is_available", return_value=False):
+            with patch("sys.argv", ["pipeline", "--doctor"]):
+                with pytest.raises(SystemExit):
+                    main()
+        assert "make antonyms" in capsys.readouterr().out
+
     @patch("pipeline.__main__.subprocess.run")
     def test_install_model_resolves_the_language_code(self, mock_run):
         """The user names a language; the spaCy model name is looked up."""
