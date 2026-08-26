@@ -168,7 +168,9 @@ is load-bearing in more places than it looks.
 ### v0.9.0 — Runs on modest hardware
 
 **Measured, 15 August 2026: `.tangovenv` is 5.9 GB and `dictionaries/` is
-820 MB.** Where the 5.9 GB goes:
+820 MB.** Step 1 below shipped on 26 August 2026 and took `.tangovenv` to
+2.2 GB, so read this table as the starting point rather than the current
+state. Where the 5.9 GB went:
 
 | package | size | why it is there |
 |---|---|---|
@@ -183,7 +185,8 @@ is load-bearing in more places than it looks.
 **torch + nvidia + triton is 4.5 GB, 76% of the install, and none of it is
 declared** — it all arrives through `argostranslate`. The CUDA stack lands
 on machines that will never have a GPU. CLAUDE.md 3.6 has been saying
-"roughly 1.5GB" for this; the real figure is three times that.
+"roughly 1.5GB" for this; the real figure is three times that. Step 1 has
+since removed `nvidia` and `triton` outright and cut torch to 725 MB.
 
 **Why torch is there at all, traced rather than assumed:**
 
@@ -214,28 +217,42 @@ So the reduction is staged, cheapest first:
 
 | step | saves | risk |
 |---|---|---|
-| 1. install the CPU-only torch wheel (`--index-url .../whl/cpu`) | ~3.4 GB of `nvidia` + `triton`, and torch itself shrinks | none — no code change, no GPU here to lose |
+| 1. install the CPU-only torch wheel (`--index-url .../whl/cpu`) — **done, 26 August 2026** | 3.7 GB measured: `nvidia` and `triton` gone, torch 1.1 GB to 725 MB | none — no code change, no GPU here to lose |
 | 2. drop `pymupdf` | 63 MB | none — zero references in the repo |
 | 3. install spaCy models on demand, not all nine | ~400 MB (`sudachidict_core` 208 MB + `zh_core_web_sm` 76 MB + others) | none for users who need one language |
 | 4. guard the stanza import upstream, ship minisbd packages | the remaining ~1.1 GB of torch | needs an upstream patch or a vendored shim; verify translation quality is unchanged |
 
-**After step 1 the dictionary index becomes the largest single item**, and
-that reframes the work: `dictionaries/` is 820 MB for three languages,
-131–423 MB each. 81.4% of the German index is inflected forms (8.30), which
-are needed for lookup but are mostly a word plus a pointer — whether that
-warrants the current row format is an open question with a real number
-attached to it.
+**After step 1, measured 26 August 2026, the three biggest things left are
+torch, the indexes and the spaCy models**, in that order:
+
+| | size |
+|---|---|
+| `torch` (CPU build) | 725 MB |
+| `dictionaries/` | 820 MB for three languages: fr 404, de 292, ru 126 |
+| nine spaCy models plus `sudachidict_core` | roughly 400 MB |
+| `.tangovenv` total | 2203 MB |
+
+So torch is still the largest single package even after losing 3.7 GB, which
+is what step 4 is about. `dictionaries/` is larger than any one of them, but
+only because three languages are installed; one index is 126 to 404 MB.
+81.4% of the German index is inflected forms (8.30), which are needed for
+lookup but are mostly a word plus a pointer — whether that warrants the
+current row format is an open question with a real number attached to it.
 
 A realistic floor for a one-language, no-translation install is therefore
 roughly **250–300 MB of code plus one index**, and the index dominates.
 Worth knowing before optimising the wrong half.
 
-Proposed acceptance targets. **None of these are measured yet** — the 5.9 GB
-above is the only real number here, and the rest are the shape of the goal
-rather than findings:
+Proposed acceptance targets. Step 1 is done and measured; the rest are still
+the shape of the goal rather than findings. Note what step 1 did **not**
+reach: a translation install is 2.2 GB, nowhere near the 600 MB below, and it
+cannot get there while torch is 725 MB of it. That is step 4, and it needs an
+upstream change:
 
 - base install, no translation, one language: **≤ 300 MB** of code
-- with translation: **≤ 600 MB** after step 1, **≤ 200 MB** after step 4
+- with translation: **≤ 600 MB** of code, which step 1 alone does not reach.
+  Measured after it: 2203 MB, of which torch is 725 and the nine spaCy models
+  are roughly 400. It needs steps 3 and 4 as well
 - peak RSS on a normal run: **≤ 1 GB**
 - index build completes within **2 GB RAM** (currently the most memory-hungry
   step by far, and unmeasured)
