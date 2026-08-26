@@ -507,12 +507,32 @@ remaining user-visible value is; the rest is measurement and hygiene.
 
       Antonyms remain the weakest field, which is the point of this item and
       is unchanged. ConceptNet's bulk dump is the evaluated candidate:
-      free, no key, CC BY-SA, one 475 MB download covering every language,
-      real French antonyms for `grand` (petit, court, faible, minime...), and
-      9 of 12 languages sampled returned data. Its live API is 502 on every
-      endpoint, so bulk is the only route — which is what the rate-limit
-      constraint required anyway. Needs the OMW-style filtering: drop
-      self-references, cross-language leakage and junk.
+      free, no key, CC BY-SA, one 498 MB download covering every language.
+      Its live API is 502 on every endpoint, so bulk is the only route —
+      which is what the rate-limit constraint required anyway.
+
+      **Measured 26 August 2026, and written up as ADR-010 (Proposed).**
+      Reproduce with `scripts/measure_antonym_sources.py`:
+
+      | deck | index today | union with ConceptNet | adds |
+      |---|---|---|---|
+      | French, 1054 lemmas | 22.5% | 35.0% | +12.5 points |
+      | German, 406 lemmas | 54.2% | 57.9% | +3.7 points |
+      | Russian, 701 lemmas | 50.2% | 50.8% | +0.6 points |
+
+      The asymmetry is the finding. ConceptNet's antonyms come from exactly
+      two Wiktionary editions, English (40 719 edges) and French (19 806),
+      and Tango's index is built from the English edition. So for German and
+      Russian it mostly hands back what the index already has; for French it
+      hands over the French edition, which this project has never read. The
+      gap is between Wiktionary editions, not between Wiktionary and
+      ConceptNet.
+
+      The shipped artifact is 3.06 MB for 22 languages. Filtering to
+      same-language `/r/Antonym` pairs, no self-references, removes the `大`
+      -> `郵局` case but not `es/grande` -> `es/irrelevante`, so a wrong
+      antonym asserted as an antonym still gets through. Awaiting a decision
+      on ADR-010 before any of it is built.
 
 - [x] **Filler-word cards.** `Ah`, `Bah`, `Ouai`, `Euh`, `Tss` — 3.4% of
       cards, and the ones that look broken to a user. Needs a per-language
