@@ -24,6 +24,7 @@ from pipeline.definition import (
     DefinitionResult,
     _cache_get,
     _cache_set,
+    _cache_key,
     _cache_set_key,
     _find_transcript_sentence,
     _parse_dictapi_response,
@@ -595,13 +596,14 @@ class TestCache:
         def _boom():
             raise sqlite3.OperationalError("database is locked")
         monkeypatch.setattr(def_module, "_get_db", _boom)
-        def_module._cache_set_key("contaminate::en", sample_definition_result)  # must not raise
+        key = def_module._cache_key("contaminate", "en", "en")
+        def_module._cache_set_key(key, sample_definition_result)  # must not raise
 
     def test_cache_read_failure_returns_none_not_raises(self, monkeypatch):
         def _boom():
             raise sqlite3.OperationalError("database is locked")
         monkeypatch.setattr(def_module, "_get_db", _boom)
-        assert def_module._cache_get("contaminate::en") is None
+        assert def_module._cache_get(def_module._cache_key("contaminate", "en", "en")) is None
 
     @patch("pipeline.definition._fetch_from_mw")
     @patch("pipeline.definition._fetch_from_dictapi")
@@ -787,9 +789,9 @@ class TestFetchDefinition:
         self, mock_mw, sample_definition_result, sample_snippets
     ):
         # Cache key is now composite: "lemma::language"
-        # fetch_definition with default language="en" looks up "contaminate::en"
+        # fetch_definition with default language="en" looks up the native key
         from pipeline.definition import _cache_set_key
-        _cache_set_key("contaminate::en", sample_definition_result)
+        _cache_set_key(_cache_key("contaminate", "en", "en"), sample_definition_result)
         result = fetch_definition(
             "contaminate", sample_snippets, use_cache=True, language="en"
         )
@@ -807,8 +809,10 @@ class TestFetchDefinition:
         fetch_definition(
             "contaminate", sample_snippets, use_cache=False, language="en"
         )
-        # Cache key is now composite: "contaminate::en"
-        cached = _cache_get("contaminate::en")
+        # The key is composite; derive it rather than spelling it out, so
+        # this cannot drift from _cache_key() the way it did when the
+        # source language joined the key.
+        cached = _cache_get(_cache_key("contaminate", "en", "en"))
         assert cached is not None
 
     # -- Wiktionary supplementation (issue #1) -----------------------------
@@ -1563,13 +1567,16 @@ class TestFetchDefinitions:
     def test_cache_hit_skips_fetch_definition_call(
         self, sample_definition_result
     ):
-        # fetch_definitions() reads the cache via the composite "lemma::language"
-        # key (matching fetch_definition()'s own cache key format), so the seed
-        # here must use _cache_set_key() with that same composite key rather
-        # than the bare-lemma _cache_set(). Seeding with the bare key leaves
-        # the composite-keyed lookup unable to find it, causing a spurious
-        # cache miss and a real (mocked) fetch_definition call.
-        _cache_set_key(f"{sample_definition_result.lemma}::en", sample_definition_result)
+        # Seeded through _cache_key() rather than a hand-written string.
+        # This test spelled the key out, and when the source language joined
+        # it the seed silently stopped matching: the lookup missed and the
+        # assertion failed for a reason unrelated to what it tests. Deriving
+        # the key means it cannot drift from the implementation again, which
+        # is the same reason _cache_key() exists at all.
+        _cache_set_key(
+            _cache_key(sample_definition_result.lemma, "en", "en"),
+            sample_definition_result,
+        )
         with patch("pipeline.definition.fetch_definition") as mock_fetch:
             result = fetch_definitions(["contaminate"])
             mock_fetch.assert_not_called()
@@ -1578,7 +1585,10 @@ class TestFetchDefinitions:
     def test_all_cache_hits_never_start_thread_pool(self, sample_definition_result):
         # If every lemma is cached, fetch_definitions() should never even
         # construct a ThreadPoolExecutor — there is nothing for it to do.
-        _cache_set_key(f"{sample_definition_result.lemma}::en", sample_definition_result)
+        _cache_set_key(
+            _cache_key(sample_definition_result.lemma, "en", "en"),
+            sample_definition_result,
+        )
         with patch("pipeline.definition.ThreadPoolExecutor") as mock_pool:
             fetch_definitions(["contaminate"])
             mock_pool.assert_not_called()
@@ -2058,14 +2068,14 @@ class TestCacheKeyCarriesPartOfSpeech:
         # "fait" as a noun and "fait" as an adjective are different cards.
         # Sharing one row is exactly how a sense fix fails to land.
         assert (
-            def_module._cache_key("fait", "fr", "NOUN")
-            != def_module._cache_key("fait", "fr", "ADJ")
+            def_module._cache_key("fait", "fr", "fr", "NOUN")
+            != def_module._cache_key("fait", "fr", "fr", "ADJ")
         )
 
     def test_same_pos_is_the_same_row(self):
         assert (
-            def_module._cache_key("fait", "fr", "NOUN")
-            == def_module._cache_key("fait", "fr", "NOUN")
+            def_module._cache_key("fait", "fr", "fr", "NOUN")
+            == def_module._cache_key("fait", "fr", "fr", "NOUN")
         )
 
     def test_a_pos_that_cannot_narrow_does_not_split_the_cache(self):
@@ -2074,22 +2084,22 @@ class TestCacheKeyCarriesPartOfSpeech:
         # one pins that a meaningful POS splits, this pins that a
         # meaningless one does not.
         assert (
-            def_module._cache_key("fait", "fr", "PROPN")
-            == def_module._cache_key("fait", "fr")
+            def_module._cache_key("fait", "fr", "fr", "PROPN")
+            == def_module._cache_key("fait", "fr", "fr")
         )
 
     def test_language_still_separates_rows(self):
         # The pre-existing guarantee must survive: a German lemma cached
         # under ::en once served false-friend English definitions back.
         assert (
-            def_module._cache_key("gift", "de", "NOUN")
-            != def_module._cache_key("gift", "en", "NOUN")
+            def_module._cache_key("gift", "de", "de", "NOUN")
+            != def_module._cache_key("gift", "en", "en", "NOUN")
         )
 
     def test_bare_lemma_is_recoverable_from_the_key(self):
         # _cache_row_to_result splits on "::" to restore the lemma, and a
         # third segment must not break that.
-        key = def_module._cache_key("maison", "fr", "NOUN")
+        key = def_module._cache_key("maison", "fr", "fr", "NOUN")
         assert key.split("::")[0] == "maison"
 
     def test_batch_and_single_agree_on_the_key(self, sample_definition_result):
@@ -2097,7 +2107,7 @@ class TestCacheKeyCarriesPartOfSpeech:
         # drifted, so a row written by one was invisible to the other. Seed
         # through the batch loop's key and read it back through the same
         # helper fetch_definition() uses.
-        key = def_module._cache_key(sample_definition_result.lemma, "en", "VERB")
+        key = def_module._cache_key(sample_definition_result.lemma, "en", "en", "VERB")
         _cache_set_key(key, sample_definition_result)
         with patch("pipeline.definition.fetch_definition") as mock_fetch:
             result = fetch_definitions(
@@ -2113,7 +2123,7 @@ class TestCacheKeyCarriesPartOfSpeech:
         # The partner: the batch must MISS a row whose POS differs, rather
         # than serving the sense chosen for a different reading of the word.
         _cache_set_key(
-            def_module._cache_key(sample_definition_result.lemma, "en", "NOUN"),
+            def_module._cache_key(sample_definition_result.lemma, "en", "en", "NOUN"),
             sample_definition_result,
         )
         with patch("pipeline.definition.fetch_definition") as mock_fetch:
@@ -2154,7 +2164,7 @@ class TestNoCache:
 
     def test_cached_row_is_ignored(self, sample_definition_result):
         _cache_set_key(
-            def_module._cache_key(sample_definition_result.lemma, "en"),
+            def_module._cache_key(sample_definition_result.lemma, "en", "en"),
             sample_definition_result,
         )
         with patch("pipeline.definition.fetch_definition") as mock_fetch:
@@ -2166,7 +2176,7 @@ class TestNoCache:
         # The partner. Without this, a --no-cache implementation that simply
         # broke the cache read for everyone would still satisfy the test above.
         _cache_set_key(
-            def_module._cache_key(sample_definition_result.lemma, "en"),
+            def_module._cache_key(sample_definition_result.lemma, "en", "en"),
             sample_definition_result,
         )
         with patch("pipeline.definition.fetch_definition"):
@@ -2210,4 +2220,152 @@ class TestNoCache:
              patch("pipeline.definition._wordnet_synonyms_antonyms",
                    return_value=([], [])):
             fetch_definitions(["contaminate"], max_workers=1)
-        assert written == ["contaminate::en"]
+        assert written == [def_module._cache_key("contaminate", "en", "en")]
+
+
+# ── Cache key and the transcript language ────────────────────────────────────
+
+class TestCacheKeyCarriesSourceLanguage:
+    """
+    The key recorded the language a definition was written *in*, never the
+    language of the video it came from, and constraint 3.3 means those pick
+    different content: a German video with --def-lang en writes a row holding
+    German example sentences.
+
+    Measured on the real 5408-row cache, 265 rows keyed `::en` already hold
+    German examples. None had collided yet only because no English run had
+    met one of those spellings.
+    """
+
+    def test_a_cross_language_row_cannot_be_read_by_a_native_run(self):
+        # The bug, stated directly. "hand", "arm", "band" and "wild" are
+        # words in both languages, so an English card would have received
+        # German examples from a German --def-lang en run.
+        from_german_video = def_module._cache_key("hand", "de", "en", "NOUN")
+        from_english_video = def_module._cache_key("hand", "en", "en", "NOUN")
+        assert from_german_video != from_english_video
+
+    def test_the_same_pairing_is_still_one_row(self):
+        # The partner. Splitting on source must not defeat the cache: two
+        # German videos defined in English share their rows as before.
+        assert (
+            def_module._cache_key("hand", "de", "en", "NOUN")
+            == def_module._cache_key("hand", "de", "en", "NOUN")
+        )
+
+    def test_a_pairing_is_selectable_for_invalidation(self):
+        # The other half of why source is in the key. Both cache-poisoning
+        # incidents needed the vocabulary table joined back to each video's
+        # language to find the affected rows, because nothing recorded it.
+        # A LIKE on the pairing is now the whole job.
+        assert "::de::en::" in def_module._cache_key("hand", "de", "en", "NOUN")
+
+    def test_an_unresolved_pos_still_leaves_four_segments(self):
+        # Without a placeholder, a row whose POS did not resolve would have
+        # three segments and escape the LIKE above, so invalidation would
+        # silently miss exactly the rows nobody chose a sense for.
+        key = def_module._cache_key("hand", "de", "en", None)
+        assert key.count("::") == 3
+        assert "::de::en::" in key
+        # The placeholder is asserted literally, not just counted. Without
+        # `or "-"` the f-string interpolates the string "None", which still
+        # leaves four segments and still passes a shape check while putting a
+        # Python repr into every user's cache key.
+        assert key.endswith("::-")
+        assert "None" not in key
+
+    def test_an_unresolvable_pos_does_not_split_the_cache(self):
+        # The original guarantee survives the placeholder: PROPN selects no
+        # index row, so it must share a row with no POS at all rather than
+        # creating a second one holding identical content.
+        assert (
+            def_module._cache_key("fait", "fr", "fr", "PROPN")
+            == def_module._cache_key("fait", "fr", "fr", None)
+        )
+
+    def test_the_bare_lemma_is_still_recoverable(self):
+        # _cache_row_to_result splits on "::" to restore the lemma, and a
+        # fourth segment must not break that.
+        key = def_module._cache_key("maison", "fr", "en", "NOUN")
+        assert key.split("::")[0] == "maison"
+
+
+class TestCacheKeyMigration:
+    """
+    Old rows are keyed `lemma::target[::pos]` and record nothing about the
+    transcript they came from, which is the whole reason the key changed.
+
+    They cannot be rewritten: recovering a row's source language means
+    knowing which video it came from, and no table stores that. On the real
+    database only 6 of 25 videos have a deck name a language can even be
+    inferred from. Guessing native for the rest would re-key cross-language
+    rows as native, which is exactly the collision the new key prevents, so a
+    wrong guess preserves the bug while looking migrated.
+    """
+
+    @staticmethod
+    def _v0_database(path):
+        conn = sqlite3.connect(path)
+        conn.execute(
+            "CREATE TABLE definitions (lemma TEXT PRIMARY KEY, definition TEXT NOT NULL,"
+            " example_dict TEXT, example_dict2 TEXT, synonyms TEXT, antonyms TEXT,"
+            " part_of_speech TEXT, source TEXT NOT NULL, fetched_at TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO definitions (lemma, definition, source, fetched_at)"
+            " VALUES ('haus::en', 'A building.', 'wiktionary', '2026-01-01')"
+        )
+        conn.commit()
+        conn.close()
+
+    def test_old_rows_are_kept_rather_than_deleted(self, tmp_path, monkeypatch):
+        # CLAUDE.md warns against deleting pipeline.db because this cache is
+        # expensive to rebuild. Renaming honours that while starting clean.
+        db = tmp_path / "old.db"
+        self._v0_database(db)
+        monkeypatch.setattr(def_module, "DB_PATH", db)
+        monkeypatch.setattr(def_module, "_initialized_dbs", set())
+        conn = def_module._get_db()
+        assert conn.execute("SELECT count(*) FROM definitions_v0").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM definitions").fetchone()[0] == 0
+
+    def test_a_v0_row_is_not_readable_through_the_new_key(self, tmp_path, monkeypatch):
+        # The point of the migration. Left in place, "haus::en" would be
+        # unreachable anyway, but a stale row that *did* match would serve
+        # German examples to an English card.
+        db = tmp_path / "old2.db"
+        self._v0_database(db)
+        monkeypatch.setattr(def_module, "DB_PATH", db)
+        monkeypatch.setattr(def_module, "_initialized_dbs", set())
+        def_module._get_db()
+        assert def_module._cache_get(def_module._cache_key("haus", "en", "en")) is None
+
+    def test_migrating_twice_does_not_lose_the_second_cache(self, tmp_path, monkeypatch):
+        # Idempotence matters more here than usual: a second run must not
+        # rename a freshly refilled cache away on top of the old one.
+        db = tmp_path / "old3.db"
+        self._v0_database(db)
+        monkeypatch.setattr(def_module, "DB_PATH", db)
+        monkeypatch.setattr(def_module, "_initialized_dbs", set())
+        conn = def_module._get_db()
+        conn.execute(
+            "INSERT INTO definitions (lemma, definition, source, fetched_at)"
+            " VALUES ('haus::de::de::noun', 'Ein Gebaeude.', 'wiktionary', '2026-01-02')"
+        )
+        conn.commit()
+        def_module._init_schema(conn)
+        assert conn.execute("SELECT count(*) FROM definitions").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM definitions_v0").fetchone()[0] == 1
+
+    def test_a_fresh_database_is_marked_current_without_a_legacy_table(self, tmp_path, monkeypatch):
+        # The partner: a new user has nothing to migrate and must not get an
+        # empty definitions_v0 table for no reason.
+        db = tmp_path / "fresh.db"
+        monkeypatch.setattr(def_module, "DB_PATH", db)
+        monkeypatch.setattr(def_module, "_initialized_dbs", set())
+        conn = def_module._get_db()
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == def_module._CACHE_KEY_VERSION
+        legacy = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='definitions_v0'"
+        ).fetchone()
+        assert legacy is None
