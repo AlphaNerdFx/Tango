@@ -14,7 +14,7 @@ Free dictionary APIs rarely return antonyms. dictionaryapi.dev includes them occ
 
 If you have not run `make antonyms`, run it. It builds a 4.3 MB index from ConceptNet covering every supported language, and it is the last source tried when nothing else filled the field. Measured on real decks it takes French from 19.7% to 34.8% and German from 56.2% to 60.3%.
 
-Antonyms remain the thinnest field even so. Roughly two words in three still have none, because Wiktionary simply does not record one for most words.
+Antonyms remain the thinnest field even so: about two French words in three and two German words in five still have none, because Wiktionary does not record one for most words.
 
 ## Why is my deck not recognised by name?
 
