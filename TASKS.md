@@ -480,7 +480,10 @@ remaining user-visible value is; the rest is measurement and hygiene.
       still, `form_of` names the target word, so `glaube` could instead
       resolve to `glauben`'s definition rather than being skipped.
 
-- [ ] **Antonyms, the weakest field everywhere.** Cross-language collapses
+- [x] **Antonyms, the weakest field everywhere.** Shipped 26 August 2026 as
+      ADR-010: a 4.3 MB ConceptNet index, `make antonyms`, French 19.7% to
+      34.8% measured end to end. The history below is kept because the
+      wrong turns in it are the useful part. Cross-language collapses
       to 3% because 3.3 keeps them in the transcript language.
 
       **Re-measured 25 August 2026, and the two figures this entry used to
@@ -531,8 +534,10 @@ remaining user-visible value is; the rest is measurement and hygiene.
       The shipped artifact is 3.06 MB for 22 languages. Filtering to
       same-language `/r/Antonym` pairs, no self-references, removes the `大`
       -> `郵局` case but not `es/grande` -> `es/irrelevante`, so a wrong
-      antonym asserted as an antonym still gets through. Awaiting a decision
-      on ADR-010 before any of it is built.
+      antonym asserted as an antonym still gets through. ADR-010 was
+      accepted and built the same day; the shipped index keeps one row per
+      part of speech, which is why it is 4.3 MB rather than the 3.06 MB
+      predicted here.
 
 - [x] **Filler-word cards.** `Ah`, `Bah`, `Ouai`, `Euh`, `Tss` — 3.4% of
       cards, and the ones that look broken to a user. Needs a per-language
@@ -757,7 +762,8 @@ remaining user-visible value is; the rest is measurement and hygiene.
       live. `__main__.py` 55% → 82%, suite 83% → 88%, 692 passing.
       See ARCHITECTURE.md 8.24.
 
-- [ ] **Antonyms, the one visibly thin field.** French 23.2% against
+- [x] **Antonyms, the one visibly thin field.** Shipped; duplicate of the
+      entry above, which carries the outcome. French 23.2% against
       Definition's 98.6% and Synonyms' 85%, and German 51%, both as recorded
       when this was written. Re-measured 25 August 2026 the German figure is
       53.9% and the French 22.7%; see the fuller table under the other
