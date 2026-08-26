@@ -32,6 +32,25 @@ Working toward v0.6.0, card quality.
 
 ### Fixed
 
+- **The definition cache could serve one language's examples to another.**
+  The cache key recorded the language a definition was written in, not the
+  language of the video it came from, and constraint 3.3 means those choose
+  different content: a German run with `--def-lang en` writes a row holding
+  German sentences. An English video looking up a spelling both languages
+  share (`hand`, `arm`, `band`, `wild`) would have read that row back.
+  Measured on a real 5408-row cache, 265 rows keyed `::en` already hold
+  German examples; none had collided only because no English run had met one.
+
+  The key is now `lemma::source::target::pos`, which also makes invalidating
+  a language pairing a single `DELETE ... LIKE '%::de::en::%'` instead of a
+  reconstruction through the vocabulary table.
+
+  **Your existing cache is kept, not deleted.** Old rows move to a
+  `definitions_v0` table and the live cache refills as words are met again.
+  They cannot be rewritten, because recovering a row's source language means
+  knowing which video it came from and nothing records that. See
+  ARCHITECTURE.md 8.40.
+
 - **CI checked a requirements file it never installed.** A Dependabot bump of
   `thinc` to 9.1.1 passed on all three Python versions while making
   `requirements.txt` unresolvable, because CI installs `pip install -e
