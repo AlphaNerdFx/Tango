@@ -302,6 +302,46 @@ class TestConstraint33FieldLanguage:
             f"CLAUDE.md 3.3: expected the original lemma, got {call!r}"
         )
 
+    def test_every_antonym_lookup_uses_the_transcript_language(self):
+        # The ConceptNet antonym index (ADR-010) is the fourth thing that
+        # fills a field describing the word shown, and 3.3 has been violated
+        # three times by exactly that: something added beside the gate
+        # rather than inside it. Both call sites, not one -- a field that is
+        # gated on one path and not the other disagrees with itself.
+        from pipeline import definition
+        functions = (
+            definition.fetch_definition,
+            definition._fetch_definition_or_fallback_example,
+        )
+        calls = [
+            block.split(")")[0]
+            for function in functions
+            for block in _code_only(function).split("antonym_index.lookup(")[1:]
+        ]
+        assert len(calls) == len(functions), (
+            "CLAUDE.md 3.3: every path that fills the antonym field must go "
+            f"through the same lookup. Found {len(calls)} calls across "
+            f"{len(functions)} paths."
+        )
+        for call in calls:
+            assert call.startswith("lemma, language"), (
+                "CLAUDE.md 3.3: an antonym describes the word shown, so it "
+                "is looked up as (lemma, language) -- never query_lemma or "
+                f"target_language. Got {call!r}"
+            )
+
+    def test_the_antonym_index_cannot_store_a_cross_language_pair(self):
+        # The partner, and the structural half. The call site above is
+        # correct today; this asserts the index could not serve a
+        # cross-language antonym even if a call site were wrong tomorrow,
+        # which is the second lock pronunciation got and examples never had.
+        from pipeline import antonyms
+        src = _code_only(antonyms._parse)
+        assert "start[2] != end[2]" in src, (
+            "CLAUDE.md 3.3: the antonym index must drop any pair whose two "
+            "ends are in different languages, before it is ever stored."
+        )
+
 
 # ── 3.4 Validate the lemma, not the surface form ─────────────────────────────
 
