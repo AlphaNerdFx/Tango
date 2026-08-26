@@ -2294,6 +2294,63 @@ a unit test could reach the network when a fixture missed, which constraint
 
 ---
 
+### 8.41 Four and a half gigabytes of CUDA nobody can call
+
+`.tangovenv` measured 5.9 GB. `nvidia` was 2.7 GB of it, `torch` 1.1 GB and
+`triton` 689 MB: 4.5 GB, 76% of the whole environment, and none of it
+declared anywhere in `pyproject.toml`.
+
+The chain is three links and the last one is the problem:
+
+```
+argostranslate  ->  stanza==1.10.1  ->  torch>=1.3.0
+```
+
+`torch>=1.3.0` names a version and not a variant. Since torch 2.x the default
+PyPI wheel is the CUDA build, so pip installs it and its `nvidia-*` and
+`triton` companions on every machine, whatever hardware is there.
+
+**Measured on the developer machine, which does have an NVIDIA card:**
+
+```
+torch 2.13.0+cu130   built with CUDA 13.0   cuda available: False
+```
+
+The driver was too old, so the 4.5 GB had never been used once. On an AMD
+card, an integrated one, or a machine with no GPU it can never be used at
+all.
+
+Installing torch from PyTorch's CPU index before argostranslate makes pip see
+the requirement as satisfied. Verified in a clean virtualenv rather than
+reasoned about:
+
+| | size |
+|---|---|
+| current `.tangovenv` | 5993 MB |
+| torch + nvidia + triton within it | 4515 MB |
+| CPU-only torch replacing all three | 733 MB |
+| **projected `.tangovenv`** | **2211 MB** |
+
+A saving of 3.8 GB, 63%, with `nvidia` and `triton` absent entirely and
+argostranslate and stanza importing normally.
+
+**This cannot be expressed in `pyproject.toml`.** Choosing a wheel variant
+means choosing an index, and PEP 508 requirements have no way to say that. So
+it belongs in the install command, which is why `make translate-setup` does
+it in two steps rather than one.
+
+Anyone who does have working hardware can install the CUDA or ROCm build over
+the top; nothing prevents it. `--doctor` reports which build is present and
+whether the GPU is usable, because the waste is otherwise invisible: the
+pipeline behaves identically either way, just four gigabytes larger.
+
+**This is the same shape as 8.35 and 8.39.** The install worked, every test
+passed, and nothing anywhere was wrong enough to look at. CLAUDE.md 3.6 said
+PyTorch adds "roughly 1.5 GB" for months while the real figure was three
+times that, because nobody re-measured a number that had no date on it.
+
+---
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
