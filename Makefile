@@ -67,7 +67,7 @@ CYAN   := \033[36m
 
 # -- Phony targets ------------------------------------------------------------
 
-.PHONY: all venv install setup spacy-model dictionary translate-setup translate-stop \
+.PHONY: all venv install setup spacy-model dictionary antonyms translate-setup translate-stop \
         test test-all coverage format lint typecheck translate-model doctor \
         run review backlog clean check-os help
 
@@ -156,6 +156,16 @@ dictionary: venv
 		exit 1; \
 	fi
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --build-dictionary "$(LANGUAGE)"
+
+# -- antonyms -----------------------------------------------------------------
+# Builds the offline antonym index from ConceptNet. One index for every
+# language rather than one per language, so this takes no LANGUAGE. The
+# download is 498 MB and streamed rather than stored; what lands is 4.3 MB.
+# Optional everywhere: without it the antonym field is filled exactly
+# as it was before. See ADR-010.
+
+antonyms: venv
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --build-antonyms
 
 # -- translate-model ----------------------------------------------------------
 # Installs the argostranslate models for one language pair, so --def-lang
@@ -430,6 +440,7 @@ help:
 	@printf "  $(CYAN)make all$(RESET)                              Create venv, install deps, download spaCy model\n"
 	@printf "  $(CYAN)make setup$(RESET)                            Guided .env setup for an optional MW API key\n"
 	@printf "  $(CYAN)make dictionary$(RESET) LANGUAGE=<code>        Offline Wiktionary definitions (large one-time download)\n"
+	@printf "  $(CYAN)make antonyms$(RESET)                         Offline antonyms for every language (optional, 4 MB)\n"
 	@printf "\n"
 	@printf "$(BOLD)Run the pipeline:$(RESET)\n"
 	@printf "  $(CYAN)make run$(RESET) VIDEO_ID=<id> DECK=\"<name>\"   Process a YouTube video\n"
@@ -447,6 +458,7 @@ help:
 	@printf "  python -m pipeline --install-model de\n"
 	@printf "  python -m pipeline --install-translation de:en\n"
 	@printf "  python -m pipeline --build-dictionary de\n"
+	@printf "  python -m pipeline --build-antonyms\n"
 	@printf "  python -m pipeline --video-id <id> --deck \"<name>\" --language de\n"
 	@printf "  python -m pipeline --review --deck \"<name>\"\n"
 	@printf "  python -m pipeline --process-backlog --deck \"<name>\"\n"
