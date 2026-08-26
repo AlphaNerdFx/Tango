@@ -126,13 +126,15 @@ The fields exist and are filled; this is about what is *in* them.
   Done.
 - Inflection-pointer glosses that still reach cards as definitions. Done;
   Russian was the last language still leaking them.
-- Antonyms, the weakest field everywhere. Measured at 53.9% German and 22.7%
-  French. Issue #25.
 - Cache key carrying both languages, so a cross-language fix invalidates the
-  rows it should. Issue #26.
+  rows it should. Done; `lemma::source::target::pos`, with the pre-existing
+  rows set aside rather than re-keyed by guesswork. Issue #26.
 - Words that get no definition at all, 6.9% of a real German deck. Added to
   this rung on 26 August 2026 rather than planned into it, because measuring
-  the previous item surfaced it. Issue #27.
+  the previous item surfaced it. Done; the run names them. Issue #27.
+- Antonyms, the weakest field everywhere. Measured at 53.9% German and 22.7%
+  French. Issue #25. **The one item on this rung still open**, and the only
+  one needing a data source the project does not already have.
 
 The last one is deliberately not a filter. Three signals were measured and
 none separates transcript damage from real words, so the run names them and
