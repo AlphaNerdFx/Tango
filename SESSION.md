@@ -21,13 +21,17 @@ release notes, v0.4.1 to v0.4.5 having been backfilled from CHANGELOG on
 (pronunciation on cards, the migration release), v0.5.1 (pronunciation
 describes the word on the card), v0.5.2 (audio plays inside the card) and
 v0.5.3. `CHANGELOG.md` has an entry for each.
-**In development:** v0.6.0, card quality. Two of the four items on that rung
-are done: filler sounds no longer become cards, and inflection pointers
+**In development:** v0.6.0, card quality. Four of the five items on that
+rung are done: filler sounds no longer become cards, inflection pointers
 resolve to a real definition in Russian as they already did in German and
-French. Antonyms and the two-language cache key remain. `ROADMAP.md` has the ladder
-to v1.0.0 and the rule that picks the number; CLAUDE.md 15 is the short
-form, and CLAUDE.md 16 is the commit and tag format.
-**HEAD:** in sync with `tango-origin/main`. Working tree clean.
+French, the definition cache key carries the transcript language as well as
+the definition language, and the run names the words that got no definition.
+Antonyms is the one left, and the only item on the rung that needs a data
+source the project does not have. `ROADMAP.md` has the ladder to v1.0.0 and
+the rule that picks the number; CLAUDE.md 15 is the short form, and
+CLAUDE.md 16 is the commit and tag format.
+**HEAD:** ahead of `tango-origin/main` by the CPU-torch work of
+26 August 2026, unpushed. Working tree clean.
 **Pull requests and issues: none open.** All six Dependabot pull requests were
 handled on 25 August 2026 (five merged, thinc 9.1.1 closed as unresolvable
 against spaCy 3.8), and issues #1, #13 and #16 were closed against measured
