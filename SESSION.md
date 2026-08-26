@@ -14,18 +14,18 @@ installed environment at the time of writing, not recalled from memory. See
 
 ## 1. Where the project is
 
-**Tagged release:** v0.5.3, part of speech in the learner's language. The
-0.5.x line is complete. Every one of the thirteen tags now has GitHub
-release notes, v0.4.1 to v0.4.5 having been backfilled from CHANGELOG on
-18 August 2026. The 0.5.x line ran v0.5.0
-(pronunciation on cards, the migration release), v0.5.1 (pronunciation
-describes the word on the card), v0.5.2 (audio plays inside the card) and
-v0.5.3. `CHANGELOG.md` has an entry for each.
-**In development:** v0.6.0, card quality, and the rung is complete on main
-though not released. All five items: filler sounds no longer become cards, inflection pointers
-resolve to a real definition in Russian as they already did in German and
-French, the definition cache key carries the transcript language as well as
-the definition language, and the run names the words that got no definition.
+**Tagged release:** v0.6.0, card quality, released 27 August 2026. All
+fourteen tags have GitHub release notes, v0.4.1 to v0.4.5 having been
+backfilled from CHANGELOG on 18 August 2026. The 0.5.x line before it ran
+v0.5.0 (pronunciation on cards, the migration release), v0.5.1
+(pronunciation describes the word on the card), v0.5.2 (audio plays inside
+the card) and v0.5.3 (part of speech in the learner's language).
+`CHANGELOG.md` has an entry for each.
+**Shipped in v0.6.0.** All five items on the rung: filler sounds no longer
+become cards, inflection pointers resolve to a real definition in Russian as
+they already did in German and French, the definition cache key carries the
+transcript language as well as the definition language, and the run names
+the words that got no definition.
 Antonyms, the last of them, shipped on 26 August 2026 as ADR-010: an
 offline ConceptNet index, `make antonyms`, French 19.7% to 34.8% measured
 end to end. The gain is concentrated in French because ConceptNet carries
@@ -34,8 +34,9 @@ the English one, so the gap was between editions rather than between
 sources. `ROADMAP.md` has the ladder to v1.0.0 and
 the rule that picks the number; CLAUDE.md 15 is the short form, and
 CLAUDE.md 16 is the commit and tag format.
-**HEAD:** in sync with `tango-origin/main`, pushed 27 August 2026. Working
-tree clean.
+**HEAD:** in sync with `tango-origin/main`, tagged v0.6.0 on
+27 August 2026. Working tree clean.
+**In development:** v0.7.0, the command line as a product.
 **Pull requests and issues: none open.** All six Dependabot pull requests were
 handled on 25 August 2026 (five merged, thinc 9.1.1 closed as unresolvable
 against spaCy 3.8), and issues #1, #13 and #16 were closed against measured
