@@ -32,8 +32,8 @@ already been ruled out with evidence, recorded in TASKS.md:
   read. 22.7% is the ceiling of the data the index is built from.
 
 That last finding is the one this ADR turns out to be about, and it was
-stated slightly too broadly. The ceiling belongs to the *edition* the index
-is built from, not to Wiktionary.
+stated slightly too broadly. The ceiling belongs to what one *extraction* of
+Wiktionary captured, not to Wiktionary.
 
 ## Evidence gathered
 
@@ -82,8 +82,19 @@ gets `abfahren`. From the Russian deck: `вопрос` gets `ответ`.
 
 ### Why the three languages differ by 20x
 
-This is the part worth keeping. ConceptNet's antonyms are not a new kind of
-data. They are Wiktionary's, re-extracted, from exactly two editions:
+**This section first carried a wrong answer, corrected 27 August 2026 and
+left visible rather than quietly rewritten.** What it said: that Tango's
+index is built from the English Wiktionary's entries for each language, so
+ConceptNet's French-edition data was reaching an edition this project had
+never read. That is false, and one query would have shown it at the time.
+`maison` in the French index glosses as "Bâtiment servant de logis,
+d'habitation, de demeure", which is the French Wiktionary's own wording, not
+an English gloss of a French word. `wiktdata.py`'s own module docstring says
+so in its third paragraph. Both sources read the same edition.
+
+The measured answer is below. First, the fact the wrong answer was built on,
+which is true: ConceptNet's antonyms are not a new kind of data. They are
+Wiktionary's, re-extracted, from exactly two editions:
 
 | dataset | antonym edges |
 |---|---|
@@ -99,15 +110,30 @@ Broken down for the three languages measured, counting same-language edges:
 | German | 2 526 | 869 |
 | Russian | 980 | 330 |
 
-Tango's index is built from `kaikki.org/dictionary/downloads/{lang}`, which
-is the English edition's entries for that language. So for German and
-Russian, ConceptNet is mostly handing back data the index already has, and
-the small gain is real but incidental. For French it is handing over the
-French Wiktionary's own antonyms, which this project has never read.
+What actually predicts the gain is how large ConceptNet's antonym vocabulary
+is *relative to the index's*, because the two extractions cover
+substantially different words:
 
-**The gap is between Wiktionary editions, not between Wiktionary and
-ConceptNet.** That reframes the item: ConceptNet is the cheap way to reach a
-second edition, not a second source.
+| language | words the index has an antonym for | words ConceptNet has | measured gain |
+|---|---|---|---|
+| French | 15 045 | 12 376 | +15.1 points |
+| German | 30 616 | 3 547 | +4.2 points |
+| Russian | 23 747 | 1 857 | +1.0 points |
+
+For German and Russian the index already holds eight to thirteen times more
+antonym-bearing words than ConceptNet does, so ConceptNet mostly hands back
+what is already there. For French the two are comparable in size and
+overlap only partly, so the union is much larger than either.
+
+**The gap is between two extractions of the same edition, not between two
+editions and not between Wiktionary and ConceptNet.** kaikki uses
+wiktextract; ConceptNet used wikiparsec in 2019. On the French Wiktionary
+those two disagree about antonyms for enough common words that taking both
+is worth 15 points, which is the whole case for this ADR. Note the French
+index is 1.93 million words and only 0.78% of them carry an antonym, against
+3.25% for German and 5.28% for Russian: French is the language where this
+extraction is weakest, and that is what made it the language with the most
+to gain.
 
 ### Quality and licence
 
