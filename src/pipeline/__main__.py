@@ -955,6 +955,52 @@ examples:
 
 # ── Mode: doctor ──────────────────────────────────────────────────────────────
 
+def _report_torch_build() -> int:
+    """
+    Report a CUDA torch build that this machine cannot use.
+
+    Returns:
+        1 if the install is wasting space and can be shrunk, else 0.
+
+    torch arrives through argostranslate -> stanza -> `torch>=1.3.0`, a
+    constraint that names no variant, so pip takes the default PyPI wheel.
+    Since torch 2.x that wheel bundles CUDA and pulls in nvidia-* and triton:
+    4.5 GB measured here, 76% of the virtualenv, none of it usable without an
+    NVIDIA card and a current driver.
+
+    Worth reporting rather than assuming, because the waste is invisible from
+    anything the pipeline does. It runs correctly either way, just four
+    gigabytes larger, and on the machine this was found on
+    `torch.cuda.is_available()` was False the whole time because the driver
+    was too old.
+    """
+    try:
+        import torch
+    except ImportError:
+        return 0  # Not installed at all, which is the smallest install there is.
+
+    build = getattr(torch.version, "cuda", None)
+    if not build:
+        print("    torch          CPU build, which is the small one")
+        return 0
+
+    try:
+        usable = torch.cuda.is_available()
+    except Exception:
+        usable = False
+
+    if usable:
+        print(f"    torch          CUDA {build} build, GPU available and in use")
+        return 0
+
+    print(f"    {YELLOW}torch          CUDA {build} build, but no usable GPU on this machine{RESET}")
+    print("                   That costs roughly 4.5 GB in nvidia and triton")
+    print("                   packages nothing can call. The CPU build is 733 MB.")
+    print("    -> pip install --index-url https://download.pytorch.org/whl/cpu \\")
+    print("         --force-reinstall torch && pip uninstall -y triton")
+    return 1
+
+
 def _run_doctor() -> int:
     """
     Report what this installation has and what it is missing.
@@ -1030,6 +1076,7 @@ def _run_doctor() -> int:
     except ImportError:
         print("    argostranslate not installed (optional)")
         print("    -> pip install -e '.[translation]'")
+    missing += _report_torch_build()
     print()
 
     # ── Optional credentials and services ──
