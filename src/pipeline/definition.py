@@ -211,6 +211,7 @@ from pipeline.config import (
     WIKTIONARY_API_BASE, WIKTIONARY_USER_AGENT,
     API_TIMEOUT, DB_PATH, CIRCUIT_BREAKER_THRESHOLD, DEFINITION_FETCH_WORKERS,
 )
+from pipeline import antonyms as antonym_index
 from pipeline import wiktdata
 
 
@@ -1504,6 +1505,20 @@ def fetch_definition(
         if not native_ants:
             native_ants = wn_ants
 
+    # Last source for antonyms, and only for antonyms. WordNet carries them
+    # for English alone -- OMW has none outside it, which is why the field
+    # sat at 22.7% on a real French deck -- so the offline ConceptNet index
+    # is what fills it for every other language. ADR-010.
+    #
+    # Same rule as pronunciation below: resolved against `lemma` in
+    # `language`, never `query_lemma` or `target_language`. An antonym
+    # describes the word shown, so constraint 3.3 puts it in the transcript
+    # language. The index enforces that a second time by storing only pairs
+    # whose two ends share a language, so a careless caller cannot reach a
+    # cross-language antonym even by asking for one.
+    if not native_ants:
+        native_ants = antonym_index.lookup(lemma, language, pos)
+
     # ── Pronunciation ────────────────────────────────────────────────────────
     #
     # Resolved ONCE, here, and always against `lemma` in `language` -- the
@@ -1640,6 +1655,15 @@ def _fetch_definition_or_fallback_example(
             synonyms = entry.synonyms
         if not antonyms:
             antonyms = entry.antonyms
+
+    # The same last source for antonyms as fetch_definition() uses, and here
+    # for the same reason twice over: this path runs when no definition was
+    # found anywhere, which is the normal case for a non-English language,
+    # and it is also the path where the antonym field is structurally empty
+    # rather than sparse. Leaving it out of one of the two call sites is how
+    # a field ends up disagreeing with itself. ADR-010.
+    if not antonyms:
+        antonyms = antonym_index.lookup(lemma, language, pos)
 
     # Through the shared resolver rather than off `entry`, even though this
     # lookup is already in the right language. Two reasons: pronunciation has
