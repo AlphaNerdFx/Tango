@@ -134,7 +134,10 @@ The fields exist and are filled; this is about what is *in* them.
   the previous item surfaced it. Done; the run names them. Issue #27.
 - Antonyms, the weakest field everywhere. Measured at 53.9% German and 22.7%
   French. Issue #25. **The one item on this rung still open**, and the only
-  one needing a data source the project does not already have.
+  one needing a data source the project does not already have. The candidate
+  is measured and written up in `docs/ADR-010-conceptnet-antonyms.md`, which
+  is Proposed: it would take French from 22.5% to 35.0% for a 3 MB artifact,
+  and move German and Russian by 3.7 and 0.6 points.
 
 The last one is deliberately not a filter. Three signals were measured and
 none separates transcript damage from real words, so the run names them and
