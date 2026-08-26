@@ -30,6 +30,22 @@ Working toward v0.6.0, card quality.
   as a truncation of `Baracke`, and 63% of words that *do* get a definition
   also appear only once. See issue #27.
 
+### Changed
+
+- **Translation setup installs CPU-only torch, cutting the install by 3.8 GB.**
+  `argostranslate` needs `stanza`, which asks for `torch>=1.3.0` without
+  naming a variant, so pip took the CUDA wheel and its `nvidia` and `triton`
+  companions on every machine: 4.5 GB, 76% of the virtualenv, unusable
+  without an NVIDIA card and a current driver. On the machine this was found
+  on, which has an NVIDIA card, `torch.cuda.is_available()` was False the
+  whole time because the driver was too old.
+
+  Verified in a clean virtualenv: 733 MB instead of 4515 MB, with `nvidia`
+  and `triton` absent entirely, taking `.tangovenv` from 5.9 GB to a
+  projected 2.2 GB. A working GPU can still have the CUDA or ROCm build
+  installed over the top. `--doctor` now reports which build is present and
+  whether the GPU is usable. ARCHITECTURE.md 8.41.
+
 ### Fixed
 
 - **The definition cache could serve one language's examples to another.**
