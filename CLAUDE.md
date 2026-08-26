@@ -37,13 +37,14 @@ line ran v0.5.0 (pronunciation on cards, the one release needing a
 migration), v0.5.1 (pronunciation describes the word on the card), v0.5.2
 (audio plays inside the card) and v0.5.3. Every one of the thirteen tags
 has GitHub release notes as of 18 August 2026.
-**On main and unreleased:** four of the five items on the v0.6.0 rung.
-Filler sounds no longer become cards, inflection pointers no longer reach
-cards as definitions, the definition cache key carries both languages, and
-the run names the words that got no definition instead of only counting
-them. Antonyms is the one left. Also on main and not part of that rung: the
-translation install no longer pulls 4.5 GB of CUDA nobody can call.
-`__version__` still reads 0.5.3 and bumps when the rung is finished, not per
+**On main and unreleased:** all five items on the v0.6.0 rung. Filler sounds
+no longer become cards, inflection pointers no longer reach cards as
+definitions, the definition cache key carries both languages, the run names
+the words that got no definition instead of only counting them, and the
+antonym field has an offline source of its own (ADR-010, which took a real
+French deck from 19.7% to 34.8%). Also on main and not part of that rung:
+the translation install no longer pulls 4.5 GB of CUDA nobody can call.
+`__version__` still reads 0.5.3 and bumps when the rung is released, not per
 item.
 **Working toward:** v0.6.0, card quality. Goals per tag through v1.0.0 are
 in `ROADMAP.md`; the rule that picks the number is in section 15; the commit
@@ -53,10 +54,11 @@ and tag format is in section 16; release history is in `CHANGELOG.md`.
 
 ## 2. Architecture summary
 
-Twelve modules. Nine are stages in a linear pipeline; `media.py` is called
-by `cards.py` rather than being a stage of its own, `config.py` holds
-configuration, and `__main__.py` is the CLI. One video per invocation. One
-`.apkg` per run. All state in local SQLite. No server component. No async.
+Thirteen modules. Nine are stages in a linear pipeline; `media.py` is called
+by `cards.py` and `antonyms.py` by `definition.py` rather than being stages
+of their own, `config.py` holds configuration, and `__main__.py` is the CLI.
+One video per invocation. One `.apkg` per run. All state in local SQLite. No
+server component. No async.
 
 ```
 YouTube video ID
@@ -65,6 +67,7 @@ YouTube video ID
   -> nlp.py            spaCy tokenize, lemmatize, POS filter, drop fillers
   -> deck.py           AnkiConnect duplicate check, fuzzy match
   -> definition.py     dual-source definition and example fetch
+       -> antonyms.py  offline ConceptNet antonym index, last source for that field
   -> wiktdata.py       offline Wiktionary index, non-English definitions
   -> translation.py    (optional) translate lemma for cross-language definitions
   -> cards.py          genanki .apkg generation
@@ -427,6 +430,15 @@ make dictionary LANGUAGE=fr           # or any code in language.SPACY_MODELS
 python -m pipeline --build-dictionary fr
 ```
 
+Antonyms are the weakest card field and have their own optional index, one
+file for every language rather than one per language. Without it the field
+is filled exactly as it was before v0.6.0. See ADR-010:
+
+```bash
+make antonyms                         # 498 MB streamed, 4.3 MB stored
+python -m pipeline --build-antonyms
+```
+
 ### Run
 
 ```bash
@@ -454,7 +466,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 937 passing, 24 deselected. The count drifts as tests are added —
+Expected: 972 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
@@ -548,8 +560,8 @@ OPERATING_RULES.md               Superseded by this file; kept for its tone
 ```
 
 The three markdown ADRs are the live ones and are cited throughout the code;
-the v0.4.0 PDF set is the historical record. ADR-010 is Proposed, not
-accepted, and nothing in the code depends on it yet.
+the v0.4.0 PDF set is the historical record. ADR-010 was accepted and
+implemented on 26 August 2026.
 
 ## 10. Pre-commit gate
 Never commit unless `make check` exits 0. Run it as a bare command (`make check`) — do NOT pipe to `tail`, `head`, or any filter, since pipes mask the real exit code. If output is long, redirect to a file and grep it: `make check > /tmp/check.log 2>&1; echo "exit=$?"; tail -50 /tmp/check.log`.
