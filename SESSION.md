@@ -34,8 +34,8 @@ the English one, so the gap was between editions rather than between
 sources. `ROADMAP.md` has the ladder to v1.0.0 and
 the rule that picks the number; CLAUDE.md 15 is the short form, and
 CLAUDE.md 16 is the commit and tag format.
-**HEAD:** ahead of `tango-origin/main` by the CPU-torch work and the whole
-antonym item of 26 August 2026, unpushed. Working tree clean.
+**HEAD:** in sync with `tango-origin/main`, pushed 27 August 2026. Working
+tree clean.
 **Pull requests and issues: none open.** All six Dependabot pull requests were
 handled on 25 August 2026 (five merged, thinc 9.1.1 closed as unresolvable
 against spaCy 3.8), and issues #1, #13 and #16 were closed against measured
