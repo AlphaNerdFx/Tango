@@ -41,10 +41,24 @@ Working toward v0.6.0, card quality.
   whole time because the driver was too old.
 
   Verified in a clean virtualenv: 733 MB instead of 4515 MB, with `nvidia`
-  and `triton` absent entirely, taking `.tangovenv` from 5.9 GB to a
-  projected 2.2 GB. A working GPU can still have the CUDA or ROCm build
-  installed over the top. `--doctor` now reports which build is present and
-  whether the GPU is usable. ARCHITECTURE.md 8.41.
+  and `triton` absent entirely, and then applied to this machine's own
+  environment, which went from 5.9 GB to 2.2 GB. A working GPU can still
+  have the CUDA or ROCm build installed over the top, and neither the target
+  nor the advice will replace one that is actually being used.
+  ARCHITECTURE.md 8.41.
+
+- **`make translate-setup` repairs an environment that already has the CUDA
+  build**, instead of only helping a fresh one. Installing from the CPU
+  index does nothing when torch is already present: pip answers "already
+  satisfied" and the 4.5 GB stays. The target now detects a CUDA build with
+  no usable GPU, replaces it with `--force-reinstall --no-deps`, and removes
+  the `nvidia-*` and `triton` orphans that pip leaves behind on its own.
+
+- **`--doctor` prints the repair commands in a form that runs.** They were
+  spelled `pip`, which is not on `PATH` in a virtualenv built by `make venv`,
+  and they replaced torch without removing the 3.4 GB of orphans, which is
+  the worst of both. They now use the running interpreter's own path and
+  name every installed `nvidia-*` distribution.
 
 ### Fixed
 
