@@ -60,8 +60,8 @@ changed.
 
 The dump never has to touch disk: `curl | zcat | grep` filters it in flight,
 which matters given ROADMAP v0.9.0 and a repository whose largest single
-package is 725 MB. What ships afterwards is 3 MB, against 131 to 404 MB for
-one language's Wiktionary index.
+package is 725 MB. What ships afterwards is 4.3 MB, against 131 to 404 MB
+for one language's Wiktionary index.
 
 ### What it adds, measured on the decks the baselines came from
 
