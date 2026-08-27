@@ -633,3 +633,16 @@ class TestIntegration:
         result = translate_word("bonjour", "fr", "en", interactive=False)
         # Either community mirror works or returns None gracefully
         assert result is None or isinstance(result, str)
+
+
+class TestErrorMessagesNameTheFix:
+    """v0.7.0: a failure the user can act on must say how."""
+
+    def test_model_not_installed_names_the_install_command(self):
+        message = str(ModelNotInstalledError("de", "en"))
+        assert "--install-translation de:en" in message
+
+    def test_model_not_installed_names_the_other_way_out(self):
+        # Installing is not the only fix, and for a user who does not want
+        # cross-language definitions it is the wrong one.
+        assert "--def-lang" in str(ModelNotInstalledError("de", "en"))
