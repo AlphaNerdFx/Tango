@@ -36,7 +36,7 @@ def unpaced(monkeypatch):
     minutes and, worse, make the timing tests below depend on how many other
     tests ran first.
     """
-    monkeypatch.setattr(media, "_LIMITER", media._RateLimiter(rate=0, burst=1))
+    monkeypatch.setattr(media, "_LIMITER", media.RateLimiter(rate=0, burst=1))
 
 
 def _response(content=b"ID3fakeaudio", content_type="audio/mpeg", status=200, retry_after=None):
@@ -189,7 +189,7 @@ class TestRateLimiting:
 
     def test_requests_beyond_the_burst_are_paced(self):
         # Fails if pacing is dropped: without it six acquires cost nothing.
-        limiter = media._RateLimiter(rate=25, burst=1)   # 40ms apart
+        limiter = media.RateLimiter(rate=25, burst=1)   # 40ms apart
         start = time.monotonic()
         for _ in range(6):
             limiter.acquire()
@@ -201,7 +201,7 @@ class TestRateLimiting:
         # The other half of the pair. A limiter that simply slept on every
         # call would satisfy the test above, and would make a five-word run
         # pay for a rate limit it was never going to hit.
-        limiter = media._RateLimiter(rate=25, burst=6)
+        limiter = media.RateLimiter(rate=25, burst=6)
         start = time.monotonic()
         for _ in range(6):
             limiter.acquire()
