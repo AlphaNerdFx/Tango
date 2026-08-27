@@ -16,6 +16,8 @@ import gzip
 import json
 import sqlite3
 
+from unittest.mock import patch
+
 import pytest
 
 import pipeline.wiktdata as wiktdata
@@ -262,17 +264,32 @@ class TestDownloadUrl:
 
 class TestDiscouraged:
 
-    def test_english_is_discouraged_with_a_reason(self):
-        # Measured, not assumed: a live English run consulted the index zero
-        # times because Merriam-Webster already answered everything.
-        reason = wiktdata.is_discouraged("en")
-        assert reason
-        assert "Merriam-Webster" in reason
+    def test_english_is_no_longer_discouraged(self):
+        """
+        This test asserted the opposite until 27 August 2026, and it was
+        right to: a live English run consulted the index zero times, because
+        that run predated IPA and Pronunciation being card fields. ADR-011
+        reversed the decision on measured grounds -- English deck lemmas get
+        IPA from the index 96.4% of the time, against 0% from a source that
+        was down all day -- so the assertion is inverted rather than deleted.
+        """
+        assert wiktdata.is_discouraged("en") is None
 
     def test_languages_that_need_the_index_are_not_discouraged(self):
         # These are exactly the languages with no other definition source.
         for lang in ("fr", "de", "ru"):
             assert wiktdata.is_discouraged(lang) is None
+
+    def test_the_mechanism_still_works_for_a_language_that_needs_it(self):
+        """
+        The partner. `_DISCOURAGED` is empty now, so every assertion above
+        would pass against a function that always returned None. This pins
+        the lookup itself, so the next language worth warning about can be
+        added by one row rather than by rediscovering the mechanism.
+        """
+        with patch.dict(wiktdata._DISCOURAGED, {"xx": "because reasons"}, clear=False):
+            assert wiktdata.is_discouraged("xx") == "because reasons"
+            assert wiktdata.is_discouraged("en") is None
 
     def test_discouraged_is_advisory_and_does_not_block_building(self, tmp_path):
         # It must stay a warning, not a refusal -- the data is real and
