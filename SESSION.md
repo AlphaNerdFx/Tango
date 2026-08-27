@@ -28,10 +28,13 @@ transcript language as well as the definition language, and the run names
 the words that got no definition.
 Antonyms, the last of them, shipped on 26 August 2026 as ADR-010: an
 offline ConceptNet index, `make antonyms`, French 19.7% to 34.8% measured
-end to end. The gain is concentrated in French because ConceptNet carries
-the English and French Wiktionary editions and Tango's index is built from
-the English one, so the gap was between editions rather than between
-sources. `ROADMAP.md` has the ladder to v1.0.0 and
+end to end. The gain is concentrated in French because kaikki and ConceptNet
+extract the same Wiktionary edition with different tools and disagree about
+which words carry an antonym: 15 045 French words in the index against
+12 376 in ConceptNet, comparable and overlapping only partly, where German
+and Russian already hold eight to thirteen times more than ConceptNet does.
+The first version of this claim, written the same day, said the gap was
+between editions. It was wrong; see ARCHITECTURE 8.42 and 6.22. `ROADMAP.md` has the ladder to v1.0.0 and
 the rule that picks the number; CLAUDE.md 15 is the short form, and
 CLAUDE.md 16 is the commit and tag format.
 **HEAD:** in sync with `tango-origin/main`, tagged v0.6.0 on
