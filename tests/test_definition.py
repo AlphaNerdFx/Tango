@@ -2471,3 +2471,34 @@ class TestEnglishPronunciationFallsThrough:
              patch.object(def_module.wiktdata, "lookup", lambda *a, **k: None):
             assert def_module._resolve_pronunciation("Haus", "de") == (None, None)
         mock_api.assert_not_called()
+
+
+class TestFetchReportsProgress:
+    @patch("pipeline.definition._fetch_definition_or_fallback_example")
+    def test_progress_fires_once_per_lemma_with_a_running_count(self, mock_fetch):
+        mock_fetch.return_value = (None, def_module.FallbackExtras())
+        seen = []
+        def_module.fetch_definitions(
+            ["a", "b", "c"], use_cache=False, progress=lambda d, t: seen.append((d, t))
+        )
+        assert seen == [(1, 3), (2, 3), (3, 3)]
+
+    @patch("pipeline.definition._fetch_definition_or_fallback_example")
+    def test_a_failing_lemma_still_advances_the_count(self, mock_fetch):
+        # Otherwise a batch with one bad word never reaches 100% and the
+        # display sits at 99% forever, which reads as a hang.
+        mock_fetch.side_effect = [
+            (None, def_module.FallbackExtras()),
+            RuntimeError("boom"),
+            (None, def_module.FallbackExtras()),
+        ]
+        seen = []
+        def_module.fetch_definitions(
+            ["a", "b", "c"], use_cache=False, progress=lambda d, t: seen.append(d)
+        )
+        assert sorted(seen) == [1, 2, 3]
+
+    @patch("pipeline.definition._fetch_definition_or_fallback_example")
+    def test_no_callback_is_the_default_and_does_not_raise(self, mock_fetch):
+        mock_fetch.return_value = (None, def_module.FallbackExtras())
+        assert def_module.fetch_definitions(["a"], use_cache=False) is not None
