@@ -142,7 +142,9 @@ The offline dictionary is built from Wiktionary data and works with no network a
 | German | 91% | 84% | 60% | 51% |
 | Russian | 91% | 72% | 72% | 46% |
 
-Do not build it for English. English already scores 98% from Merriam-Webster, whose definitions are better curated; the index would add nothing and costs a 475 MB download.
+Build it for English too, since 27 August 2026. That advice used to be the opposite, and the reversal is worth knowing: Merriam-Webster still writes better definitions and is still tried first, but it is the only source English has, it allows 1000 queries a day per key, and one 1094-word video exceeds that on its own. The index is the floor under it.
+
+Measured on a real 1094-lemma English deck, the index supplies IPA for 96.4% of words, audio for 97.0% and an example for 90.3%, all offline. Before it, English cards carried none of those whenever dictionaryapi.dev was unreachable, which it was for the whole day this was measured. See `docs/ADR-011-english-offline-index.md`.
 
 The antonym column above is what the Wiktionary index alone gives. Antonyms have their own optional index, built once for every language at the same time:
 
