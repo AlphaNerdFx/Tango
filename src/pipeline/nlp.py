@@ -55,6 +55,7 @@ warnings.filterwarnings(
 # noqa: E402 throughout -- these must follow the filter above to take effect.
 import spacy  # noqa: E402,I001
 from spacy.language import Language  # noqa: E402
+from pipeline import wiktdata
 from pipeline.language import (  # noqa: E402
     SpacyModelUnavailableError,
     get_spacy_model,
@@ -270,6 +271,75 @@ def _corrected_lemma(token, language: str, known: frozenset) -> str:
     return lemma
 
 
+def _merge_inflected_forms(
+    vocabulary: dict,
+    surface_forms: Optional[dict],
+    pos_counts: dict,
+    language: str,
+) -> int:
+    """
+    Fold an inflected form onto its base form when both are in this run.
+
+    Args:
+        vocabulary:    lemma -> frequency, modified in place.
+        surface_forms: lemma -> how it appeared, modified in place if given.
+        pos_counts:    lemma -> Counter of UPOS tags, modified in place.
+        language:      Transcript language, naming the index to consult.
+
+    Returns:
+        How many lemmas were folded away.
+
+    spaCy's lemmatizer sometimes returns the surface form. Measured on a real
+    1079-card French deck, 15 cards were an inflected form of another card in
+    the same deck: `voyez` beside `voir`, `soit` beside `être`, `attend`
+    beside `attendre`. Each pair is one word taught twice.
+
+    The index already knows the answer. `form_of` is set on 73% of French
+    rows and 81% of German ones, and 8.30 already follows it one hop to
+    resolve a definition. This follows the same pointer one hop earlier, to
+    resolve the vocabulary key.
+
+    **Only when the base form is also in this run**, which is the whole
+    reason this is safe. Folding unconditionally would overturn 8.30's rule
+    that the learner sees the form they met, and would merge words that are
+    only related on paper: French `seconde` points at `second`, but it is
+    also a noun meaning a unit of time. Requiring both forms means nothing
+    is ever lost, only de-duplicated -- the base form was going to be a card
+    regardless, and the inflected one now adds its count to it instead of
+    standing beside it.
+
+    A missing or unbuilt index makes this a no-op, like every other use of
+    the index.
+    """
+    if not wiktdata.is_available(language):
+        return 0
+
+    merged = 0
+    for lemma in list(vocabulary):
+        entry = wiktdata.lookup(lemma, language)
+        if not entry or not entry.form_of:
+            continue
+        base = entry.form_of.lower()
+        # One hop, and only onto a word this run already has. Same "one hop
+        # only" rule as 8.30: a chain is not worth the risk of landing
+        # somewhere unrelated.
+        if base == lemma or base not in vocabulary:
+            continue
+
+        vocabulary[base] += vocabulary.pop(lemma)
+        if surface_forms is not None and lemma in surface_forms:
+            keep = surface_forms.setdefault(base, [])
+            for surface in surface_forms.pop(lemma):
+                if surface not in keep and len(keep) < _MAX_SURFACE_FORMS:
+                    keep.append(surface)
+        if lemma in pos_counts:
+            pos_counts.setdefault(base, Counter()).update(pos_counts.pop(lemma))
+        merged += 1
+        logger.debug("Folded '%s' onto '%s' (both present in this run)", lemma, base)
+
+    return merged
+
+
 def _is_valid_token(token) -> bool:
     """
     Return True if a token should be included in the vocabulary output.
@@ -428,6 +498,14 @@ def process_transcript(
 
         if parts_of_speech is not None:
             pos_counts.setdefault(lemma, Counter())[token.pos_] += 1
+
+    # Before the tags are resolved below, so a folded lemma's tags are
+    # counted toward the word that survives rather than discarded with it.
+    folded = _merge_inflected_forms(vocabulary, surface_forms, pos_counts, language)
+    if folded:
+        logger.info(
+            "Folded %d inflected form(s) onto a base form already in this run", folded
+        )
 
     # Resolved after the loop rather than during it, because the answer is
     # the tag the word carried MOST often, not the one it happened to carry
