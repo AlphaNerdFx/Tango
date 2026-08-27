@@ -1343,6 +1343,15 @@ extractions that silently returned template syntax like `{{семантика|`
 as though they had succeeded -- because wiktextract resolved those
 upstream.
 
+**English was excluded, and that was reversed on 27 August 2026.** The
+exclusion was measured rather than assumed: a live English run consulted the
+index zero times because Merriam-Webster answered everything. What the
+measurement could not know is that IPA and Pronunciation would become card
+fields a week later, and that `_resolve_pronunciation` would consult the
+index first for every language. English deck lemmas now get IPA from it
+96.4% of the time. ADR-011 has the full argument, including the licensing
+half: MW allows 1000 queries a day per key and one video can exceed that.
+
 **Layered with OMW, not replacing it.** Measured against a real 958-lemma
 French deck, the index covers synonyms at 49% against OMW's 76%. Reading
 that number the other way round would have traded better data for worse,
