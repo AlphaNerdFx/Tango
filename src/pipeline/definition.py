@@ -207,11 +207,12 @@ def _wordnet_synonyms_antonyms(word: str, language: str = "en") -> tuple:
 # ── Constants (moved to config.py at end of project) ─────────────────────────
 
 from pipeline.config import (
-    MW_API_KEY, MW_API_BASE, DICT_API_BASE,
+    MW_API_KEY, MW_API_BASE, MW_RATE_LIMIT, MW_BURST, DICT_API_BASE,
     WIKTIONARY_API_BASE, WIKTIONARY_USER_AGENT,
     API_TIMEOUT, DB_PATH, CIRCUIT_BREAKER_THRESHOLD, DEFINITION_FETCH_WORKERS,
 )
 from pipeline import antonyms as antonym_index
+from pipeline.media import RateLimiter
 from pipeline import wiktdata
 
 
@@ -312,6 +313,10 @@ class DefinitionBatchResult:
     not_found_antonyms: dict[str, list[str]]   = field(default_factory=dict)
     not_found_ipa:      dict[str, str]         = field(default_factory=dict)
     not_found_audio:    dict[str, str]         = field(default_factory=dict)
+    # Sources the circuit breaker gave up on mid-run. Carried on the result
+    # rather than read off module state by the caller, so a run reports what
+    # happened during *that* run.
+    sources_stopped:    list[str]              = field(default_factory=list)
 
 
 @dataclass
@@ -910,6 +915,13 @@ _circuit_tripped: set[str] = set()
 # This lock makes each read-modify-write on the breaker state atomic.
 _circuit_lock = threading.Lock()
 
+# Paced for the same reason media.py is, and discovered the same way: a real
+# run drove one source past its rate limit, the source stopped answering, and
+# the run reported success with most of the deck empty. The breaker below is
+# the symptom's last line of defence; this is meant to stop it being reached.
+# config.MW_RATE_LIMIT records what is measured and what is not.
+_MW_LIMITER = RateLimiter(MW_RATE_LIMIT, MW_BURST)
+
 
 def reset_circuit_breaker() -> None:
     """
@@ -942,6 +954,19 @@ def _circuit_record_failure(source: str) -> None:
             )
 
 
+def tripped_sources() -> list[str]:
+    """
+    Return the sources the circuit breaker stopped using during this run.
+
+    A tripped breaker is the difference between a thin deck and a broken
+    one, and it used to be visible only as a log line nobody reads. The run
+    summary reports it, so "85% of my cards have no definition" comes with
+    its cause attached rather than looking like the pipeline's own fault.
+    """
+    with _circuit_lock:
+        return sorted(_circuit_tripped)
+
+
 def _circuit_record_success(source: str) -> None:
     with _circuit_lock:
         _circuit_failures[source] = 0
@@ -966,6 +991,7 @@ def _fetch_from_mw(lemma: str) -> Optional[list]:
         return None
 
     url = f"{MW_API_BASE}/{lemma}?key={api_key}"
+    _MW_LIMITER.acquire()
     try:
         response = requests.get(url, timeout=API_TIMEOUT)
         response.raise_for_status()
@@ -1831,4 +1857,5 @@ def fetch_definitions(
             target,
         )
 
+    batch.sources_stopped = tripped_sources()
     return batch
