@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from types import SimpleNamespace
+
 import pytest
 
 import pipeline.definition as definition_module
@@ -2431,3 +2433,41 @@ class TestStoppedSourcesAreReportable:
         batch = definition_module.fetch_definitions([], language="en")
         assert batch.sources_stopped == ["mw"]
         definition_module.reset_circuit_breaker()
+
+
+class TestEnglishPronunciationFallsThrough:
+    """
+    ADR-011's prerequisite. The index is consulted first for every language,
+    and it used to return early on a miss. That was free while English had no
+    index; once it has one, an early return means a word the index does not
+    carry gets no pronunciation at all, where before it got dictionaryapi's.
+    """
+
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_an_index_miss_still_tries_dictionaryapi_for_english(self, mock_api):
+        mock_api.return_value = [{"phonetics": [{"text": "/haʊs/", "audio": "u.mp3"}]}]
+        with patch.object(def_module.wiktdata, "is_available", lambda _l: True), \
+             patch.object(def_module.wiktdata, "lookup", lambda *a, **k: None):
+            ipa, audio = def_module._resolve_pronunciation("house", "en")
+        assert ipa == "/haʊs/"
+        mock_api.assert_called_once()
+
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_an_index_hit_does_not_call_the_network(self, mock_api):
+        # The partner: falling through on a hit would put a request on every
+        # word and undo the reason the index exists.
+        entry = SimpleNamespace(ipa="/haʊs/", audio_url="a.ogg")
+        with patch.object(def_module.wiktdata, "is_available", lambda _l: True), \
+             patch.object(def_module.wiktdata, "lookup", lambda *a, **k: entry):
+            ipa, audio = def_module._resolve_pronunciation("house", "en")
+        assert (ipa, audio) == ("/haʊs/", "a.ogg")
+        mock_api.assert_not_called()
+
+    @patch("pipeline.definition._fetch_from_dictapi")
+    def test_a_non_english_index_miss_does_not_reach_dictionaryapi(self, mock_api):
+        # dictionaryapi.dev has no usable non-English data (issue #1), so a
+        # request for a German word is latency spent on a guaranteed miss.
+        with patch.object(def_module.wiktdata, "is_available", lambda _l: True), \
+             patch.object(def_module.wiktdata, "lookup", lambda *a, **k: None):
+            assert def_module._resolve_pronunciation("Haus", "de") == (None, None)
+        mock_api.assert_not_called()
