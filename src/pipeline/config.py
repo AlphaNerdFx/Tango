@@ -230,6 +230,28 @@ SHORT_WORD_THRESHOLD: int = int(os.getenv("SHORT_WORD_THRESHOLD", "4"))
 MW_API_KEY: str | None = os.getenv("MW_API_KEY")
 MW_API_BASE: str = "https://www.dictionaryapi.com/api/v3/references/collegiate/json"
 
+# Pacing for Merriam-Webster, in requests per second across all threads.
+#
+# Unlike MEDIA_RATE_LIMIT above, this number is NOT measured, and saying so
+# matters more than the number. What is measured: a real 1094-word English
+# run on 27 August 2026 pushed roughly 18 requests a second through five
+# workers, MW answered 167 of them and then nothing, and the circuit breaker
+# skipped it for the rest of the run. 85% of that deck shipped with "No
+# definition found". Separately, ten concurrent requests succeed and six
+# sequential ones succeed, so the key is neither blocked nor out of quota.
+#
+# 4/s is a deliberate underestimate, roughly a quarter of the rate that
+# failed. It costs about four and a half minutes on a 1094-word run, which is
+# the right trade against 85% of the deck being empty. Replace it with a real
+# ceiling when someone measures where MW actually starts refusing: the
+# measurement costs a chunk of the 1000-per-day free tier, which is why it
+# has not been done yet.
+MW_RATE_LIMIT: float = float(os.getenv("MW_RATE_LIMIT", "4.0"))
+
+# Requests allowed back-to-back before pacing applies, so a short review run
+# of a few words pays nothing.
+MW_BURST: int = int(os.getenv("MW_BURST", "8"))
+
 # dictionaryapi.dev — fallback, no key required
 DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
 
