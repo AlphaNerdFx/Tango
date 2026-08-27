@@ -8,6 +8,7 @@ Run: pytest tests/test_main.py -m "not integration"
 """
 
 import json
+import time
 from pathlib import Path
 from unittest.mock import DEFAULT, MagicMock, patch, call
 
@@ -1154,4 +1155,79 @@ class TestTorchBuildReport:
             with patch.object(builtins, "__import__", no_torch):
                 counted = _report_torch_build()
         assert counted == 0
+        assert capsys.readouterr().out == ""
+
+
+class TestDurationFormatting:
+    def test_seconds_stay_seconds(self):
+        assert main_module._duration(9) == "9s"
+        assert main_module._duration(59) == "59s"
+
+    def test_minutes_pad_the_seconds(self):
+        # "4m 3s" reads as ambiguous next to "4m 30s" in a redrawn line.
+        assert main_module._duration(75) == "1m 15s"
+        assert main_module._duration(243) == "4m 03s"
+
+    def test_hours_for_a_long_build(self):
+        assert main_module._duration(4000) == "1h 06m"
+
+    def test_negative_and_zero_do_not_render_as_nonsense(self):
+        assert main_module._duration(0) == "0s"
+        assert main_module._duration(-5) == "0s"
+
+
+class TestProgressRendering:
+    """
+    Two modes on purpose. A terminal gets one line redrawn; anything else --
+    `make run > run.log`, CI -- gets one line per decile, because carriage
+    returns in a log file are noise.
+    """
+
+    def _tracker(self, tty, elapsed=0.0):
+        tracker = main_module._Progress("definitions")
+        tracker._tty = tty
+        tracker._start = time.monotonic() - elapsed
+        return tracker
+
+    def test_a_log_file_gets_one_line_per_decile(self, capsys):
+        tracker = self._tracker(tty=False)
+        for done in range(1, 101):
+            tracker.update(done, 100)
+        lines = [ln for ln in capsys.readouterr().out.splitlines() if ln.strip()]
+        # 0% through 100% inclusive, not one line per word.
+        assert len(lines) == 11
+
+    def test_a_terminal_redraws_one_line(self, capsys):
+        tracker = self._tracker(tty=True)
+        for done in range(1, 21):
+            tracker.update(done, 20)
+        out = capsys.readouterr().out
+        assert out.count("\r") == 20
+        assert "\n" not in out
+
+    def test_no_estimate_until_there_is_something_to_estimate_from(self, capsys):
+        # An ETA computed from one completed word out of a thousand is a
+        # guess wearing a number's clothes.
+        tracker = self._tracker(tty=False, elapsed=10)
+        tracker.update(1, 1000)
+        assert "left" not in capsys.readouterr().out
+
+    def test_an_estimate_appears_once_the_sample_is_real(self, capsys):
+        tracker = self._tracker(tty=False, elapsed=10)
+        tracker.update(10, 1000)
+        assert "left" in capsys.readouterr().out
+
+    def test_a_finished_phase_shows_no_estimate(self, capsys):
+        tracker = self._tracker(tty=False, elapsed=10)
+        tracker.update(100, 100)
+        assert "left" not in capsys.readouterr().out
+
+    def test_zero_total_does_not_divide_by_zero(self, capsys):
+        self._tracker(tty=False).update(0, 0)
+        assert capsys.readouterr().out == ""
+
+    def test_finish_clears_the_line_on_a_terminal_only(self, capsys):
+        self._tracker(tty=True).finish()
+        assert "\r" in capsys.readouterr().out
+        self._tracker(tty=False).finish()
         assert capsys.readouterr().out == ""
