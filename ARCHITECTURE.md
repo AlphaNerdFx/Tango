@@ -2395,7 +2395,7 @@ times that, because nobody re-measured a number that had no date on it.
 
 ---
 
-### 8.42 The antonym gap was between Wiktionary editions
+### 8.42 The antonym gap was between two extractions of one edition
 
 Antonyms were the weakest field on a card by a wide margin: 19.7% on a real
 1054-lemma French deck, against 98.6% for definitions. TASKS.md had already
@@ -2404,20 +2404,35 @@ kaikki French entries carry sense-level antonyms and all 1682 top-level ones
 are read. The conclusion drawn from that was that 22.7% is Wiktionary's
 ceiling for French.
 
-It is the ceiling of **one edition** of Wiktionary. Tango's index comes from
-`kaikki.org/dictionary/downloads/{lang}`, the English edition's entries for
-that language. ConceptNet's antonym data comes from two editions, and the
-split is the whole finding:
+It is the ceiling of **one extraction** of Wiktionary, not of Wiktionary.
 
-| language | edges from the English edition | from the French edition |
+**This section first said "one edition", and that was wrong.** The claim was
+that Tango's index is built from the English Wiktionary's entries for each
+language, so ConceptNet was supplying an edition never read here. One query
+disproves it: `maison` in the French index glosses as "Bâtiment servant de
+logis, d'habitation, de demeure", which is the French Wiktionary's own
+wording rather than an English gloss. `wiktdata.py` has said so in its
+docstring since it was written. Recorded rather than quietly fixed, because
+this is 6.22's shape again: a plausible cause written into the record in the
+same session that found the effect.
+
+What actually differs is the extractor. kaikki runs wiktextract; ConceptNet
+ran wikiparsec in 2019. On the same edition they disagree about which words
+carry an antonym, and the gain tracks how large ConceptNet's antonym
+vocabulary is relative to the index's:
+
+| language | words the index has an antonym for | words ConceptNet has |
 |---|---|---|
-| French | 875 | 10 635 |
-| German | 2 526 | 869 |
-| Russian | 980 | 330 |
+| French | 15 045 | 12 376 |
+| German | 30 616 | 3 547 |
+| Russian | 23 747 | 1 857 |
 
-So ConceptNet hands German and Russian back data they already have, and
-hands French an edition this project has never read. Measured end to end
-after building the index:
+For German and Russian the index holds eight to thirteen times more, so
+ConceptNet mostly hands back what is already there. For French the two are
+comparable and overlap only partly, so the union is much larger than either.
+French is also where the extraction is thinnest in absolute terms: 0.78% of
+its 1.93 million words carry an antonym, against 3.25% for German and 5.28%
+for Russian. Measured end to end after building the index:
 
 | deck | before | after |
 |---|---|---|
