@@ -2555,6 +2555,70 @@ for one language, against 498 MB once for all of them.
 
 ---
 
+### 8.43 The same rate limit, the same silence, a different host
+
+A real 1094-word English run on 27 August 2026 shipped **167 cards with a
+definition and 927 with "No definition found"**, and reported success.
+
+Merriam-Webster answered the first 167 words and then nothing. It was not
+blocked and not out of quota: ten concurrent requests and six sequential
+ones all succeeded minutes later with the same key. What differed was rate.
+Five workers pushed roughly **18 requests a second**, five consecutive
+failures tripped the circuit breaker, and a tripped breaker skips its source
+for the remainder of the run.
+
+**This is 8.35 with the host's name changed.** There, Wikimedia's per-IP
+limit let 13 of 377 recordings through while the run reported success. The
+fix there was a leaky bucket; the fix here is the same bucket, now shared
+rather than copied: `media.RateLimiter` is public and `definition.py` builds
+its own instance from `MW_RATE_LIMIT`.
+
+Two things are worth separating. The pacing is a guess: 4 requests a second,
+a quarter of the rate that failed, and nobody has measured where MW actually
+starts refusing, because finding out costs a meaningful slice of a 1000-a-day
+free tier. `config.MW_RATE_LIMIT` says so in the comment rather than
+implying a measurement that was never taken.
+
+The reporting is not a guess and matters more. A tripped breaker was visible
+only as a log line at WARNING, so the failure mode was a deck that looked
+like the pipeline's own fault. `definition.tripped_sources()` now travels on
+`DefinitionBatchResult`, and the run summary prints which source stopped,
+that it explains the empty fields, and what to do about it. **The lesson
+repeated across 8.35 and here is not "add rate limiting", it is that a
+source degrading quietly is worse than a source failing loudly**, and the
+summary is where that has to surface.
+
+---
+
+### 8.44 One word, two cards, because the lemmatizer gave up
+
+The same test run produced a 1079-card French deck in which **15 cards were
+an inflected form of another card in the same deck**: `voyez` beside `voir`,
+`soit` beside `être`, `attend` beside `attendre`, `mangerai` beside
+`manger`. One word, taught twice, 1.4% of the deck.
+
+spaCy returned the surface form as the lemma for those, so each became its
+own vocabulary key. `_corrected_lemma` already repairs one shape of this,
+but only for French verbs ending in `-e` validated against the model's own
+vocabulary (issue #13), and none of these fifteen fit it.
+
+The index already knew the answer. `form_of` is populated on 73% of French
+rows and 81% of German ones, and 8.30 follows it one hop to resolve a
+*definition*. `nlp._merge_inflected_forms` follows the same pointer one hop
+earlier to resolve the *vocabulary key*.
+
+**It only fires when the base form is also in the same run, and that
+restriction is the whole design.** Folding unconditionally would overturn
+8.30's rule that the learner sees the form they met, and would merge words
+that are related only on paper: French `seconde` points at `second` and is
+also a noun meaning a unit of time. Requiring both forms means nothing is
+ever lost, only de-duplicated. The base form was going to be a card
+regardless; the inflected one now adds its count and its surface forms to it
+instead of standing beside it, which also gives the surviving card a
+transcript example it would not otherwise have had.
+
+---
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
