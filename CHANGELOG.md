@@ -16,6 +16,19 @@ rather than list every change.
 
 Working toward v0.7.0, the command line as a product.
 
+### Fixed
+
+- **Failures name the fix.** Seven messages stopped the run while stating
+  only the outcome, leaving the user to find the flag in `--help` or guess
+  that one exists. Now: an already-processed video names `--force` and shows
+  the exact command; a missing translation model names
+  `--install-translation de:en` and the alternative of dropping `--def-lang`;
+  an AnkiConnect error carries the action that failed and points at
+  `--doctor`; an AnkiConnect timeout names the modal dialog that causes it
+  nearly every time; an empty transcript says the video's captions are empty
+  instead of naming a private function and a private dict key; and the three
+  CLI paths that could fail without a next step now print one.
+
 ## [0.6.0] — 2026-08-27
 
 Card quality: what is *in* the fields, rather than which fields exist.
