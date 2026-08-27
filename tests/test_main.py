@@ -769,7 +769,14 @@ class TestSetupCommands:
         assert "Tango environment" in capsys.readouterr().out
 
     def test_doctor_exit_code_reports_missing_items(self):
-        """Non-zero when something is absent, so a setup script can branch."""
+        """
+        Non-zero when something is absent, so a setup script can branch.
+
+        `make doctor` deliberately does NOT propagate this. The report's own
+        last line says every missing item is optional, and make printing
+        "Error 1" under that reads as a broken tool rather than a checklist.
+        The Makefile swallows it; the CLI keeps it.
+        """
         with patch("pipeline.__main__._run_doctor", return_value=1) as mock_doc:
             with patch("sys.argv", ["pipeline", "--doctor"]):
                 with pytest.raises(SystemExit) as exc:
