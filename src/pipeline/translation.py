@@ -85,7 +85,10 @@ class ModelNotInstalledError(Exception):
         self.from_code = from_code
         self.to_code   = to_code
         super().__init__(
-            f"No local translation model installed for {from_code} -> {to_code}."
+            f"No local translation model installed for {from_code} -> {to_code}.\n"
+            f"  Install it with: python -m pipeline "
+            f"--install-translation {from_code}:{to_code}\n"
+            f"  Or drop --def-lang to define words in their own language."
         )
 
 
@@ -674,6 +677,10 @@ def translate_word(
             elif stored == "exit":
                 raise TranslationUnavailableError(
                     f"Translation unavailable for {pair}. Exiting."
+                    f"\n  Install the model with: python -m pipeline "
+                    f"--install-translation {pair.replace(' -> ', ':')}"
+                    f"\n  Or run without --def-lang, which needs no "
+                    f"translation."
                 )
             # "download" — model should now be installed, try again
             try:
@@ -702,6 +709,10 @@ def translate_word(
         else:  # exit
             raise TranslationUnavailableError(
                 f"Translation unavailable for {pair}. Exiting."
+                f"\n  Install the model with: python -m pipeline "
+                f"--install-translation {pair.replace(' -> ', ':')}"
+                f"\n  Or run without --def-lang, which needs no "
+                f"translation."
             )
 
 
