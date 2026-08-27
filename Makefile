@@ -140,8 +140,13 @@ setup: venv
 # in this project turned out to be setup rather than logic, and none of it was
 # visible from the failure itself.
 
+# The `-` matters. `--doctor` exits non-zero when something optional is
+# missing, deliberately, so a setup script can branch on it. make treats that
+# as a failed recipe and prints "Error 1" under a report whose own last line
+# says every missing item is optional, which reads as a broken tool.
+# The CLI keeps its exit code; this target does not propagate it.
 doctor: venv
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --doctor
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --doctor || true
 
 # -- dictionary ---------------------------------------------------------------
 # Builds the offline Wiktionary index for one language. Large one-time
