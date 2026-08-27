@@ -1,18 +1,26 @@
 """
 Offline antonym index, built from ConceptNet's assertions dump.
 
-Antonyms are the weakest field on a Tango card: 22.7% on a real French deck
+Antonyms are the weakest field on a Tango card: 19.7% on a real French deck
 against 98.6% for definitions. The offline Wiktionary index is not holding
 anything back (0 of 40000 kaikki French entries carry sense-level antonyms),
 so the ceiling belongs to the source, and the source needed widening.
 
 ConceptNet is not a different kind of data. It is Wiktionary's own antonyms,
-re-extracted from two editions, English and French. Tango's index is built
-from the English edition, so for German and Russian this mostly hands back
-what the index already has. For French it hands over the French edition,
-which this project has never read. That is why the measured gain is +12.5
-points for French and +0.6 for Russian. ADR-010 has the numbers and
-`scripts/measure_antonym_sources.py` reproduces them.
+re-extracted by a different tool: kaikki runs wiktextract, ConceptNet ran
+wikiparsec. Both read the same edition of Wiktionary for a given language,
+and they disagree about which words have an antonym often enough that the
+union is much larger than either. How much larger depends on the language:
+
+    language   words the index has        words ConceptNet has   gain
+    fr         15 045                     12 376                 +15.1 points
+    de         30 616                      3 547                  +4.2 points
+    ru         23 747                      1 857                  +1.0 points
+
+French is where wiktextract's antonym capture is thinnest (0.78% of a
+1.93 million word index, against 3.25% for German), which is why French had
+the most to gain. ADR-010 has the full evaluation and
+`scripts/measure_antonym_sources.py` reproduces every number.
 
 One file covers every language, unlike the per-language Wiktionary indexes:
 4.3 MB for 22 languages, against 131 to 404 MB for one language of Wiktionary.
