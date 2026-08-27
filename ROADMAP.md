@@ -154,7 +154,8 @@ The first release aimed at someone who did not write it.
 
 - Migrate argparse → Typer
 - Error messages that name the fix, everywhere (`make doctor` already does
-  this; the pipeline itself does not)
+  this; the pipeline itself does not). Started 27 August 2026: the seven
+  that stopped a run without naming a next step now name one.
 - Progress and timing that make a long run legible
 
 ### v0.8.0 — Runs on any operating system
