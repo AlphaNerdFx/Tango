@@ -46,7 +46,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 import requests
 
@@ -1722,6 +1722,7 @@ def fetch_definitions(
     def_language: Optional[str] = None,
     parts_of_speech: Optional[dict] = None,
     use_cache: bool = True,
+    progress: Optional[Callable[[int, int], None]] = None,
 ) -> DefinitionBatchResult:
     """
     Fetch definitions for a list of lemmas, returned in first-appearance
@@ -1811,6 +1812,12 @@ def fetch_definitions(
                 ): lemma
                 for lemma in to_fetch
             }
+            # Reported as each future lands rather than in order, because
+            # the point is to show that something is happening. This phase
+            # is now the long one by a wide margin: Merriam-Webster is paced
+            # at MW_RATE_LIMIT, so a thousand-word English video spends
+            # minutes here and used to print nothing at all while it did.
+            done = 0
             for future in as_completed(future_to_lemma):
                 lemma = future_to_lemma[future]
                 try:
@@ -1818,6 +1825,9 @@ def fetch_definitions(
                 except Exception:
                     logger.exception("Unexpected error fetching '%s'.", lemma)
                     results[lemma] = (None, FallbackExtras())
+                done += 1
+                if progress:
+                    progress(done, len(to_fetch))
 
         for lemma in to_fetch:
             result, extras = results[lemma]
