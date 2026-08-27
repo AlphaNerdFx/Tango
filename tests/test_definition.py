@@ -18,6 +18,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+import pipeline.definition as definition_module
+
 import pipeline.definition as def_module
 from pipeline.definition import (
     DefinitionBatchResult,
@@ -2369,3 +2371,63 @@ class TestCacheKeyMigration:
             "SELECT name FROM sqlite_master WHERE type='table' AND name='definitions_v0'"
         ).fetchone()
         assert legacy is None
+
+
+class TestMerriamWebsterIsPaced:
+    """
+    A real 1094-word English run drove MW at roughly 18 requests a second.
+    It answered 167 and then nothing, the breaker skipped it for the rest of
+    the run, and 85% of the deck shipped with "No definition found" while the
+    run reported success. Pacing exists to stop that, and the tests below
+    pin both halves: the slot is claimed, and the breaker is reportable.
+    """
+
+    @patch("pipeline.definition.requests.get")
+    def test_a_slot_is_claimed_before_the_request(self, mock_get):
+        mock_get.return_value = MagicMock(
+            raise_for_status=lambda: None, json=lambda: [{"meta": {"id": "x"}}]
+        )
+        with patch.object(definition_module._MW_LIMITER, "acquire") as acquire:
+            with patch("pipeline.definition.MW_API_KEY", "key"):
+                definition_module._fetch_from_mw("house")
+        acquire.assert_called_once()
+
+    @patch("pipeline.definition.requests.get")
+    def test_pacing_is_not_skipped_when_the_call_fails(self, mock_get):
+        # The partner. Paying the slot only on success would let a failing
+        # source be retried as fast as the pool can go, which is the exact
+        # condition that trips the breaker.
+        import requests as _requests
+
+        mock_get.side_effect = _requests.exceptions.RequestException("boom")
+        with patch.object(definition_module._MW_LIMITER, "acquire") as acquire:
+            with patch("pipeline.definition.MW_API_KEY", "key"):
+                definition_module._fetch_from_mw("house")
+        acquire.assert_called_once()
+
+
+class TestStoppedSourcesAreReportable:
+    def test_tripped_sources_names_what_the_breaker_gave_up_on(self):
+        definition_module.reset_circuit_breaker()
+        assert definition_module.tripped_sources() == []
+        for _ in range(definition_module.CIRCUIT_BREAKER_THRESHOLD):
+            definition_module._circuit_record_failure("mw")
+        assert definition_module.tripped_sources() == ["mw"]
+        definition_module.reset_circuit_breaker()
+
+    def test_a_source_below_the_threshold_is_not_reported(self):
+        # The partner: reporting a source that merely had a bad word would
+        # put a scary line on a perfectly good run.
+        definition_module.reset_circuit_breaker()
+        for _ in range(definition_module.CIRCUIT_BREAKER_THRESHOLD - 1):
+            definition_module._circuit_record_failure("mw")
+        assert definition_module.tripped_sources() == []
+        definition_module.reset_circuit_breaker()
+
+    def test_the_batch_carries_what_stopped(self):
+        definition_module.reset_circuit_breaker()
+        for _ in range(definition_module.CIRCUIT_BREAKER_THRESHOLD):
+            definition_module._circuit_record_failure("mw")
+        batch = definition_module.fetch_definitions([], language="en")
+        assert batch.sources_stopped == ["mw"]
+        definition_module.reset_circuit_breaker()
