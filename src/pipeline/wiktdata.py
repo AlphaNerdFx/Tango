@@ -85,14 +85,16 @@ def download_url(language: str) -> str:
 # nothing. Its first-sense definitions are frequently archaic too, because
 # English Wiktionary orders senses historically rather than by frequency:
 # "may" -> "To be strong; to have power (over)".
-_DISCOURAGED: dict[str, str] = {
-    "en": (
-        "English already gets ~98% definition coverage from Merriam-Webster "
-        "and dictionaryapi.dev, which are better curated.\n"
-        "  A measured English run used this index zero times, so it costs a "
-        "475 MB download to change nothing."
-    ),
-}
+# English was here until 27 August 2026, on the grounds that a measured run
+# used the index zero times so it cost a download to change nothing. That was
+# true when measured on 7 August and stopped being true on the 14th, when IPA
+# and Pronunciation became card fields and `_resolve_pronunciation` began
+# consulting the index first for every language. The other half of the
+# reasoning survives and is not recorded here as discouragement because it is
+# not one: Merriam-Webster's definitions are better curated, which is why
+# `fetch_definition` still tries MW first for English. The index is the floor
+# under it, not a replacement. ADR-011.
+_DISCOURAGED: dict[str, str] = {}
 
 
 def is_discouraged(language: str) -> Optional[str]:
