@@ -227,6 +227,25 @@ SHORT_WORD_THRESHOLD: int = int(os.getenv("SHORT_WORD_THRESHOLD", "4"))
 
 # Merriam-Webster Collegiate API — primary definition source
 # Key required: https://dictionaryapi.com/register/index.htm (free tier: 1000/day)
+# Merriam-Webster's terms, quoted from dictionaryapi.com because they shape
+# the architecture rather than merely the setup:
+#
+#   "free as long as it is for non-commercial use, usage does not exceed
+#    1000 queries per day per API key, and use is limited to two reference
+#    APIs"
+#
+# and the key is "specific to your application". Three consequences:
+#
+#   1. 1000/day is a per-user ceiling that pacing cannot lift. The English
+#      run that prompted MW_RATE_LIMIT below needed 1094 lookups for one
+#      video, so it could not have completed on a free key however politely
+#      it asked.
+#   2. The key must be the user's own. Shipping one would put every user
+#      through a single 1000-a-day allowance and, being application-scoped,
+#      would be the wrong licence besides. `make setup` asks for it.
+#   3. Commercial use is a negotiation, not a tier. Anything monetized needs
+#      MW's written terms, which is why MW must stay an enhancement rather
+#      than the thing English depends on. See ADR-011.
 MW_API_KEY: str | None = os.getenv("MW_API_KEY")
 MW_API_BASE: str = "https://www.dictionaryapi.com/api/v3/references/collegiate/json"
 
