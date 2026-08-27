@@ -435,3 +435,23 @@ class TestSession:
         ).fetchall()
         conn.close()
         assert tables == []
+
+
+class TestErrorMessagesNameTheFix:
+    """
+    v0.7.0: a failure the user can act on must say how.
+
+    This one stops a run dead. It used to end at "No new cards will be
+    created", which states the outcome and leaves the user to find `--force`
+    in `--help`, if they guess that a flag exists at all.
+    """
+
+    def test_already_processed_names_force(self):
+        message = str(VideoAlreadyProcessedError("abc123", "2026-08-01", "French"))
+        assert "--force" in message
+
+    def test_already_processed_still_says_what_happened(self):
+        # The partner: naming the fix must not cost the fact. A message that
+        # is only a command leaves the user guessing what went wrong.
+        message = str(VideoAlreadyProcessedError("abc123", "2026-08-01", "French"))
+        assert "abc123" in message and "2026-08-01" in message and "French" in message
