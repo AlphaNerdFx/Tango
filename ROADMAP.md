@@ -158,7 +158,37 @@ The first release aimed at someone who did not write it.
   that stopped a run without naming a next step now name one.
 - Progress and timing that make a long run legible
 
-### v0.8.0 — Runs on any operating system
+### v0.8.0 — Packaged and installable
+
+**Moved here from v0.10.0 on 27 August 2026.** It was three rungs back,
+behind cross-platform support and install size, which is the ordering of a
+project polishing for users who cannot install it. An outside review put it
+plainly: the funnel has no top. Card quality, portability and disk footprint
+all matter more once someone can run the thing, and less than nothing before.
+
+Two things moved with it, because a published package that fails on first
+contact is worse than no package. `ANKI_HOST` is a WSL gateway IP, which is
+wrong on every other platform, and the default install pulls translation and
+its 900 MB whether or not anyone asked for it.
+
+- **Decide the name.** `tango` on PyPI is an unrelated project and
+  `pyproject.toml` currently says `yt-anki-pipeline`. Every tag, link and
+  document written before this decision accrues to a name that cannot ship
+- **A console entry point.** There is no `[project.scripts]` at all today, so
+  even an editable install gives you `python -m pipeline` rather than a verb
+- **A thin default install.** One language, no translation, no torch.
+  `pip install <name>[translate]` for the rest
+- **`ANKI_HOST` that works off WSL.** It defaults to a gateway IP that is
+  meaningless on macOS, native Linux and native Windows
+- Model and index downloads as a first-run step rather than a README
+- Dockerfile for the "just run it" case
+- Uninstall that actually removes the 800 MB of indexes
+
+### v0.9.0 — Runs on any operating system
+
+The `ANKI_HOST` half of this moved into v0.8.0, since a package that cannot
+reach Anki on the user's own platform is not installable in any useful
+sense. What is left is the rest of the portability work.
 
 Today the repo assumes WSL2 with Anki on the Windows side. That assumption
 is load-bearing in more places than it looks.
@@ -166,15 +196,13 @@ is load-bearing in more places than it looks.
 - `_translate_wsl_path()` and `_is_wsl()` exist because AnkiConnect resolves
   paths on the Windows side. macOS and native Linux need neither; native
   Windows needs no translation but different path handling
-- `ANKI_HOST` is a WSL gateway IP that changes on every WSL restart. On any
-  other platform it is `localhost` and never moves
 - The Makefile is the documented entry point for 23 targets, and GNU make is
   not a reasonable requirement on Windows. `make help` already prints the CLI
   equivalent of every user-facing target — the remaining work is making the
   CLI the primary path and the Makefile a convenience
 - CI on Linux, macOS and Windows, because "should work" is not evidence
 
-### v0.9.0 — Runs on modest hardware
+### v0.10.0 — Runs on modest hardware
 
 **Measured, 15 August 2026: `.tangovenv` is 5.9 GB and `dictionaries/` is
 820 MB.** Step 1 below shipped on 26 August 2026 and took `.tangovenv` to
@@ -272,15 +300,6 @@ upstream change:
 High-end hardware should be able to spend more, not merely avoid crashing:
 worker counts, batch sizes and cache behaviour should scale to what the
 machine has rather than being fixed at defaults chosen on one laptop.
-
-### v0.10.0 — Packaged and installable
-
-- A published package, so the install is one command and not a git clone.
-  **The name needs deciding: `tango` on PyPI is an unrelated project** —
-  `pyproject.toml` currently says `yt-anki-pipeline`
-- Model and index downloads as a first-run step rather than a README
-- Dockerfile for the "just run it" case
-- Uninstall that actually removes the 800 MB of indexes
 
 ### v0.11.0 — Freeze candidate
 
