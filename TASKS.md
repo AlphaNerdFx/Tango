@@ -1175,6 +1175,72 @@ remaining user-visible value is; the rest is measurement and hygiene.
       wrong: no TTS source was needed. Wiktionary already carries Wikimedia
       Commons URLs for real human recordings, which is better than synthesis
       and was sitting in data the pipeline already downloaded.
+- [ ] **Log every queue decision, starting now.** The cheapest item on this
+      page and the only one with a deadline, because the data cannot be
+      recovered later.
+
+      `deck._check_single` sorts each lemma into SKIP, QUEUE or NEW by
+      WRatio, and QUEUE is the band between `CONFIDENCE_LOW` (60) and
+      `CONFIDENCE_HIGH` (90) where the user is asked y/n/s. **The answer is
+      used and thrown away.** Nothing records what was asked, what the
+      scores were, or what the user said. Every prompt anyone has ever
+      answered is gone.
+
+      That is the training set for the item below, and for any future
+      tuning of the two thresholds, which were picked by hand and have
+      never been validated against a real answer. One table, written at the
+      moment of the prompt: lemma, the matched card front, WRatio, token
+      sort ratio, length ratio, the deck, and the answer. No behaviour
+      change, no cost at runtime, and in a month there is something to
+      learn from. Without it, the item below cannot start when it is
+      wanted, only when the logging has run for a season.
+
+- [ ] **Stop asking the user y/n/s for every uncertain word.** Raised
+      27 August 2026. Recorded here rather than acted on, because part of it
+      sits against ROADMAP §4's exclusion of deep-learning work. See the
+      note there.
+
+      **These are two problems and they should not be built as one.**
+
+      *Is this word already in the deck?* A comparison against the user's
+      own collection, currently fuzzy string matching, and the source of the
+      prompts. Better features would shrink the uncertain band: a learned
+      classifier over the decision log above, or embeddings where string
+      similarity is the wrong tool (`sein`/`seine` is a near-string-match
+      and a real inflection; `Bank`/`Bar` is not). This is the part where
+      machine learning genuinely fits.
+
+      *Should this word be a card at all?* A judgement about the word, not
+      the deck: `you`, `bus`, `and`. **This one needs no model.** A
+      frequency-ranked word list is the proficiency proxy, it is a lookup
+      table, it is offline, deterministic and explainable, and it can be
+      wrong in a way a user can see and correct. Reaching for a model here
+      would be the expensive way to lose an argument with a CSV.
+
+      **Frequency rank is also the answer to the download-size half.** A
+      proficiency level does not by itself shrink an index, because
+      `dictionaries/` is sliced by *language*, not by difficulty, and 81.4%
+      of the German index is inflected forms (8.30) that a beginner needs
+      exactly as much as anyone. What does shrink it is shipping the index
+      **sliced by frequency rank**: an A2 learner needs the top few
+      thousand lemmas and their inflections, not 1.93 million entries. That
+      is one mechanism serving both the filter and the ROADMAP v0.9.0 size
+      goal, and it is worth designing once rather than twice.
+
+      **The error asymmetry is already settled in this repository and
+      applies to both halves.** From the v0.6.0 rung: a filler that slips
+      through costs one card, a word wrongly filtered is never offered and
+      cannot be missed. So the automation must bias toward creating the
+      card. A false "you already know this" is silent and permanent; a
+      false "here is a new word" costs one deletion. Any threshold, model
+      or level chosen here should be tuned against that asymmetry rather
+      than against accuracy, which weighs the two errors equally and is
+      therefore the wrong metric for this problem.
+
+      A proficiency test to place the user is a separate question again,
+      and the cheaper first version is letting them pick a level and change
+      it later.
+
 - [ ] User vocabulary profiles from Anki review history. Requires at least 30
       days of review data before the model has anything to learn from.
 - [ ] Video recommendations by vocabulary domain and level. Depends on the
