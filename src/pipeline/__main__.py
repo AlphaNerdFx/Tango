@@ -319,6 +319,8 @@ def _select_deck(deck_arg: str | None, session: Session) -> str:
 
     if not decks:
         _err("No decks found in Anki.")
+        _info("Create a deck in Anki first, or pass --deck \"<name>\" and it "
+              "will be created on import.")
         sys.exit(1)
 
     print()
@@ -1178,6 +1180,10 @@ def _run_install_model(language: str) -> int:
         _ok(f"Installed {model}.")
     else:
         _err(f"spaCy download failed for {model}.")
+        _info("Usually the network, or a pip that cannot reach GitHub, which "
+              "is where spaCy hosts its models.")
+        _info(f"Retry, or install it by hand: "
+              f"{sys.executable} -m spacy download {model}")
     return result.returncode
 
 
@@ -1210,6 +1216,10 @@ def _run_install_translation(pair: str) -> int:
         _ok(f"Translation ready: {from_code} -> {to_code}")
         return 0
     _err(f"Could not install translation for {from_code} -> {to_code}.")
+    _info("argostranslate publishes no model for every pair. It pivots "
+          "through English, so try the two halves separately:")
+    _info(f"  python -m pipeline --install-translation {from_code}:en")
+    _info(f"  python -m pipeline --install-translation en:{to_code}")
     return 1
 
 
