@@ -16,6 +16,23 @@ rather than list every change.
 
 Working toward v0.7.0, the command line as a product.
 
+### Added
+
+- **English can have an offline index, and should.** `make dictionary
+  LANGUAGE=en` used to warn you off. That advice was measured on 7 August,
+  a week before IPA and Pronunciation became card fields, and it has been
+  reversed. On a real 1094-lemma English deck the index supplies IPA for
+  96.4% of words, audio for 97.0% and an example for 90.3%, all offline,
+  where before English carried none of those whenever dictionaryapi.dev was
+  unreachable.
+
+  Merriam-Webster is still tried first for definitions, because they are
+  better written. What changed is that it is no longer the only thing
+  holding English up: its free tier allows 1000 queries a day per key and
+  one 1094-word video exceeds that on its own, and its licence does not
+  cover a commercial product. 502 MB to download, 236 MB on disk, the
+  smallest of the four indexes. ADR-011.
+
 ### Fixed
 
 - **Merriam-Webster is paced, and a source that stops is reported.** A real
@@ -38,6 +55,12 @@ Working toward v0.7.0, the command line as a product.
   surface forms. Only when the base form is in the same run, so a word met
   only in an inflected form is still taught as the learner met it.
   ARCHITECTURE 8.44.
+
+- **An index miss no longer costs English its pronunciation.**
+  `_resolve_pronunciation` consults the index first for every language and
+  returned early on a miss, which was free while English had no index. With
+  one, a word the index does not carry would have gone from "sometimes has
+  audio" to "never has audio". It falls through to dictionaryapi.dev now.
 
 - **`make doctor` no longer reports `Error 1`.** The report's own last line
   says every missing item is optional, and make printed a failure directly
