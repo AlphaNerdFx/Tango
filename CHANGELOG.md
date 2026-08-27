@@ -41,11 +41,14 @@ Card quality: what is *in* the fields, rather than which fields exist.
   from it when nothing else can.
 
   Measured end to end: French 19.7% to 34.8%, German 56.2% to 60.3%,
-  Russian 47.8% to 48.8%. The asymmetry is the point. ConceptNet's antonyms
-  come from two Wiktionary editions, English and French, and Tango's index
-  is built from the English one, so French gains an edition it never had
-  while German and Russian mostly get back what they already hold. The gap
-  was between editions rather than between sources. ADR-010.
+  Russian 47.8% to 48.8%. The asymmetry is the point. ConceptNet's
+  antonyms are Wiktionary's own, re-extracted by a different tool: kaikki
+  runs wiktextract, ConceptNet ran wikiparsec, and on the same edition they
+  disagree about which words carry an antonym. The French index has one for
+  15 045 words and ConceptNet has 12 376, comparable and overlapping only
+  partly, so the union is much larger. German and Russian already hold eight
+  to thirteen times more than ConceptNet does, so there it mostly hands back
+  what is there. ADR-010.
 
   Entirely optional. Without the index every card is exactly what it was,
   and `--doctor` reports it as absent rather than missing.
