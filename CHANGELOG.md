@@ -18,6 +18,32 @@ Working toward v0.7.0, the command line as a product.
 
 ### Fixed
 
+- **Merriam-Webster is paced, and a source that stops is reported.** A real
+  1094-word English run shipped 167 cards with a definition and 927 without,
+  and said "Done". MW answered the first 167 and then nothing: five workers
+  were pushing about 18 requests a second, five consecutive failures tripped
+  the circuit breaker, and a tripped breaker skips its source for the rest of
+  the run while nothing in the summary says so.
+
+  MW now goes through the same leaky bucket `media.py` has used since v0.5.2,
+  at a deliberately conservative 4 requests a second (`MW_RATE_LIMIT`), and
+  the run summary names any source the breaker gave up on, says that it
+  explains the missing content, and gives the two ways out. ARCHITECTURE 8.43.
+
+- **One word no longer becomes two cards.** A 1079-card French deck carried
+  `voyez` beside `voir` and `soit` beside `être`: 15 cards, 1.4%, each an
+  inflected form of another card in the same deck, because spaCy returned the
+  surface form as the lemma. The offline index already records the base form,
+  so an inflected form is now folded onto it, keeping its count and its
+  surface forms. Only when the base form is in the same run, so a word met
+  only in an inflected form is still taught as the learner met it.
+  ARCHITECTURE 8.44.
+
+- **`make doctor` no longer reports `Error 1`.** The report's own last line
+  says every missing item is optional, and make printed a failure directly
+  underneath it. The CLI keeps its exit code, which setup scripts branch on;
+  the make target no longer propagates it.
+
 - **Failures name the fix.** Seven messages stopped the run while stating
   only the outcome, leaving the user to find the flag in `--help` or guess
   that one exists. Now: an already-processed video names `--force` and shows
