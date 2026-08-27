@@ -49,7 +49,12 @@ learner's language). Every tag has GitHub release notes.
 longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
 5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.9.0,
 where the rest of the size work lives.
-**Working toward:** v0.7.0, the command line as a product. Goals per tag
+**Working toward:** v0.7.0, the command line as a product, then v0.8.0,
+packaged and installable. That second rung moved forward three places on
+27 August 2026: it sat behind cross-platform support and install size, which
+is the ordering of a project polishing for users who cannot install it. The
+ladder is now sequenced for someone who wants the tool adopted rather than
+finished. Goals per tag
 through v1.0.0 are in `ROADMAP.md`; the rule that picks the number is in
 section 15; the commit and tag format is in section 16; release history is
 in `CHANGELOG.md`.
