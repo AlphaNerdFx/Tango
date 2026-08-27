@@ -965,3 +965,43 @@ class TestHyphenatedCompounds:
         threshold moves, this fails and says so.
         """
         assert _check_single("après-midi", ["apres-midi"]).decision == Decision.QUEUE
+
+
+class TestErrorMessagesNameTheFix:
+    """
+    v0.7.0: a failure the user can act on must say how.
+
+    Both of these reach the user through `_err(str(exc))`, so whatever the
+    exception says is the whole of what they get.
+    """
+
+    @patch("pipeline.deck.requests.post")
+    def test_anki_error_says_what_to_check(self, mock_post):
+        import pipeline.deck as deck_module
+
+        mock_post.return_value = MagicMock(
+            json=lambda: {"error": "deck was not found: French", "result": None},
+            raise_for_status=lambda: None,
+        )
+        with pytest.raises(AnkiConnectError) as exc:
+            deck_module._anki_request("addNotes")
+        message = str(exc.value)
+        # Anki's own words survive, since they name the actual object.
+        assert "deck was not found: French" in message
+        # And the action, which Anki's message never includes.
+        assert "addNotes" in message
+        assert "--doctor" in message
+
+    @patch("pipeline.deck.requests.post")
+    def test_timeout_names_the_modal_dialog(self, mock_post):
+        import requests
+
+        import pipeline.deck as deck_module
+
+        mock_post.side_effect = requests.exceptions.Timeout()
+        # The real cause nearly every time: Anki is running and answering
+        # nothing because a dialog is open. Nothing in "timed out after 5s"
+        # points at the window sitting in front of the user.
+        with pytest.raises(AnkiNotRunningError) as exc:
+            deck_module._anki_request("addNotes")
+        assert "dialog" in str(exc.value).lower()
