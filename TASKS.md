@@ -1175,6 +1175,37 @@ remaining user-visible value is; the rest is measurement and hygiene.
       wrong: no TTS source was needed. Wiktionary already carries Wikimedia
       Commons URLs for real human recordings, which is better than synthesis
       and was sitting in data the pipeline already downloaded.
+- [ ] **French elisions: measured, and smaller than it looks.** Reported
+      27 August 2026 as "`d'accord` is labelled `accord`". True, and the
+      mechanism is confirmed: spaCy splits the elision into `d'` (ADP,
+      lemma `de`) and `accord` (NOUN), so the card carries the noun.
+
+      **The obvious fix is worse than the defect.** Dropping every token that
+      follows an elision would also drop `l'eau` -> `eau` and `d'histoire`
+      -> `histoire`, which are correct and are the overwhelming majority of
+      elisions in French. Verified on the tokenizer, not assumed.
+
+      **Measured impact: 7 of 1079 cards on a real French deck, 0.65%** --
+      and six of the seven are legitimate French words a learner needs
+      regardless of how they got there:
+
+      | word | verdict |
+      |---|---|
+      | `ici`, `après`, `autant` | common words, cards are correct |
+      | `habitude`, `ailleurs`, `accord` | real nouns/adverbs, cards are fine |
+      | `abord` | the only weak one, and it is unhelpful rather than wrong |
+
+      So there is no bug to fix here, only a feature not built: teaching
+      `d'accord` as its own card, since it is more useful to a learner than
+      `accord`. That needs a per-language list of elided fixed expressions,
+      the same shape as the filler stoplist in `language.is_filler`, checked
+      against the previous token. One dict lookup per post-elision token, so
+      the cost is not the concern; the concern is that the list is
+      hand-written per language and needs a speaker to be right.
+
+      Not started. Worth doing when a language's fixed expressions are worth
+      the curation, not before.
+
 - [ ] **Log every queue decision, starting now.** The cheapest item on this
       page and the only one with a deadline, because the data cannot be
       recovered later.
