@@ -386,7 +386,71 @@ primary key, so the same word is cached separately per definition language
 and per part of speech. The `pos` segment is omitted when no part of speech
 resolves, which is why `_cache_key()` has two return shapes.
 
-### 3.7 translation.py
+### 3.7 wiktdata.py
+
+The offline Wiktionary index, and the only source of non-English definitions.
+
+Built from wiktextract output published per language by kaikki.org, from
+that language's own Wiktionary edition, so glosses come back in the target
+language rather than as an English gloss of a foreign word. One SQLite file
+per language in `dictionaries/`, 131 to 404 MB each, built once by
+`make dictionary LANGUAGE=<code>` and read offline afterwards.
+
+```sql
+entries (
+    word TEXT, pos TEXT, definition TEXT,
+    example1 TEXT, example2 TEXT, synonyms TEXT, antonyms TEXT,
+    ipa TEXT, audio_url TEXT, form_of TEXT
+)
+```
+
+Why bulk data rather than the live API, which is ADR-008 and issue #16:
+Wikimedia rate-limits anonymous requests to roughly 8 to 10 before a 429
+regardless of pacing, and one video needs 100 to 1000 lookups. Downloading
+once sidesteps the limit rather than circumventing it.
+
+Three things in `lookup()` are worth knowing. It picks between a word's
+senses using the part of speech spaCy gave that word in its own sentence,
+because the index holds one row per (word, part of speech) and taking the
+first row defined `marcher` as a noun in a video about walking (8.29). It
+follows inflection pointers, so `glaube` borrows `glauben`'s meaning while
+keeping its own spelling and pronunciation (8.30, 8.38). And it never
+raises: a missing, corrupt or outdated index returns None and the pipeline
+falls back to its other sources, which is how every optional source in this
+project behaves.
+
+Connections are thread-local, because `definition.py` fetches through a
+thread pool and one sqlite3 connection is not safe to share.
+
+### 3.8 antonyms.py
+
+The offline antonym index, called by `definition.py` and by nothing else.
+
+One SQLite file for every language rather than one per language, 4.3 MB
+covering 22, built by `make antonyms` from ConceptNet's assertions dump. The
+dump is 498 MB and is streamed through a filter rather than stored.
+
+```sql
+antonyms (lang TEXT, word TEXT, pos TEXT, antonyms TEXT)
+```
+
+It is the last source tried for one field, after Merriam-Webster,
+dictionaryapi.dev, the Wiktionary index and WordNet/OMW have all left it
+empty. It exists because that happened on four cards in five for French.
+8.42 has the measurements and ADR-010 the evaluation.
+
+**Constraint 3.3 is enforced in the build rather than at the call site.**
+Only pairs whose two ends are in the same language are stored, so a
+cross-language antonym cannot reach a card even when a caller asks for one.
+That is deliberate: 3.3 has been violated three times, each time by
+something added beside the gate rather than inside it, and a filter in the
+data cannot be walked around by the next call site.
+
+Optional in the strong sense. Without the index every card is exactly what
+it was before the index existed, and `--doctor` reports it as absent rather
+than missing.
+
+### 3.9 translation.py
 
 Translates a lemma when `DEF_LANG` differs from `LANGUAGE`.
 
@@ -418,7 +482,7 @@ argostranslate import, because argostranslate resolves its model directory at
 import time. On WSL the default user cache path resolves differently between
 sessions, causing repeated 150MB downloads.
 
-### 3.8 cards.py
+### 3.10 cards.py
 
 Builds the Anki package.
 
@@ -458,7 +522,33 @@ package, writes the `.apkg` with a timestamped filename, and returns a
 `skipped_count` counts words that had neither a definition nor a transcript
 sentence — they produce no card at all.
 
-### 3.9 state.py
+### 3.11 media.py
+
+Downloads and caches the pronunciation audio a card embeds, called by
+`cards.build_package()`.
+
+Its own module because `cards.py` is otherwise entirely offline and
+therefore trivially testable, and definition fetching happens long before a
+package is built. Downloading belongs to neither.
+
+Why download at all when v0.5.0 shipped a link: a link opens a browser,
+which is not reviewing, and does nothing useful on AnkiDroid or AnkiMobile.
+An embedded file plays inside the card and keeps working when the source is
+down. ADR-009 rejected embedding on size grounds using an estimate nobody
+measured; real Commons files are 16 to 30 KB, so a 240-card German deck
+costs about 5 MB rather than "tens of megabytes".
+
+**The part worth remembering is the pacing.** Wikimedia rate-limits per IP,
+and the first implementation embedded 13 recordings out of 377 while
+reporting success. A rate limit does not fail a run here, it quietly
+degrades every card past the tenth. Downloads now go through a leaky bucket
+and honour `Retry-After` on a 429. 8.35 has the measurements.
+
+Files are named by hashing `language:lemma`, so a French recording can only
+ever be named `tango-fr-*` and cannot turn up in a German package. That
+naming is also what makes the cache safe to share across runs.
+
+### 3.12 state.py
 
 Owns pipeline-level SQLite tables and the in-memory session.
 
@@ -513,7 +603,7 @@ rather than failing on a primary key conflict.
 The `Session` class is an in-memory container for the selected deck name. It is
 not persisted. When the process exits, the session ends.
 
-### 3.10 __main__.py
+### 3.13 __main__.py
 
 CLI entry point using `argparse`.
 
