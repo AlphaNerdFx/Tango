@@ -150,7 +150,7 @@ The antonym column above is what the Wiktionary index alone gives. Antonyms have
 make antonyms
 ```
 
-It is a 498 MB download that is streamed rather than stored, leaving 4.3 MB on disk. Measured end to end on real decks, it takes French from 19.7% to 34.8%, German from 56.2% to 60.3% and Russian from 47.8% to 48.8%. The gain is concentrated in French because the data comes from the English and French Wiktionary editions, and the dictionary index above is built from the English one. Without it, every card is exactly what it was.
+It is a 498 MB download that is streamed rather than stored, leaving 4.3 MB on disk. Measured end to end on real decks, it takes French from 19.7% to 34.8%, German from 56.2% to 60.3% and Russian from 47.8% to 48.8%. The gain is concentrated in French because both sources extract the same Wiktionary edition with different tools, and they disagree about which words carry an antonym. The French dictionary index has one for 15,045 words and ConceptNet has 12,376, overlapping only partly; German already holds 30,616 against ConceptNet's 3,547, so it gains less. Without it, every card is exactly what it was.
 
 ---
 
