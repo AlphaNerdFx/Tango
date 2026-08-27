@@ -138,8 +138,9 @@ The fields exist and are filled; this is about what is *in* them. **Released
   ConceptNet index covering 22 languages, built by `make antonyms`, filling
   the field when nothing else can. Measured end to end, French went from
   19.7% to 34.8%, German 56.2% to 60.3%, Russian 47.8% to 48.8%. The gain is
-  concentrated in French because the gap was between Wiktionary editions
-  rather than between sources. Issue #25.
+  concentrated in French because kaikki and ConceptNet extract the same
+  Wiktionary edition with different tools, and French is where wiktextract's
+  antonym capture is thinnest. Issue #25.
 
 The last one is deliberately not a filter. Three signals were measured and
 none separates transcript damage from real words, so the run names them and
