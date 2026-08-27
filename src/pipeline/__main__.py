@@ -35,6 +35,7 @@ from pipeline import (
     transcript as transcript_module,
 )
 from pipeline.translation import reset_warning_state
+from pipeline.config import MW_RATE_LIMIT
 from pipeline.definition import reset_circuit_breaker
 from pipeline.language import (
     LanguageResolutionError,
@@ -260,6 +261,14 @@ def _wrap_words(words: list[str], width: int = 62, cap: int = 40) -> list[str]:
     return lines
 
 
+# The breaker keys sources by an internal short name. A user reading a run
+# summary has never seen "dictapi:en" and should not have to.
+_SOURCE_LABELS = {
+    "mw": "Merriam-Webster",
+    "dictapi:en": "dictionaryapi.dev",
+}
+
+
 def _print_summary(
     video_id: str,
     deck_name: str,
@@ -269,6 +278,7 @@ def _print_summary(
     skipped_count: int,
     not_found_count: int,
     not_found_words: Optional[list[str]] = None,
+    sources_stopped: Optional[list[str]] = None,
 ) -> None:
     _rule()
     print(f"  {GREEN}{BOLD}Done.{RESET}")
@@ -290,6 +300,25 @@ def _print_summary(
         # ARCHITECTURE.md 8.40.
         for line in _wrap_words(sorted(not_found_words or [])):
             print(f"            {DIM}{line}{RESET}")
+    # A source the breaker gave up on is the difference between a thin deck
+    # and a deck that looks broken, and it used to be visible only in a log
+    # line at WARNING. A real English run shipped 927 of 1094 cards with no
+    # definition because Merriam-Webster stopped answering partway through,
+    # and nothing in this summary said so.
+    for source in sources_stopped or []:
+        label = _SOURCE_LABELS.get(source, source)
+        print(f"  {YELLOW}Stopped:  {label} stopped answering partway through this "
+              f"run and was skipped for the rest of it.{RESET}")
+        print(f"            That is why cards above are missing content, rather "
+              f"than the words being unknown.")
+        if source == "mw":
+            print(f"            {DIM}-> Retry later; whatever already worked is "
+                  f"cached and will not be refetched.{RESET}")
+            print(f"            {DIM}-> Or lower MW_RATE_LIMIT (now "
+                  f"{MW_RATE_LIMIT}/s) in .env.{RESET}")
+        else:
+            print(f"            {DIM}-> Retry later; whatever already worked is "
+                  f"cached and will not be refetched.{RESET}")
     print(f"  Package:  {apkg_path}")
     _rule()
 
@@ -560,6 +589,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
         skipped_count=result.skipped_count,
         not_found_count=len(batch.not_found),
         not_found_words=batch.not_found,
+        sources_stopped=batch.sources_stopped,
     )
     _prompt_import(result.path)
 
@@ -677,6 +707,7 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
         skipped_count=result.skipped_count,
         not_found_count=len(batch.not_found),
         not_found_words=batch.not_found,
+        sources_stopped=batch.sources_stopped,
     )
     _prompt_import(result.path)
 
@@ -752,6 +783,7 @@ def _run_backlog(args: argparse.Namespace, session: Session) -> None:
         skipped_count=result.skipped_count,
         not_found_count=len(batch.not_found),
         not_found_words=batch.not_found,
+        sources_stopped=batch.sources_stopped,
     )
     _prompt_import(result.path)
 
