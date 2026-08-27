@@ -68,7 +68,7 @@ class AudioUnavailableError(Exception):
     """The audio could not be retrieved. Callers fall back to a link."""
 
 
-class _RateLimiter:
+class RateLimiter:
     """
     Paces every request this module makes, across all threads.
 
@@ -84,6 +84,13 @@ class _RateLimiter:
     This exists because the download host rate-limits per IP and answers with
     429 rather than an error, which the previous code treated as a permanent
     failure. See config.MEDIA_RATE_LIMIT for the measurements.
+
+    **Public, and used by definition.py as well as here.** Merriam-Webster
+    turned out to have the same failure shape as the download host: a real
+    English run made roughly 18 requests a second, the source stopped
+    answering after 167 words, and 85% of that deck shipped with no
+    definition. One implementation of this rather than two, because the
+    subtle part is the scheduling and a copy would drift.
     """
 
     def __init__(self, rate: float, burst: int) -> None:
@@ -108,7 +115,7 @@ class _RateLimiter:
             time.sleep(wait)
 
 
-_LIMITER = _RateLimiter(MEDIA_RATE_LIMIT, MEDIA_BURST)
+_LIMITER = RateLimiter(MEDIA_RATE_LIMIT, MEDIA_BURST)
 
 
 def _retry_after(response: requests.Response, default: float = 5.0) -> float:
