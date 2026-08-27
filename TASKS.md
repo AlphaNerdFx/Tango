@@ -525,11 +525,13 @@ remaining user-visible value is; the rest is measurement and hygiene.
 
       The asymmetry is the finding. ConceptNet's antonyms come from exactly
       two Wiktionary editions, English (40 719 edges) and French (19 806),
-      and Tango's index is built from the English edition. So for German and
-      Russian it mostly hands back what the index already has; for French it
-      hands over the French edition, which this project has never read. The
-      gap is between Wiktionary editions, not between Wiktionary and
-      ConceptNet.
+      but so does kaikki, and the index is built from each language's own
+      edition rather than the English one. What differs is the extractor:
+      wiktextract for kaikki, wikiparsec for ConceptNet. The French index
+      has an antonym for 15 045 words against ConceptNet's 12 376, so the
+      union is much larger; German holds 30 616 against 3 547 and Russian
+      23 747 against 1 857, so there it adds little. The claim that the gap
+      was between editions was written here first and is wrong.
 
       The shipped artifact is 3.06 MB for 22 languages. Filtering to
       same-language `/r/Antonym` pairs, no self-references, removes the `大`
