@@ -784,6 +784,38 @@ class TestSetupCommands:
         mock_doc.assert_called_once()
         assert exc.value.code == 1
 
+    def test_the_summary_reports_a_source_that_stopped(self, capsys):
+        """
+        A tripped breaker used to be a log line at WARNING and nothing else,
+        so a run that shipped 927 of 1094 cards with no definition looked
+        like the pipeline's own failure. It names the source and the fix.
+        """
+        from pathlib import Path
+
+        from pipeline.__main__ import _print_summary
+
+        _print_summary(
+            video_id="abc", deck_name="English", apkg_path=Path("out.apkg"),
+            card_count=167, fallback_count=927, skipped_count=0,
+            not_found_count=927, not_found_words=[], sources_stopped=["mw"],
+        )
+        out = capsys.readouterr().out
+        assert "Merriam-Webster" in out          # not the internal key "mw"
+        assert "MW_RATE_LIMIT" in out            # and it names the lever
+
+    def test_the_summary_says_nothing_when_every_source_held(self, capsys):
+        # The partner. A warning on a healthy run trains people to ignore it.
+        from pathlib import Path
+
+        from pipeline.__main__ import _print_summary
+
+        _print_summary(
+            video_id="abc", deck_name="English", apkg_path=Path("out.apkg"),
+            card_count=1094, fallback_count=0, skipped_count=0,
+            not_found_count=0, not_found_words=[], sources_stopped=[],
+        )
+        assert "Stopped:" not in capsys.readouterr().out
+
     def test_build_antonyms_is_reachable_without_a_video_id(self):
         """Same standalone-mode guard as --doctor, for the ADR-010 index."""
         with patch("pipeline.antonyms.build_index", return_value=52156) as mock_build:
