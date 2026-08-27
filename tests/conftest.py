@@ -19,6 +19,33 @@ from __future__ import annotations
 import pytest
 
 import pipeline.antonyms as antonyms
+import pipeline.wiktdata as wiktdata
+
+
+@pytest.fixture(autouse=True)
+def isolated_dictionary_indexes(tmp_path, monkeypatch):
+    """
+    Point the Wiktionary indexes at an empty directory for every test.
+
+    Same reasoning as the antonym fixture below, and added the moment the
+    English index stopped being hypothetical. `nlp.process_transcript` now
+    consults the index to fold inflected forms, so without this a test's
+    result depends on which languages the developer happens to have built.
+    A test that wants an index builds one in `tmp_path` and patches this
+    attribute itself, which overrides this fixture.
+    """
+    monkeypatch.setattr(wiktdata, "DICT_DIR", tmp_path / "no-dictionary-index")
+    if hasattr(wiktdata._local, "conns"):
+        for conn in wiktdata._local.conns.values():
+            if conn is not None:
+                conn.close()
+        del wiktdata._local.conns
+    yield
+    if hasattr(wiktdata._local, "conns"):
+        for conn in wiktdata._local.conns.values():
+            if conn is not None:
+                conn.close()
+        del wiktdata._local.conns
 
 
 @pytest.fixture(autouse=True)
