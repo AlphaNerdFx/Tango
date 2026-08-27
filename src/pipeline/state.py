@@ -44,9 +44,13 @@ class VideoAlreadyProcessedError(Exception):
         self.video_id     = video_id
         self.processed_at = processed_at
         self.deck_name    = deck_name
+        # Names --force because this is a wall, not a warning: the run stops
+        # here and nothing in the message told the user how to get past it.
         super().__init__(
             f"Video '{video_id}' was already processed on {processed_at} "
-            f"for deck '{deck_name}'. No new cards will be created."
+            f"for deck '{deck_name}'. No new cards will be created.\n"
+            f"  Pass --force to process it again "
+            f"(make run VIDEO_ID={video_id} DECK=\"{deck_name}\" FORCE=1)."
         )
 
 
