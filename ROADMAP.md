@@ -340,6 +340,18 @@ These are plausibly a **separate expansion project sharing a common premise**
 with this one, not later versions of this one. Keeping them off the ladder
 is what lets 1.0.0 mean "finished" instead of "paused".
 
+**Raised 27 August 2026 and parked here undecided:** learning from the user's
+own y/n/s answers so the pipeline stops asking, and a proficiency level so
+common words never become cards. The second half needs no model at all, only
+a frequency-ranked word list, and it belongs on the ladder rather than here:
+it is a filter and a smaller download, which is v0.9.0's goal. The first half
+is a classifier trained on user decisions, which is what the third bullet
+above excludes. So the two halves land on opposite sides of this line and
+should not be built as one thing. TASKS.md has the full note, including the
+one part that is cheap, in scope and time-sensitive: nothing currently
+records what the user answers, so the training data for the first half is
+being discarded on every run.
+
 **What that costs now: almost nothing. What it requires now: one thing.**
 The seam those surfaces would consume is the card payload — the name-keyed
 dicts `cards._build_note()` and `_build_fallback_note()` construct before
