@@ -373,9 +373,15 @@ def process_transcript(
         NLPModelNotFoundError:       The resolved model isn't installed.
     """
     if not text or not text.strip():
+        # Was written for whoever wrote the call site, naming a private
+        # function and a private key. A user who sees this needs to know
+        # the video is the problem and that another one will work.
         raise EmptyTranscriptError(
-            "Transcript text is empty. "
-            "Ensure get_snippets() returned a non-empty '_full_text'."
+            "The transcript is empty, so there are no words to make cards "
+            "from.\n"
+            "  The video has a subtitle track that contains no text, which "
+            "usually means auto-generated captions that failed.\n"
+            "  Try another video, or check the track plays on YouTube first."
         )
 
     nlp = _get_model(language)
