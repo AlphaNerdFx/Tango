@@ -144,12 +144,24 @@ def _anki_request(action: str, **params) -> object:
         ) from exc
     except requests.exceptions.Timeout as exc:
         raise AnkiNotRunningError(
-            f"AnkiConnect timed out after {timeout}s on '{action}'."
+            f"AnkiConnect timed out after {timeout}s on '{action}'.\n"
+            f"  Anki is running but did not answer. A modal dialog open in "
+            f"Anki blocks every request; close it and retry.\n"
+            f"  A slow import can also need a longer ANKI_IMPORT_TIMEOUT "
+            f"in .env."
         ) from exc
 
     data = response.json()
     if data.get("error"):
-        raise AnkiConnectError(f"AnkiConnect error: {data['error']}")
+        # Anki's own wording, then the two things that actually fix it.
+        # "deck was not found" and "model was not found" are the common
+        # pair, and neither says which of Anki's states to correct.
+        raise AnkiConnectError(
+            f"AnkiConnect error on '{action}': {data['error']}\n"
+            f"  Check the deck and notetype exist in the open Anki profile, "
+            f"then retry.\n"
+            f"  Run 'python -m pipeline --doctor' to confirm Anki is reachable."
+        )
 
     return data["result"]
 
