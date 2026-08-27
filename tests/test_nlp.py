@@ -9,6 +9,9 @@ Run all (model needed): pytest tests/test_nlp.py
 """
 
 from unittest.mock import MagicMock, patch
+from collections import Counter
+from types import SimpleNamespace
+
 import pytest
 
 import pipeline.nlp as nlp_module
@@ -804,3 +807,96 @@ class TestErrorMessagesNameTheFix:
         # user can see, do anything about, or find in the help.
         assert "get_snippets" not in message and "_full_text" not in message
         assert "video" in message.lower()
+
+
+class TestFoldingInflectedForms:
+    """
+    spaCy sometimes returns the surface form as the lemma, so a real French
+    deck carried `voyez` beside `voir` and `soit` beside `être`: 15 of 1079
+    cards, each one word taught twice.
+
+    The rule is narrow on purpose. Folding only happens when the base form
+    is ALSO in this run, so nothing is ever lost -- see the docstring, and
+    ARCHITECTURE 8.30, whose rule that the learner sees the form they met
+    would otherwise be overturned.
+    """
+
+    @staticmethod
+    def _entry(form_of):
+        return SimpleNamespace(form_of=form_of, antonyms=[], synonyms=[])
+
+    def _patched(self, pointers):
+        """wiktdata stubbed so the default run needs no built index."""
+        return (
+            patch.object(nlp_module.wiktdata, "is_available", return_value=True),
+            patch.object(
+                nlp_module.wiktdata, "lookup",
+                side_effect=lambda w, lang, **kw: (
+                    self._entry(pointers[w]) if w in pointers else None
+                ),
+            ),
+        )
+
+    def test_an_inflected_form_folds_onto_a_base_form_in_the_same_run(self):
+        vocab = {"voyez": 3, "voir": 5}
+        avail, look = self._patched({"voyez": "voir"})
+        with avail, look:
+            folded = nlp_module._merge_inflected_forms(vocab, None, {}, "fr")
+        assert folded == 1
+        assert vocab == {"voir": 8}
+
+    def test_an_inflected_form_alone_is_left_as_its_own_word(self):
+        """
+        The partner, and the one that keeps 8.30 intact. `voyez` without
+        `voir` is the only card the learner will get for that word, and
+        folding it would silently replace the word they heard.
+        """
+        vocab = {"voyez": 3, "maison": 1}
+        avail, look = self._patched({"voyez": "voir"})
+        with avail, look:
+            folded = nlp_module._merge_inflected_forms(vocab, None, {}, "fr")
+        assert folded == 0
+        assert vocab == {"voyez": 3, "maison": 1}
+
+    def test_the_surface_form_moves_with_the_count(self):
+        # cards._find_in_snippets searches the transcript by surface form,
+        # so dropping it would cost the surviving card its video example.
+        vocab = {"voyez": 1, "voir": 1}
+        surfaces = {"voyez": ["voyez"], "voir": ["voir"]}
+        avail, look = self._patched({"voyez": "voir"})
+        with avail, look:
+            nlp_module._merge_inflected_forms(vocab, surfaces, {}, "fr")
+        assert sorted(surfaces["voir"]) == ["voir", "voyez"]
+        assert "voyez" not in surfaces
+
+    def test_parts_of_speech_are_merged_not_discarded(self):
+        vocab = {"voyez": 1, "voir": 1}
+        counts = {"voyez": Counter({"VERB": 2}), "voir": Counter({"VERB": 1})}
+        avail, look = self._patched({"voyez": "voir"})
+        with avail, look:
+            nlp_module._merge_inflected_forms(vocab, None, counts, "fr")
+        assert counts["voir"] == Counter({"VERB": 3})
+
+    def test_no_index_means_no_folding(self):
+        """
+        The availability guard, and the lookup is stubbed to SUCCEED so this
+        can actually fail. Stubbing only `is_available` made the test pass
+        with the guard deleted, because the real lookup returns None for a
+        language with no index either way -- a vacuous test that a mutation
+        run caught.
+        """
+        vocab = {"voyez": 3, "voir": 5}
+        with patch.object(nlp_module.wiktdata, "is_available", return_value=False), \
+             patch.object(nlp_module.wiktdata, "lookup",
+                          return_value=self._entry("voir")):
+            folded = nlp_module._merge_inflected_forms(vocab, None, {}, "en")
+        assert folded == 0
+        assert vocab == {"voyez": 3, "voir": 5}
+
+    def test_a_word_pointing_at_itself_is_left_alone(self):
+        vocab = {"voir": 5}
+        avail, look = self._patched({"voir": "voir"})
+        with avail, look:
+            folded = nlp_module._merge_inflected_forms(vocab, None, {}, "fr")
+        assert folded == 0
+        assert vocab == {"voir": 5}
