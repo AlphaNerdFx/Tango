@@ -24,6 +24,7 @@ import logging
 import re
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from pipeline import (
@@ -323,6 +324,77 @@ def _print_summary(
     _rule()
 
 
+# ── Progress and timing ───────────────────────────────────────────────────────
+#
+# v0.7.0: a long run has to be legible. Pacing Merriam-Webster (8.43) turned
+# the definition phase into minutes of silence on a large English video, and
+# silence is indistinguishable from a hang.
+
+
+def _duration(seconds: float) -> str:
+    """Render a number of seconds the way a person would say it."""
+    seconds = max(0, int(seconds))
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes, seconds = divmod(seconds, 60)
+    if minutes < 60:
+        return f"{minutes}m {seconds:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    return f"{hours}h {minutes:02d}m"
+
+
+class _Progress:
+    """
+    A one-line progress display for a phase that takes a while.
+
+    Redraws in place on a terminal, which keeps a thousand-word run to a
+    single line. Anywhere else -- a pipe, a log file, CI -- carriage returns
+    are noise, so it prints one line per decile instead and stays readable
+    afterwards. `make run > run.log` is a normal thing to do here.
+
+    The estimate is deliberately naive: elapsed divided by completed, times
+    what is left. The work per word is uniform enough for that to be honest,
+    and a cleverer estimate that is wrong is worse than a simple one that is
+    roughly right.
+    """
+
+    def __init__(self, label: str) -> None:
+        self._label = label
+        self._start = time.monotonic()
+        self._tty = sys.stdout.isatty()
+        self._last_decile = -1
+
+    def update(self, done: int, total: int) -> None:
+        if not total:
+            return
+        elapsed = time.monotonic() - self._start
+        share = done / total
+        # An estimate before there is anything to estimate from is a guess
+        # dressed as information.
+        eta = ""
+        if done >= 5 and share < 1:
+            eta = f", ~{_duration(elapsed / done * (total - done))} left"
+        text = f"  {self._label}: {done}/{total} ({share:.0%}{eta})"
+
+        if self._tty:
+            print(f"\r{text}\033[K", end="", flush=True)
+            return
+
+        decile = int(share * 10)
+        if decile > self._last_decile:
+            self._last_decile = decile
+            print(text, flush=True)
+
+    def finish(self) -> None:
+        """Clear the line so the phase's own result can take its place."""
+        if self._tty:
+            print("\r\033[K", end="", flush=True)
+
+    @property
+    def elapsed(self) -> float:
+        return time.monotonic() - self._start
+
+
 # ── Deck selection ────────────────────────────────────────────────────────────
 
 def _select_deck(deck_arg: str | None, session: Session) -> str:
@@ -469,16 +541,19 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
 
     # ── 2. Fetch transcript ───────────────────────────────────────────────────
     _info(f"Fetching transcript for: {video_id}")
+    phase = time.monotonic()
     try:
         transcript = transcript_module.get_transcript(video_id, languages=[language_code])
         snippets   = transcript_module.get_snippets(transcript)
     except Exception as exc:
         _err(f"Transcript failed: {exc}")
         sys.exit(1)
-    _ok(f"Transcript ready ({snippets['_snippet_count']} snippets, language: {snippets['_language_code']})")
+    _ok(f"Transcript ready ({snippets['_snippet_count']} snippets, "
+        f"language: {snippets['_language_code']}) in {_duration(time.monotonic() - phase)}")
 
     # ── 3. NLP ────────────────────────────────────────────────────────────────
     _info("Running spaCy NLP...")
+    phase = time.monotonic()
     try:
         # surface_forms records how each lemma actually appeared, so the
         # transcript-example search can match "sais" for the lemma "savoir".
@@ -495,13 +570,15 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
     except Exception as exc:
         _err(f"NLP failed: {exc}")
         sys.exit(1)
-    _ok(f"Vocabulary extracted: {len(vocabulary)} unique lemmas")
+    _ok(f"Vocabulary extracted: {len(vocabulary)} unique lemmas "
+        f"in {_duration(time.monotonic() - phase)}")
 
     # ── 4. Save vocabulary to SQLite ──────────────────────────────────────────
     save_vocabulary(video_id, vocabulary)
 
     # ── 5. Deck check ─────────────────────────────────────────────────────────
     _info(f"Checking deck: {deck_name}")
+    phase = time.monotonic()
     check_result = deck_module.check_vocabulary(vocabulary, deck_name)
 
     if not check_result.anki_available:
@@ -514,7 +591,8 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
     _ok(
         f"Deck check: {len(check_result.skip)} skip / "
         f"{len(check_result.queue)} queue / "
-        f"{len(check_result.new)} new"
+        f"{len(check_result.new)} new "
+        f"in {_duration(time.monotonic() - phase)}"
     )
 
     # ── 6. CLI prompt for queued words ────────────────────────────────────────
@@ -534,16 +612,20 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
 
     # ── 7. Fetch definitions ──────────────────────────────────────────────────
     _info(f"Fetching definitions for {len(words_to_define)} words...")
+    tracker = _Progress("definitions")
     batch = definition_module.fetch_definitions(
             words_to_define, snippets,
             language=language_code,
             def_language=def_language,
             parts_of_speech=parts_of_speech,
             use_cache=not args.no_cache,
+            progress=tracker.update,
         )
+    tracker.finish()
     _ok(
         f"Definitions: {len(batch.found)} found "
-        f"({len(batch.from_cache)} cached) / {len(batch.not_found)} not found"
+        f"({len(batch.from_cache)} cached) / {len(batch.not_found)} not found "
+        f"in {_duration(tracker.elapsed)}"
     )
 
     # ── 8. Build .apkg ────────────────────────────────────────────────────────
