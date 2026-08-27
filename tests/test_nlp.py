@@ -791,3 +791,16 @@ class TestFillerSounds:
         assert "euh" not in forms
         assert "euh" not in pos
         assert forms["maison"] == ["maison"]
+
+
+class TestErrorMessagesNameTheFix:
+    """v0.7.0: a failure the user can act on must say how."""
+
+    def test_empty_transcript_is_written_for_the_user(self):
+        with pytest.raises(EmptyTranscriptError) as exc:
+            process_transcript("   ", language="en")
+        message = str(exc.value)
+        # It named `get_snippets()` and `_full_text`, neither of which the
+        # user can see, do anything about, or find in the help.
+        assert "get_snippets" not in message and "_full_text" not in message
+        assert "video" in message.lower()
