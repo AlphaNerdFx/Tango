@@ -1,6 +1,6 @@
 # ADR-011: An offline index for English
 
-Status: Proposed
+Status: Accepted, 27 August 2026
 
 Continues the numbering from ADR-010. This one argues against a decision
 already recorded in ARCHITECTURE 8.19 and enforced in
@@ -58,26 +58,76 @@ dictionaryapi.dev returned HTTP 522 for the entire day. It is the only
 source English has for IPA, for audio, and for example sentences. There is
 no pacing fix for a host that is down.
 
-That is the whole case. Every language with an index scored around 90% on
-definitions and examples that day and was untouched by either outage,
-because it never made a request. English is the only language with no floor
-under it.
+That is the whole case for the outage half. Every language with an index
+scored around 90% on definitions and examples that day and was untouched by
+either outage, because it never made a request. English is the only language
+with no floor under it.
 
-## What it would cost
+## The licence, which turned out to matter more than the outage
+
+Merriam-Webster's own terms, which were read after this ADR was first
+drafted and which change its conclusion from "worth doing" to "has to be
+done":
+
+> free as long as it is for non-commercial use, usage does not exceed 1000
+> queries per day per API key, and use is limited to two reference APIs
+
+and the key is "specific to your application". Commercial use is not a paid
+tier, it is a case-by-case negotiation with Merriam-Webster.
+
+**1000 a day is a per-user ceiling, and one video can exceed it.** The run
+that prompted all of this needed 1094 lookups. Paced perfectly, on a key
+with a completely unused allowance, it still could not have finished. No
+amount of rate limiting fixes a daily cap, and no amount of caching helps
+the first run.
+
+**And it makes MW a licensing dependency.** Tango is a CLI a user installs
+with their own key, so today's arrangement is sound: non-commercial use by
+one person, their allowance, their key. But a product that is ever monetized
+cannot ship English support that depends on MW without a negotiated licence,
+and that is a strange thing for the *base* behaviour of one language to hang
+on when every other language reads from a file.
+
+The index does not replace MW. It puts a floor under English so MW is an
+enhancement: better curated definitions when the key is present and the
+allowance holds, and a working card when it is not.
+
+## What it cost, and what it delivered
+
+Built on 27 August 2026, so these are measurements rather than estimates:
 
 | | |
 |---|---|
-| download | **502 MB** gzipped, measured, not the 475 MB in the warning |
-| on disk | unmeasured. The other three landed at 131, 305 and 423 MB |
-| build time | one pass, comparable to the others |
-| runtime | none. It is read offline like every other index |
+| download | **502 MB** gzipped, not the 475 MB in the warning |
+| on disk | **236 MB**, the smallest of the four despite the largest download |
+| entries | 1 486 439 |
+| build | one streamed pass, no unpacking |
+| runtime | none. Read offline like every other index |
+
+**Coverage, and a trap worth recording.** Read as a share of index rows,
+English looks useless for the field this ADR was written about:
+
+| | share of the 1.49M rows | share of 1094 real deck lemmas |
+|---|---|---|
+| IPA | 9.4% | **96.4%** |
+| audio | 8.6% | **97.0%** |
+| example | 18.1% | **90.3%** |
+| found at all | — | 99.8% |
+
+The row percentage is the wrong denominator and nearly cost this decision.
+An index of 1.49 million entries is mostly rare, archaic and inflected
+forms, 35.9% of it inflections alone, and none of those carry a recording.
+The words a transcript actually contains are the common ones, and those are
+covered almost completely. The draft of this ADR asserted "83 to 99% in
+every language built so far" by extrapolating from German, French and
+Russian, which is SESSION.md 6.14's standing lesson (measure per language
+before generalising) being relearned for the price of one query.
 
 ## What it would and would not change
 
-**Pronunciation: the real win.** English is the only language where the
-Pronunciation and IPA fields are structurally empty whenever one host is
-unwell. The index carries IPA on 83 to 99% of rows in every language built
-so far.
+**Pronunciation: the real win, and now measured.** English cards went from
+0% IPA and 0% audio, because the only source was down, to 96.4% and 97.0%
+available offline on the same 1094-lemma deck.
 
 **Examples: a second source where there is currently one.**
 
@@ -128,10 +178,17 @@ investigated beyond observing that it lasted all day.
 
 ## Decision
 
-Not made. This ADR exists to put the timeline in front of the person who has
-to choose, because the recorded decision is not wrong so much as it is
-answering a question about a card that no longer exists.
+**Candidate 1, accepted 27 August 2026.** Build the index, keep MW ahead of
+it for definitions, and fix the fallthrough in the same change.
 
-The recommendation is candidate 1, with the fallthrough fixed in the same
-change, and `_DISCOURAGED["en"]` rewritten rather than deleted: the "better
-curated" point is still true and still the reason MW stays first.
+`_DISCOURAGED["en"]` is removed rather than reworded, because a prompt
+asking "build it anyway?" is now asking the wrong question. The half of its
+reasoning that survives is kept as a comment in its place: MW's definitions
+are better curated, which is why `fetch_definition` still tries MW first.
+
+The deciding argument is not the outage, which might have been a bad day. It
+is that English is the only language whose base behaviour depends on a
+third-party allowance of 1000 queries a day and a licence that does not
+cover a commercial product. Every other language reads from a file it owns.
+That asymmetry is defensible in a prototype and not in a finished CLI, which
+is what 1.0.0 is meant to mean.
