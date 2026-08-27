@@ -554,6 +554,7 @@ docs/Code_Walkthrough.pdf        Function-by-function explanation
 docs/ADR-008-per-language-dictionary-sources.md
 docs/ADR-009-card-media-enrichment.md
 docs/ADR-010-conceptnet-antonyms.md
+docs/ADR-011-english-offline-index.md
 ARCHITECTURE.md                  This repo, full system detail
 SESSION.md                       Current working state
 TASKS.md                         Prioritised remaining work
@@ -563,9 +564,11 @@ CONTRIBUTING.md                  Setup and workflow for outside contributors
 OPERATING_RULES.md               Superseded by this file; kept for its tone
 ```
 
-The three markdown ADRs are the live ones and are cited throughout the code;
+The four markdown ADRs are the live ones and are cited throughout the code;
 the v0.4.0 PDF set is the historical record. ADR-010 was accepted and
-implemented on 26 August 2026.
+implemented on 26 August 2026. ADR-011 is Proposed and undecided: it argues
+that 8.19's decision against an English index was measured a week before the
+two card fields that would have used it existed.
 
 ## 10. Pre-commit gate
 Never commit unless `make check` exits 0. Run it as a bare command (`make check`) — do NOT pipe to `tail`, `head`, or any filter, since pipes mask the real exit code. If output is long, redirect to a file and grep it: `make check > /tmp/check.log 2>&1; echo "exit=$?"; tail -50 /tmp/check.log`.
