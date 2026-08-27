@@ -1084,10 +1084,15 @@ def _resolve_pronunciation(
     """
     if wiktdata.is_available(language):
         entry = wiktdata.lookup(lemma, language, pos=pos)
-        if entry:
+        if entry and (entry.ipa or entry.audio_url):
             return entry.ipa or None, entry.audio_url or None
-        return None, None
 
+    # Falls through rather than returning early on an index miss. Before
+    # English had an index this branch was unreachable for English and the
+    # early return cost nothing; building one (ADR-011) would have turned
+    # "sometimes has audio" into "never has audio" for every English word
+    # the index does not carry, which is a regression bought with a 502 MB
+    # download. Written before that download rather than found after it.
     if language == "en":
         data = _fetch_from_dictapi(lemma, language="en")
         if data:
