@@ -18,6 +18,19 @@ Working toward v0.7.0, the command line as a product.
 
 ### Added
 
+- **A real command, with subcommands.** `tango run <id> --deck "..."`,
+  plus `review`, `backlog`, `languages`, `doctor`, `setup`, `install-model`,
+  `install-translation`, `build-dictionary` and `build-antonyms`. The old
+  surface put every mode behind a boolean flag on one parser, so `--help`
+  listed sixteen options without indicating that `--review` and `--video-id`
+  are different programs, and nothing stopped you passing both.
+
+  There is also a console entry point for the first time: the project had no
+  `[project.scripts]` at all, so even an editable install gave you
+  `python -m pipeline` rather than a verb. **This is a breaking CLI change**,
+  made deliberately now, while the interface has no installed users, rather
+  than after v0.8.0 publishes it.
+
 - **English can have an offline index, and should.** `make dictionary
   LANGUAGE=en` used to warn you off. That advice was measured on 7 August,
   a week before IPA and Pronunciation became card fields, and it has been

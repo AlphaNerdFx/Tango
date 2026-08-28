@@ -152,7 +152,9 @@ cannot be missed.
 
 The first release aimed at someone who did not write it.
 
-- Migrate argparse → Typer
+- Migrate argparse → Typer. Done 28 August 2026: `tango run`, `review`,
+  `backlog`, `languages`, `doctor`, `setup`, `install-model`,
+  `install-translation`, `build-dictionary`, `build-antonyms`
 - Error messages that name the fix, everywhere (`make doctor` already does
   this; the pipeline itself does not). Started 27 August 2026: the seven
   that stopped a run without naming a next step now name one.
@@ -328,9 +330,10 @@ this project's cards.**
 1. **The notetype.** `MODEL_ID`, `DECK_ID`, and the field names and order in
    `cards.FIELDS`. Fields may be **appended** (with a migration); indices
    0–9 are what every already-imported card is bound to.
-2. **The CLI surface.** Flag names and semantics: `--video-id`, `--deck`,
-   `--language`, `--def-lang`, `--review`, `--process-backlog`, `--doctor`,
-   `--build-dictionary`, `--list-languages`, `--force`, `--no-cache`.
+2. **The CLI surface.** Command names and their options: `run`, `review`,
+   `backlog`, `languages`, `doctor`, `setup`, `install-model`,
+   `install-translation`, `build-dictionary`, `build-antonyms`, and the
+   options `--deck`, `--language`, `--def-lang`, `--force`, `--no-cache`.
 3. **Configuration keys.** Every `ANKI_*`, `DEF_LANG`, `MW_API_KEY`,
    `DB_PATH`, `DICT_DIR`, and the rest of `.env.example`.
 4. **On-disk schemas.** `pipeline.db` (definition cache, vocabulary, runs,

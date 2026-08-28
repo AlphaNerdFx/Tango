@@ -13,7 +13,7 @@ Tango resolves the target language in this order:
 Run this command to see all 40 supported languages with their BCP-47 codes.
 
 ```bash
-python -m pipeline --list-languages
+tango languages
 ```
 
 Supported languages include French, Spanish, German, Italian, Portuguese, Russian, Polish, Japanese, Chinese (Simplified and Traditional), Korean, Arabic, Hindi, Turkish, and more.

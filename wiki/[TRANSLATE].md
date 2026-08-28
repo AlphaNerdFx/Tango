@@ -50,7 +50,7 @@ This installs argostranslate and downloads the language pair model for your LANG
 
 Note: argostranslate pulls in PyTorch, and `make translate-setup` installs the CPU-only build of it deliberately. That build is 733 MB. The wheel pip picks by default is the CUDA one, which brings `nvidia` and `triton` with it for a total of 4.5 GB, and none of that can be used without an NVIDIA card and a current driver.
 
-If you already ran `make translate-setup` before 26 August 2026 and have the CUDA build, run it again: it now detects that case and replaces the build in place. `python -m pipeline --doctor` tells you which build you have and prints the commands to swap it by hand. A machine with a working GPU is left alone.
+If you already ran `make translate-setup` before 26 August 2026 and have the CUDA build, run it again: it now detects that case and replaces the build in place. `tango doctor` tells you which build you have and prints the commands to swap it by hand. A machine with a working GPU is left alone.
 
 If disk space is a concern, use community mirrors and skip `make translate-setup` entirely.
 

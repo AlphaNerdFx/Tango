@@ -53,7 +53,7 @@ make antonyms
 
 The download is 498 MB and is streamed through a filter rather than saved, so what stays on disk is 4.3 MB. Measured on real decks it takes French antonym coverage from 19.7% to 34.8%, German from 56.2% to 60.3% and Russian from 47.8% to 48.8%.
 
-Skip it and nothing breaks: every card is exactly what it would have been. `python -m pipeline --doctor` reports whether it is built.
+Skip it and nothing breaks: every card is exactly what it would have been. `tango doctor` reports whether it is built.
 
 ## Optional: translation support
 
@@ -65,4 +65,4 @@ make translate-setup
 
 This installs argostranslate and PyTorch, which adds roughly 950 MB to the installation, 725 MB of it PyTorch (measured 26 August 2026). Skip it if you only process English videos or want native-language definitions.
 
-PyTorch comes in a CPU build and a CUDA build, and pip picks the CUDA one by default even on a machine with no NVIDIA card. That build is 4.5 GB once `nvidia` and `triton` come with it, so `make translate-setup` installs the CPU build deliberately. Run `python -m pipeline --doctor` if you want to know which one you have.
+PyTorch comes in a CPU build and a CUDA build, and pip picks the CUDA one by default even on a machine with no NVIDIA card. That build is 4.5 GB once `nvidia` and `triton` come with it, so `make translate-setup` installs the CPU build deliberately. Run `tango doctor` if you want to know which one you have.

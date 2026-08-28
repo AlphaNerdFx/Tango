@@ -413,7 +413,7 @@ nearly every failure investigated in this project has been setup rather than
 logic, and none of it was visible from the failure itself:
 
 ```bash
-make doctor                   # or: python -m pipeline --doctor
+make doctor                   # or: tango doctor
 ```
 
 It reports spaCy models, dictionary indexes, translation pairs, the MW key
@@ -436,7 +436,7 @@ this data (issue #1). Large one-time download per language, then offline:
 
 ```bash
 make dictionary LANGUAGE=fr           # or any code in language.SPACY_MODELS
-python -m pipeline --build-dictionary fr
+tango build-dictionary fr
 ```
 
 Antonyms are the weakest card field and have their own optional index, one
@@ -445,7 +445,7 @@ is filled exactly as it was before v0.6.0. See ADR-010:
 
 ```bash
 make antonyms                         # 498 MB streamed, 4.3 MB stored
-python -m pipeline --build-antonyms
+tango build-antonyms
 ```
 
 ### Run
@@ -456,8 +456,9 @@ make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr
 make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr DEF_LANG=en
 make review DECK="<deck name>"          # process review.json decisions
 make backlog DECK="<deck name>"         # process SQLite backlog
-python -m pipeline --list-languages     # list supported language codes
-python -m pipeline --help
+tango languages                 # list supported language codes
+tango --help                    # every command
+tango run --help                # one command's options
 ```
 
 Non-interactive run (defers all queued words to `review.json`):

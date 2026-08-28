@@ -50,7 +50,7 @@ Then import the generated .apkg from `output/` into Anki.
 first, or every card will read "No definition found":
 
 ```bash
-make dictionary LANGUAGE=fr        # any code from --list-languages
+make dictionary LANGUAGE=fr        # any code from `tango languages`
 ```
 
 One large download per language (a few hundred MB), then it works offline
@@ -113,7 +113,7 @@ make clean                                             remove venv, output, and 
 To list all supported language codes:
 
 ```bash
-python -m pipeline --list-languages
+tango languages
 ```
 
 ---
