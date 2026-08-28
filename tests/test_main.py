@@ -13,11 +13,11 @@ from pathlib import Path
 from unittest.mock import DEFAULT, MagicMock, patch, call
 
 import pytest
+from typer.testing import CliRunner
 
 import pipeline.__main__ as main_module
 from pipeline import cards as cards_module
 from pipeline.__main__ import (
-    _build_parser,
     _prompt_import,
     _print_summary,
     _report_torch_build,
@@ -27,11 +27,6 @@ from pipeline.__main__ import (
     main,
 )
 from pipeline.state import Session
-
-
-@pytest.fixture
-def parser():
-    return _build_parser()
 
 
 @pytest.fixture
@@ -49,92 +44,128 @@ def tmp_apkg(tmp_path) -> Path:
 VIDEO_ID  = "LV_NoD2M54w"
 DECK_NAME = "Language::English::Vocabulary"
 
-class TestArgumentParser:
+class TestCommandSurface:
+    """
+    The CLI moved from argparse mode-flags to Typer subcommands on
+    28 August 2026, immediately before v0.8.0 publishes it. This class
+    replaces TestArgumentParser and pins the same intents against the new
+    surface: which commands exist, what they require, and what they refuse.
 
-    def test_default_mode_parses_video_id(self, parser):
-        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME])
+    Driven through Typer's CliRunner rather than by patching sys.argv, so a
+    parse error is a result to assert on rather than a SystemExit to catch.
+    """
+
+    runner = CliRunner()
+
+    def test_run_takes_the_video_id_as_an_argument(self):
+        with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            result = self.runner.invoke(main_module.app, ["run", VIDEO_ID, "--deck", DECK_NAME])
+        assert result.exit_code == 0
+        args = run_pipeline.call_args.args[0]
         assert args.video_id == VIDEO_ID
-
-    def test_default_mode_parses_deck(self, parser):
-        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME])
         assert args.deck == DECK_NAME
 
-    def test_verbose_flag(self, parser):
-        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME, "--verbose"])
-        assert args.verbose is True
+    def test_run_without_a_video_id_is_refused(self):
+        # Used to be a hand-written "--video-id is required" check inside
+        # main(). It is now the signature's job, which is the point of the
+        # migration.
+        with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            result = self.runner.invoke(main_module.app, ["run"])
+        assert result.exit_code != 0
+        run_pipeline.assert_not_called()
 
-    def test_verbose_default_false(self, parser):
-        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME])
-        assert args.verbose is False
+    def test_run_carries_the_optional_flags(self):
+        with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            self.runner.invoke(main_module.app, [
+                "run", VIDEO_ID, "--deck", DECK_NAME,
+                "--language", "fr", "--def-lang", "en",
+                "--force", "--no-cache", "--verbose",
+            ])
+        args = run_pipeline.call_args.args[0]
+        assert (args.language, args.def_lang) == ("fr", "en")
+        assert args.force is True and args.no_cache is True and args.verbose is True
 
-    def test_review_flag(self, parser):
-        args = parser.parse_args(["--review", "--deck", DECK_NAME])
-        assert args.review is True
-
-    def test_process_backlog_flag(self, parser):
-        args = parser.parse_args(["--process-backlog", "--deck", DECK_NAME])
-        assert args.process_backlog is True
-
-    def test_review_and_backlog_mutually_exclusive(self, parser):
-        with pytest.raises(SystemExit):
-            parser.parse_args(["--review", "--process-backlog", "--deck", DECK_NAME])
-
-    def test_deck_optional(self, parser):
-        args = parser.parse_args(["--video-id", VIDEO_ID])
+    def test_the_flags_default_off(self):
+        with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            self.runner.invoke(main_module.app, ["run", VIDEO_ID])
+        args = run_pipeline.call_args.args[0]
+        assert args.force is False and args.no_cache is False and args.verbose is False
         assert args.deck is None
 
-    def test_video_id_optional_in_review_mode(self, parser):
-        args = parser.parse_args(["--review", "--deck", DECK_NAME])
-        assert args.video_id is None
+    def test_review_and_backlog_need_no_video_id(self):
+        for command, target in (("review", "_run_review"), ("backlog", "_run_backlog")):
+            with patch.object(main_module, target) as runner:
+                result = self.runner.invoke(main_module.app, [command, "--deck", DECK_NAME])
+            assert result.exit_code == 0, command
+            assert runner.call_args.args[0].video_id is None
 
-    def test_force_flag(self, parser):
-        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME, "--force"])
-        assert args.force is True
+    def test_the_modes_are_separate_commands_not_combinable_flags(self):
+        # `--review --process-backlog` was a mutually-exclusive group that
+        # argparse had to police. Two subcommands cannot be given at once,
+        # so the rule is now structural rather than enforced.
+        result = self.runner.invoke(main_module.app, ["review", "backlog"])
+        assert result.exit_code != 0
 
-    def test_force_default_false(self, parser):
-        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME])
-        assert args.force is False
+    def test_every_documented_command_exists(self):
+        expected = {
+            "run", "review", "backlog", "languages", "doctor", "setup",
+            "install-model", "install-translation",
+            "build-dictionary", "build-antonyms",
+        }
+        listed = set(main_module.app.registered_commands and [
+            c.name or c.callback.__name__.replace("_", "-")
+            for c in main_module.app.registered_commands
+        ])
+        assert expected <= listed, expected - listed
 
-    def test_setup_flag(self, parser):
-        args = parser.parse_args(["--setup"])
-        assert args.setup is True
+    def test_an_unknown_command_is_refused(self):
+        assert self.runner.invoke(main_module.app, ["frobnicate"]).exit_code != 0
 
-    def test_setup_default_false(self, parser):
-        args = parser.parse_args(["--video-id", VIDEO_ID, "--deck", DECK_NAME])
-        assert args.setup is False
-
-    def test_setup_does_not_require_video_id(self, parser):
-        # --setup and --list-languages are standalone modes -- neither
-        # processes a video, so argparse itself must not require --video-id
-        # for them (a --video-id is required error is a main() concern for
-        # the default mode, not something argparse enforces here).
-        args = parser.parse_args(["--setup"])
-        assert args.video_id is None
 
 class TestMainDispatch:
 
-    def test_missing_video_id_exits(self):
-        with patch("sys.argv", ["pipeline"]):
+    def test_no_command_shows_help_rather_than_running_anything(self):
+        # Bare `tango` used to fall through to the default pipeline mode and
+        # exit 1 complaining that --video-id was missing. It now prints the
+        # command list, which is what someone typing the bare name wants.
+        with patch("sys.argv", ["tango"]):
+            with pytest.raises(SystemExit):
+                main()
+
+    def test_a_usage_error_exits_2_not_1(self):
+        # Typer follows the Unix convention that 2 means "you typed it
+        # wrong" and 1 means "it ran and failed". argparse's own errors
+        # already exited 2; only this project's hand-written check used 1,
+        # so the codes are consistent for the first time.
+        with patch("sys.argv", ["tango", "run"]):
             with pytest.raises(SystemExit) as exc:
                 main()
-            assert exc.value.code == 1
+        assert exc.value.code == 2
 
     @patch("pipeline.__main__._run_pipeline")
     def test_dispatches_to_pipeline(self, mock_run):
-        with patch("sys.argv", ["pipeline", "--video-id", VIDEO_ID, "--deck", DECK_NAME]):
-            main()
+        # main() always raises SystemExit now, because Typer's app() does
+        # even on success. The dispatch is what this asserts, not the exit.
+        with patch("sys.argv", ["tango", "run", VIDEO_ID, "--deck", DECK_NAME]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 0
         mock_run.assert_called_once()
 
     @patch("pipeline.__main__._run_review")
     def test_dispatches_to_review(self, mock_run):
-        with patch("sys.argv", ["pipeline", "--review", "--deck", DECK_NAME]):
-            main()
+        with patch("sys.argv", ["tango", "review", "--deck", DECK_NAME]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 0
         mock_run.assert_called_once()
 
     @patch("pipeline.__main__._run_backlog")
     def test_dispatches_to_backlog(self, mock_run):
-        with patch("sys.argv", ["pipeline", "--process-backlog", "--deck", DECK_NAME]):
-            main()
+        with patch("sys.argv", ["tango", "backlog", "--deck", DECK_NAME]):
+            with pytest.raises(SystemExit) as exc:
+                main()
+        assert exc.value.code == 0
         mock_run.assert_called_once()
 
     @patch("pipeline.__main__._run_setup_wizard")
@@ -142,7 +173,7 @@ class TestMainDispatch:
         # Regression guard: --setup used to be unreachable because the
         # --video-id requirement check ran before it and exited with
         # code 1 first, for every standalone mode, not just --setup.
-        with patch("sys.argv", ["pipeline", "--setup"]):
+        with patch("sys.argv", ["tango", "setup"]):
             with pytest.raises(SystemExit) as exc:
                 main()
         mock_wizard.assert_called_once()
@@ -152,7 +183,7 @@ class TestMainDispatch:
         # Same bug, same regression guard, for the flag that was already
         # there before --setup existed: --list-languages must not require
         # --video-id either, since it never processes a video.
-        with patch("sys.argv", ["pipeline", "--list-languages"]):
+        with patch("sys.argv", ["tango", "languages"]):
             with pytest.raises(SystemExit) as exc:
                 main()
         assert exc.value.code == 0
@@ -764,7 +795,7 @@ class TestSetupCommands:
         modes must run before the --video-id requirement, which used to exit
         first for every one of them.
         """
-        with patch("sys.argv", ["pipeline", "--doctor"]):
+        with patch("sys.argv", ["tango", "doctor"]):
             with pytest.raises(SystemExit):
                 main()
         assert "Tango environment" in capsys.readouterr().out
@@ -779,7 +810,7 @@ class TestSetupCommands:
         The Makefile swallows it; the CLI keeps it.
         """
         with patch("pipeline.__main__._run_doctor", return_value=1) as mock_doc:
-            with patch("sys.argv", ["pipeline", "--doctor"]):
+            with patch("sys.argv", ["tango", "doctor"]):
                 with pytest.raises(SystemExit) as exc:
                     main()
         mock_doc.assert_called_once()
@@ -820,7 +851,7 @@ class TestSetupCommands:
     def test_build_antonyms_is_reachable_without_a_video_id(self):
         """Same standalone-mode guard as --doctor, for the ADR-010 index."""
         with patch("pipeline.antonyms.build_index", return_value=52156) as mock_build:
-            with patch("sys.argv", ["pipeline", "--build-antonyms"]):
+            with patch("sys.argv", ["tango", "build-antonyms"]):
                 with pytest.raises(SystemExit) as exc:
                     main()
         mock_build.assert_called_once()
@@ -831,7 +862,7 @@ class TestSetupCommands:
         from pipeline.antonyms import AntonymDownloadError
 
         with patch("pipeline.antonyms.build_index", side_effect=AntonymDownloadError("no network")):
-            with patch("sys.argv", ["pipeline", "--build-antonyms"]):
+            with patch("sys.argv", ["tango", "build-antonyms"]):
                 with pytest.raises(SystemExit) as exc:
                     main()
         assert exc.value.code == 1
@@ -846,7 +877,7 @@ class TestSetupCommands:
         make --doctor exit non-zero on a perfectly working install.
         """
         with patch("pipeline.antonyms.is_available", return_value=False):
-            with patch("sys.argv", ["pipeline", "--doctor"]):
+            with patch("sys.argv", ["tango", "doctor"]):
                 with pytest.raises(SystemExit):
                     main()
         assert "make antonyms" in capsys.readouterr().out
@@ -855,7 +886,7 @@ class TestSetupCommands:
     def test_install_model_resolves_the_language_code(self, mock_run):
         """The user names a language; the spaCy model name is looked up."""
         mock_run.return_value = MagicMock(returncode=0)
-        with patch("sys.argv", ["pipeline", "--install-model", "de"]):
+        with patch("sys.argv", ["tango", "install-model", "de"]):
             with pytest.raises(SystemExit) as exc:
                 main()
         assert exc.value.code == 0
@@ -864,7 +895,7 @@ class TestSetupCommands:
     @patch("pipeline.__main__.subprocess.run")
     def test_install_model_rejects_an_unsupported_language(self, mock_run):
         """The pair to the test above — no download attempted for a bad code."""
-        with patch("sys.argv", ["pipeline", "--install-model", "zzz"]):
+        with patch("sys.argv", ["tango", "install-model", "zzz"]):
             with pytest.raises(SystemExit) as exc:
                 main()
         assert exc.value.code == 1
@@ -872,7 +903,7 @@ class TestSetupCommands:
 
     def test_install_translation_parses_the_pair(self):
         with patch("pipeline.translation.install_translation", return_value=True) as mock_i:
-            with patch("sys.argv", ["pipeline", "--install-translation", "de:en"]):
+            with patch("sys.argv", ["tango", "install-translation", "de:en"]):
                 with pytest.raises(SystemExit) as exc:
                     main()
         mock_i.assert_called_once_with("de", "en")
@@ -881,7 +912,7 @@ class TestSetupCommands:
     def test_install_translation_rejects_a_malformed_pair(self):
         """FROM:TO, not "de en" or "de-en"."""
         with patch("pipeline.translation.install_translation") as mock_i:
-            with patch("sys.argv", ["pipeline", "--install-translation", "de-en"]):
+            with patch("sys.argv", ["tango", "install-translation", "de-en"]):
                 with pytest.raises(SystemExit) as exc:
                     main()
         assert exc.value.code == 1
