@@ -19,23 +19,26 @@ Modes:
 
 from __future__ import annotations
 
-import argparse
 import logging
 import re
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
+from typing import Optional
 from pathlib import Path
+
+import typer
 
 from pipeline import (
     cards,
     deck as deck_module,
     definition as definition_module,
     nlp as nlp_module,
-    state,
     transcript as transcript_module,
 )
 from pipeline.translation import reset_warning_state
+
 from pipeline.config import MW_RATE_LIMIT
 from pipeline.definition import reset_circuit_breaker
 from pipeline.language import (
@@ -442,10 +445,12 @@ def _select_deck(deck_arg: str | None, session: Session) -> str:
 # ── Video ID normalisation ────────────────────────────────────────────────────
 
 # A YouTube ID is 11 characters of base64url. The "-" and "_" matter here:
-# roughly one ID in 64 starts with a hyphen, and those are the ones that
-# break a naive `--video-id -abc` on the command line, since argparse reads
-# the value as another option. The Makefile passes --video-id=<value> for
-# that reason; this only has to recognise a well-formed ID.
+# roughly one ID in 64 starts with a hyphen. Under argparse that broke
+# `--video-id -abc`, which was read as another option, and the Makefile
+# passed `--video-id=<value>` to dodge it. As a positional argument the
+# hazard is different rather than gone: `tango run -abc123defg` still looks
+# like an option, and the escape is the conventional `tango run -- -abc`.
+# This only has to recognise a well-formed ID.
 _VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
 # watch?v=, youtu.be/, /shorts/, /embed/, /live/ — the forms people paste.
@@ -496,7 +501,7 @@ def _normalise_video_id(value: str) -> str:
 
 # ── Mode: default pipeline ────────────────────────────────────────────────────
 
-def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
+def _run_pipeline(args: SimpleNamespace, session: Session) -> None:
     try:
         video_id = _normalise_video_id(args.video_id)
     except ValueError as exc:
@@ -679,7 +684,7 @@ def _run_pipeline(args: argparse.Namespace, session: Session) -> None:
 # ── Mode: review ──────────────────────────────────────────────────────────────
 
 def _resolve_side_mode_language(
-    args: argparse.Namespace,
+    args: SimpleNamespace,
     deck_name: str,
 ) -> tuple[str, str | None]:
     """
@@ -730,7 +735,7 @@ def _resolve_side_mode_language(
     return language_code, def_language
 
 
-def _run_review(args: argparse.Namespace, session: Session) -> None:
+def _run_review(args: SimpleNamespace, session: Session) -> None:
     deck_name = _select_deck(args.deck, session)
     language_code, def_language = _resolve_side_mode_language(args, deck_name)
     reset_circuit_breaker()
@@ -796,7 +801,7 @@ def _run_review(args: argparse.Namespace, session: Session) -> None:
 
 # ── Mode: backlog ─────────────────────────────────────────────────────────────
 
-def _run_backlog(args: argparse.Namespace, session: Session) -> None:
+def _run_backlog(args: SimpleNamespace, session: Session) -> None:
     deck_name = _select_deck(args.deck, session)
     language_code, def_language = _resolve_side_mode_language(args, deck_name)
     reset_circuit_breaker()
@@ -939,143 +944,149 @@ def _run_setup_wizard() -> None:
 
 # ── Argument parser ───────────────────────────────────────────────────────────
 
-def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="pipeline",
-        description="YouTube transcript to Anki flashcard pipeline.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-examples:
-  python -m pipeline --video-id LV_NoD2M54w --deck "Language::English"
-  python -m pipeline --review --deck "Language::English"
-  python -m pipeline --process-backlog --deck "Language::English"
-  python -m pipeline --video-id LV_NoD2M54w --deck "Language::English" --verbose
-  python -m pipeline --video-id LV_NoD2M54w --deck "Language::English" --force
-  python -m pipeline --setup
-        """,
+# ── Command line ──────────────────────────────────────────────────────────────
+#
+# Typer rather than argparse, and subcommands rather than mode flags. The old
+# surface put every mode behind a boolean flag on one parser, so `--help`
+# listed sixteen options with no indication that `--review` and `--video-id`
+# are different programs, and nothing stopped you passing both.
+#
+# Done now, immediately before v0.8.0 publishes this interface, because a
+# breaking CLI change costs nothing today and costs every installed user
+# afterwards. The `_run_*` functions below are deliberately untouched: they
+# take an args object and keep taking one, built here. They are the least
+# covered paths in the project and one of them has already shipped a real bug
+# (TASKS.md, review and backlog silently defaulting to English), so this
+# change moves the interface and not the behaviour.
+
+app = typer.Typer(
+    name="tango",
+    help="YouTube transcripts to Anki flashcard packages.",
+    add_completion=False,
+    no_args_is_help=True,
+    context_settings={"help_option_names": ["-h", "--help"]},
+)
+
+# Options shared by the three pipeline modes, defined once so they cannot
+# drift apart the way the argparse versions could.
+_DECK = typer.Option(None, "--deck", "-d", help='Target Anki deck, e.g. "Language::French". Prompts if omitted.')
+_LANGUAGE = typer.Option(None, "--language", "-l", help="Transcript language as a BCP-47 code. Inferred from the deck name if omitted.")
+_DEF_LANG = typer.Option(None, "--def-lang", help="Write definitions in this language instead of the transcript's. Needs a translation model.")
+_VERBOSE = typer.Option(False, "--verbose", "-v", help="Debug logging.")
+
+
+def _args(**kwargs) -> SimpleNamespace:
+    """
+    Build the object the `_run_*` functions expect.
+
+    They were written against argparse's Namespace and read attributes off
+    it. Handing them an equivalent object is what keeps this migration to
+    the interface layer.
+    """
+    kwargs.setdefault("video_id", None)
+    kwargs.setdefault("deck", None)
+    kwargs.setdefault("language", None)
+    kwargs.setdefault("def_lang", None)
+    kwargs.setdefault("force", False)
+    kwargs.setdefault("no_cache", False)
+    kwargs.setdefault("verbose", False)
+    return SimpleNamespace(**kwargs)
+
+
+@app.command()
+def run(
+    video_id: str = typer.Argument(..., metavar="VIDEO_ID", help="YouTube video ID or URL."),
+    deck: Optional[str] = _DECK,
+    language: Optional[str] = _LANGUAGE,
+    def_lang: Optional[str] = _DEF_LANG,
+    force: bool = typer.Option(False, "--force", "-f", help="Process a video already recorded as done."),
+    no_cache: bool = typer.Option(False, "--no-cache", help="Ignore the definition cache and refetch."),
+    verbose: bool = _VERBOSE,
+) -> None:
+    """Turn one YouTube video into an Anki package."""
+    _setup_logging(verbose)
+    _run_pipeline(
+        _args(video_id=video_id, deck=deck, language=language, def_lang=def_lang,
+              force=force, no_cache=no_cache, verbose=verbose),
+        Session(),
     )
 
-    # Mode flags — mutually exclusive
-    mode = parser.add_mutually_exclusive_group()
-    mode.add_argument(
-        "--review",
-        action="store_true",
-        help="Process review.json decisions and build .apkg for approved words.",
-    )
-    mode.add_argument(
-        "--process-backlog",
-        action="store_true",
-        dest="process_backlog",
-        help="Process the Anki backlog (requires Anki to be running).",
-    )
 
-    # Required for default mode
-    parser.add_argument(
-        "--video-id",
-        dest="video_id",
-        metavar="VIDEO_ID",
-        help="YouTube video ID or URL to process.",
-    )
+@app.command()
+def review(
+    deck: Optional[str] = _DECK,
+    language: Optional[str] = _LANGUAGE,
+    def_lang: Optional[str] = _DEF_LANG,
+    verbose: bool = _VERBOSE,
+) -> None:
+    """Process the words deferred to review.json."""
+    _setup_logging(verbose)
+    _run_review(_args(deck=deck, language=language, def_lang=def_lang, verbose=verbose), Session())
 
-    # Common
-    parser.add_argument(
-        "--language",
-        metavar="LANG_CODE",
-        help=(
-            "BCP-47 language code for subtitle selection (e.g. fr, de, ja). "
-            "If omitted, inferred from deck name. "
-            "Run 'python -m pipeline --list-languages' to see all supported codes."
-        ),
-    )
-    parser.add_argument(
-        "--def-lang",
-        dest="def_lang",
-        metavar="LANG_CODE",
-        help=(
-            "BCP-47 code for definition output language. "
-            "Defaults to the transcript language (native definitions). "
-            "Set to 'en' to get English definitions of non-English words via translation. "
-            "Example: --language fr --def-lang en"
-        ),
-    )
-    parser.add_argument(
-        "--list-languages",
-        action="store_true",
-        dest="list_languages",
-        help="Print all supported language names and their BCP-47 codes, then exit.",
-    )
-    parser.add_argument(
-        "--setup",
-        action="store_true",
-        help="Guided .env setup for an optional Merriam-Webster API key, then exit. "
-             "Nothing it configures is required to run the pipeline.",
-    )
-    parser.add_argument(
-        "--doctor",
-        action="store_true",
-        help="Report what is installed and what is missing, with the command "
-             "to fix each, then exit. Start here when something is not working.",
-    )
-    parser.add_argument(
-        "--install-model",
-        metavar="LANG",
-        dest="install_model",
-        help="Download the spaCy model for a language, then exit. "
-             "e.g. --install-model de",
-    )
-    parser.add_argument(
-        "--install-translation",
-        metavar="FROM:TO",
-        dest="install_translation",
-        help="Install translation models for a language pair, then exit. "
-             "Needed only for --def-lang. e.g. --install-translation de:en",
-    )
-    parser.add_argument(
-        "--build-dictionary",
-        metavar="LANG",
-        dest="build_dictionary",
-        help="Download and index the offline Wiktionary dictionary for a "
-             "language, then exit. Large one-time download (hundreds of MB) "
-             "that gives non-English runs real native-language definitions, "
-             "which no online source provides. e.g. --build-dictionary fr",
-    )
-    parser.add_argument(
-        "--build-antonyms",
-        action="store_true",
-        dest="build_antonyms",
-        help="Download and index ConceptNet's antonyms, then exit. One 498 MB "
-             "download, streamed rather than stored, producing a 4.3 MB index "
-             "that covers every supported language at once. Antonyms are the "
-             "weakest card field; see ADR-010.",
-    )
-    parser.add_argument(
-        "--deck",
-        metavar="DECK_NAME",
-        help='Target Anki deck. Supports sub-decks: "Language::English::Vocabulary". '
-             "If omitted, an interactive selection prompt is shown.",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable DEBUG logging output.",
-    )
-    parser.add_argument(
-        "--force",
-        action="store_true",
-        help="Reprocess a video even if pipeline.db has it marked as already "
-             "processed. Words already in the target deck are still skipped "
-             "by the normal deck duplicate check.",
-    )
-    parser.add_argument(
-        "--no-cache",
-        action="store_true",
-        help="Neither read nor write the definition cache. For measuring what "
-             "the pipeline currently produces: cached rows hold assembled "
-             "card fields, so a warm cache serves definitions chosen before "
-             "whatever you are trying to measure. Much slower.",
-    )
 
-    return parser
+@app.command()
+def backlog(
+    deck: Optional[str] = _DECK,
+    language: Optional[str] = _LANGUAGE,
+    def_lang: Optional[str] = _DEF_LANG,
+    verbose: bool = _VERBOSE,
+) -> None:
+    """Process the words queued in SQLite while Anki was unavailable."""
+    _setup_logging(verbose)
+    _run_backlog(_args(deck=deck, language=language, def_lang=def_lang, verbose=verbose), Session())
+
+
+@app.command()
+def languages() -> None:
+    """List the supported languages and their BCP-47 codes."""
+    print()
+    print("  Supported languages:")
+    print()
+    for name, code in list_supported_languages():
+        print(f"    {code:<10} {name}")
+    print()
+
+
+@app.command()
+def doctor() -> None:
+    """Report what is installed, what is missing, and the command that fixes it."""
+    raise typer.Exit(_run_doctor())
+
+
+@app.command()
+def setup() -> None:
+    """Guided .env setup for an optional Merriam-Webster API key."""
+    _run_setup_wizard()
+
+
+@app.command("install-model")
+def install_model(
+    language: str = typer.Argument(..., metavar="LANG", help="Language code, e.g. de."),
+) -> None:
+    """Download the spaCy model for one language."""
+    raise typer.Exit(_run_install_model(language))
+
+
+@app.command("install-translation")
+def install_translation(
+    pair: str = typer.Argument(..., metavar="FROM:TO", help="Language pair, e.g. de:en."),
+) -> None:
+    """Install translation models for one language pair."""
+    raise typer.Exit(_run_install_translation(pair))
+
+
+@app.command("build-dictionary")
+def build_dictionary(
+    language: str = typer.Argument(..., metavar="LANG", help="Language code, e.g. fr."),
+) -> None:
+    """Download and index the offline Wiktionary dictionary for one language."""
+    _run_build_dictionary(language)
+
+
+@app.command("build-antonyms")
+def build_antonyms() -> None:
+    """Download and index ConceptNet's antonyms, for every language at once."""
+    _run_build_antonyms()
 
 
 # ── Mode: doctor ──────────────────────────────────────────────────────────────
@@ -1410,59 +1421,8 @@ def _run_build_antonyms() -> None:
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 def main() -> None:
-    parser = _build_parser()
-    args   = parser.parse_args()
-
-    _setup_logging(args.verbose)
-    session = Session()
-
-    # Standalone informational/setup modes exit before the --video-id
-    # requirement below -- neither one processes a video.
-    if args.setup:
-        _run_setup_wizard()
-        sys.exit(0)
-
-    if args.doctor:
-        sys.exit(_run_doctor())
-
-    if args.install_model:
-        sys.exit(_run_install_model(args.install_model))
-
-    if args.install_translation:
-        sys.exit(_run_install_translation(args.install_translation))
-
-    if args.build_dictionary:
-        _run_build_dictionary(args.build_dictionary)
-        sys.exit(0)
-
-    if args.build_antonyms:
-        _run_build_antonyms()
-        sys.exit(0)
-
-    if args.list_languages:
-        langs = list_supported_languages()
-        print()
-        print("  Supported languages:")
-        print()
-        for name, code in langs:
-            print(f"    {code:<10} {name}")
-        print()
-        sys.exit(0)
-
-    # Validate: default mode requires --video-id
-    if not args.review and not args.process_backlog:
-        if not args.video_id:
-            _err("--video-id is required for the default pipeline mode.")
-            _info("Run 'python -m pipeline --help' for usage.")
-            sys.exit(1)
-
-    # Dispatch
-    if args.review:
-        _run_review(args, session)
-    elif args.process_backlog:
-        _run_backlog(args, session)
-    else:
-        _run_pipeline(args, session)
+    """Console entry point, named in pyproject.toml's [project.scripts]."""
+    app()
 
 
 if __name__ == "__main__":
