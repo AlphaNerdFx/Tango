@@ -132,7 +132,7 @@ install: venv
 # required -- dictionaryapi.dev works with zero setup.
 
 setup: venv
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --setup
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline setup
 
 # -- doctor -------------------------------------------------------------------
 # Reports what is installed and what is missing, with the command to fix each.
@@ -146,7 +146,7 @@ setup: venv
 # says every missing item is optional, which reads as a broken tool.
 # The CLI keeps its exit code; this target does not propagate it.
 doctor: venv
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --doctor || true
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline doctor || true
 
 # -- dictionary ---------------------------------------------------------------
 # Builds the offline Wiktionary index for one language. Large one-time
@@ -160,7 +160,7 @@ dictionary: venv
 		printf "  Usage: $(CYAN)make dictionary LANGUAGE=fr$(RESET)\n"; \
 		exit 1; \
 	fi
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --build-dictionary "$(LANGUAGE)"
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline build-dictionary "$(LANGUAGE)"
 
 # -- antonyms -----------------------------------------------------------------
 # Builds the offline antonym index from ConceptNet. One index for every
@@ -170,7 +170,7 @@ dictionary: venv
 # as it was before. See ADR-010.
 
 antonyms: venv
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline --build-antonyms
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline build-antonyms
 
 # -- translate-model ----------------------------------------------------------
 # Installs the argostranslate models for one language pair, so --def-lang
@@ -205,7 +205,7 @@ spacy-model: venv
 		sys.stdout.write(get_spacy_model('$(SPACY_LANG)'))" 2>/dev/null))
 	@if [ -z "$(SPACY_MODEL_NAME)" ]; then \
 		printf "$(RED)$(BOLD)[err ]$(RESET)  '$(SPACY_LANG)' isn't supported thus far.\n"; \
-		printf "  Run $(CYAN)python -m pipeline --list-languages$(RESET) to see all languages,\n"; \
+		printf "  Run $(CYAN)tango languages$(RESET) to see all languages,\n"; \
 		printf "  or check language.SPACY_MODELS for spaCy-supported codes specifically.\n"; \
 		exit 1; \
 	fi
@@ -378,8 +378,7 @@ run: check-os
 		exit 1; \
 	fi
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Running pipeline for video: %s\n" "$(VIDEO_ID)"
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
-		--video-id="$(VIDEO_ID)" \
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline run "$(VIDEO_ID)" \
 		--deck="$(DECK)" \
 		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
 		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",) \
@@ -394,8 +393,7 @@ review: check-os
 		exit 1; \
 	fi
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing review file for deck: %s\n" "$(DECK)"
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
-		--review \
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline review \
 		--deck="$(DECK)" \
 		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
 		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",)
@@ -409,8 +407,7 @@ backlog: check-os
 		exit 1; \
 	fi
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Processing Anki backlog for deck: %s\n" "$(DECK)"
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline \
-		--process-backlog \
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline backlog \
 		--deck="$(DECK)" \
 		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
 		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",)
@@ -456,17 +453,17 @@ help:
 	@printf "\n"
 	@printf "  $(CYAN)make doctor$(RESET)                           What is installed, what is missing\n"
 	@printf "\n"
-	@printf "$(BOLD)Every target above has a CLI equivalent, for use without make:$(RESET)\n"
-	@printf "  python -m pipeline --doctor\n"
-	@printf "  python -m pipeline --setup\n"
-	@printf "  python -m pipeline --list-languages\n"
-	@printf "  python -m pipeline --install-model de\n"
-	@printf "  python -m pipeline --install-translation de:en\n"
-	@printf "  python -m pipeline --build-dictionary de\n"
-	@printf "  python -m pipeline --build-antonyms\n"
-	@printf "  python -m pipeline --video-id <id> --deck \"<name>\" --language de\n"
-	@printf "  python -m pipeline --review --deck \"<name>\"\n"
-	@printf "  python -m pipeline --process-backlog --deck \"<name>\"\n"
+	@printf "$(BOLD)Every target above is a CLI command, for use without make:$(RESET)\n"
+	@printf "  tango doctor\n"
+	@printf "  tango setup\n"
+	@printf "  tango languages\n"
+	@printf "  tango install-model de\n"
+	@printf "  tango install-translation de:en\n"
+	@printf "  tango build-dictionary de\n"
+	@printf "  tango build-antonyms\n"
+	@printf "  tango run <id> --deck \"<name>\" --language de\n"
+	@printf "  tango review --deck \"<name>\"\n"
+	@printf "  tango backlog --deck \"<name>\"\n"
 	@printf "\n"
 	@printf "$(BOLD)Development:$(RESET)\n"
 	@printf "  $(CYAN)make test$(RESET)                             Unit tests only (no network or Anki needed)\n"
