@@ -40,6 +40,12 @@ dependencies = [
     # Environment variable management — .env file support
     "python-dotenv>=1.0,<2.0",
 
+    # Command line. Light: typer plus click, a few hundred KB, and it was
+    # already present as a transitive dependency of libretranslate before it
+    # was declared here. Constraint 3.6 is about heavy runtime dependencies
+    # and this is not one.
+    "typer>=0.12,<1.0",
+
     # WordNet for synonym/antonym supplementation
     # After install run: python -m nltk.downloader wordnet omw-2.0
     # (omw-1.4 is silently ignored by this nltk version -- see CLAUDE.md)
@@ -88,6 +94,13 @@ dev = [
 # =============================================================================
 # Package discovery
 # =============================================================================
+
+[project.scripts]
+# The command a user types. Deliberately `tango` even though the
+# distribution is still named yt-anki-pipeline: the script name and the
+# PyPI name are independent, and the distribution name is a v0.8.0
+# decision that has not been made yet.
+tango = "pipeline.__main__:main"
 
 [tool.setuptools.dynamic]
 # Single source of truth: src/pipeline/__init__.py
