@@ -119,7 +119,8 @@ DB_PATH                   SQLite database path, default "pipeline.db"
 OUTPUT_DIR                .apkg output directory, default "output"
 REVIEW_FILE               deferred queue file, default "review.json"
 DICT_DIR                  offline Wiktionary indexes, default "dictionaries"
-ANKI_HOST                 AnkiConnect URL, default "http://localhost:8765"
+ANKI_HOST                 AnkiConnect URL, default "http://localhost:8765";
+                          unset, WSL falls back to the Windows host (8.45)
 ANKI_VERSION              AnkiConnect API version, fixed at 6
 ANKI_TIMEOUT              seconds before AnkiConnect timeout, default 5
 MODEL_ID                  genanki model ID, 1607392319 — NEVER CHANGE
@@ -780,10 +781,15 @@ Actions used: `version`, `deckNames`, `findNotes`, `notesInfo`,
 `importPackage`.
 
 WSL note: AnkiConnect binds to `127.0.0.1` by default, which WSL2 cannot reach
-because it runs in a separate network namespace. Fix requires setting
-`webBindAddress` to `0.0.0.0` in the AnkiConnect config and pointing
-`ANKI_HOST` at the WSL gateway IP found via `ip route | grep default`. That IP
-can change between WSL sessions.
+because it runs in a separate network namespace. That still has to be set to
+`0.0.0.0` in the AnkiConnect config by hand, and no addressing fixes it.
+
+The address itself is no longer the user's problem. `ANKI_HOST` defaults to
+localhost, which WSL2 NAT refuses, and `_anki_request` then retries once
+against the Windows host read from `/proc/net/route`, latching whichever
+answered. Pointing `ANKI_HOST` at a gateway IP by hand used to be the
+documented fix and was fragile precisely because that IP is reassigned when
+Windows reboots. See 8.45.
 
 ### 6.5 argostranslate and LibreTranslate
 
@@ -2627,6 +2633,60 @@ instead of standing beside it, which also gives the surviving card a
 transcript example it would not otherwise have had.
 
 ---
+
+### 8.45 The default was right, and the document describing it was wrong
+
+ROADMAP's v0.8.0 rung carried this item for a week: "`ANKI_HOST` that works
+off WSL. It defaults to a gateway IP that is meaningless on macOS, native
+Linux and native Windows." CLAUDE.md repeated it. Both were wrong.
+`config.py` has defaulted to `http://localhost:8765` throughout. The gateway
+IP, `172.28.144.1`, was in one developer's `.env`, which is not committed,
+and someone read a local override as the shipped default.
+
+The real problem is the mirror image. localhost is correct on macOS, native
+Linux, native Windows, and on WSL2 with mirrored networking. It is wrong on
+WSL2's default NAT networking, where Anki runs on the Windows side and
+localhost is the Linux VM, which was never going to have Anki on it. So the
+platform that needed fixing was the one the environment was already running.
+
+**The fix is a retry, not a different default.** Defaulting to the gateway
+under WSL is the obvious change and it is wrong: under mirrored networking
+localhost IS the Windows host and the gateway is not, so every setup that
+works today would stop. Trying the gateway only after localhost has actually
+refused a connection cannot cause that, because the refusal has already
+happened. `deck._wsl_fallback_host()` returns the candidate; `_anki_request`
+retries once and latches the address that answered, so a 1000-word run pays
+the refusal once rather than on every call.
+
+Five conditions return "nothing to try", and each is a case where retrying
+would be wrong rather than merely useless:
+
+| condition | why |
+|---|---|
+| `ANKI_HOST` set in the environment | The user said where Anki is. An explicit localhost is still explicit |
+| not WSL | There is no second address on any other platform |
+| `wsl_host_ip()` is None | Mirrored networking, or an unreadable route table |
+| candidate equals the address that just failed | It failed |
+| already attempted this run | Two failed calls should cost two requests, not four |
+
+The address comes from `/proc/net/route`, not from `ip route` and not from
+`/etc/resolv.conf`. Not `ip route`, because that is a subprocess for a file
+read and iproute2 is not always installed. Not resolv.conf, which is the
+recipe most WSL guides give and which is **wrong on this machine**: measured
+3 September 2026, resolv.conf's nameserver is `10.255.255.254` while the
+Windows host is `172.28.144.1`. The gateway column is a little-endian hex
+word, so `01901CAC` reads as 172.28.144.1, least significant byte first.
+
+A timeout is deliberately not retried. Something answered, so the address is
+right, and the existing message already names the cause that explains almost
+every one of them: a modal dialog open in Anki blocks all requests.
+
+Two lessons, and the second is the expensive one. AnkiConnect binding to
+`127.0.0.1` remains the actual cause of most WSL failures, and no amount of
+correct addressing fixes it, so the both-addresses-failed message names
+`0.0.0.0` and where to set it. And a number or a default quoted in a document
+that nobody re-measures is a liability: this is the same failure as the
+"roughly 1.5GB" of torch in 8.41, which was out by threefold for months.
 
 ## 9. Known architectural gaps
 
