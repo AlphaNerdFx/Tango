@@ -168,8 +168,82 @@ MEDIA_MAX_RETRY_WAIT: float = float(os.getenv("MEDIA_MAX_RETRY_WAIT", "30"))
 
 # Anki
 
-# AnkiConnect host — change if running Anki on a non-default port
+
+def is_wsl() -> bool:
+    """
+    Whether this process is running inside the Windows Subsystem for Linux.
+
+    Two separate things depend on it. A .apkg path handed to a Windows-side
+    Anki has to be translated to drive-letter form
+    (`__main__._translate_wsl_path`), and `localhost` does not reach that
+    Anki from inside WSL2's default NAT network (`deck._anki_request`).
+
+    Returns:
+        True under WSL, False anywhere else, including when /proc/version
+        cannot be read at all.
+    """
+    try:
+        with open("/proc/version") as fh:
+            return "microsoft" in fh.read().lower()
+    except OSError:
+        return False
+
+
+def wsl_host_ip() -> str | None:
+    """
+    The address that reaches the Windows side from inside WSL2, or None.
+
+    Under WSL2's default NAT networking the Windows host sits at the other
+    end of the default route, and that address is reassigned on reboot,
+    which is why writing it into .env works until it silently does not.
+
+    Read from /proc/net/route rather than by parsing `ip route`, so it is a
+    file read with no subprocess and works where iproute2 is not installed.
+    The gateway column is a little-endian hex word: 01901CAC is 172.28.144.1,
+    least significant byte first.
+
+    Deliberately NOT /etc/resolv.conf's nameserver, which is the usual
+    recipe and is wrong. Measured on this machine, resolv.conf gives
+    10.255.255.254 while the Windows host is 172.28.144.1.
+
+    Returns:
+        The gateway as a dotted quad, or None when there is no usable
+        default route -- which includes WSL2 mirrored networking, where
+        localhost already reaches Windows and no separate address exists.
+        The caller reads None as "nothing to fall back to".
+    """
+    try:
+        with open("/proc/net/route") as fh:
+            rows = fh.read().splitlines()[1:]
+    except OSError:
+        return None
+    for row in rows:
+        fields = row.split()
+        # Destination 00000000 is the default route.
+        if len(fields) < 3 or fields[1] != "00000000":
+            continue
+        try:
+            packed = int(fields[2], 16)
+        except ValueError:
+            continue
+        if packed == 0:
+            continue
+        return ".".join(str((packed >> shift) & 0xFF) for shift in (0, 8, 16, 24))
+    return None
+
+
+# AnkiConnect host — change if running Anki on a non-default port.
+#
+# localhost is correct on macOS, native Linux, native Windows and on WSL2
+# with mirrored networking. It is wrong on WSL2's default NAT networking,
+# where Anki runs on the Windows side; deck.py retries there against
+# wsl_host_ip() rather than defaulting to it, because guessing the gateway
+# would break the mirrored-networking case that works today.
 ANKI_HOST: str = os.getenv("ANKI_HOST", "http://localhost:8765")
+
+# Whether the user named the host themselves. An explicit choice is never
+# second-guessed, including an explicit localhost.
+ANKI_HOST_EXPLICIT: bool = bool(os.getenv("ANKI_HOST"))
 
 # AnkiConnect API version — do not change unless AnkiConnect upgrades its API
 ANKI_VERSION: int = 6
