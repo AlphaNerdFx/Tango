@@ -1,20 +1,30 @@
 """
-CLI entry point for the yt-anki-pipeline.
+CLI entry point for Tango, distributed on PyPI as `tango-anki`.
 
 Usage:
-    python -m pipeline --video-id VIDEO_ID --deck "Deck::Name" [--verbose]
-    python -m pipeline --review --deck "Deck::Name"
-    python -m pipeline --process-backlog --deck "Deck::Name"
+    tango run VIDEO_ID --deck "Deck::Name" [--verbose]
+    tango review --deck "Deck::Name"
+    tango backlog --deck "Deck::Name"
 
 Or via Makefile:
     make run VIDEO_ID=<id> DECK="<name>"
     make review DECK="<name>"
     make backlog DECK="<name>"
 
-Modes:
-    default         — full pipeline: transcript → NLP → deck check → definitions → .apkg
-    --review        — process review.json decisions and build .apkg for approved words
-    --process-backlog — process SQLite backlog when Anki was previously unavailable
+Commands:
+    run       — full pipeline: transcript → NLP → deck check → definitions → .apkg
+    review    — process review.json decisions and build .apkg for approved words
+    backlog   — process the SQLite backlog left when Anki was unavailable
+    doctor    — report what is installed and missing, with the command to fix each
+    languages — list the language codes this pipeline supports
+    setup     — guided .env setup for the optional Merriam-Webster key
+
+    install-model, install-translation, build-dictionary, build-antonyms
+              — one-off installs; `tango --help` lists every option.
+
+`tango run` is the entry point declared in [project.scripts]. `python -m
+pipeline` still reaches the same place, and was the only way in before
+v0.7.0 gave the project a console script.
 """
 
 from __future__ import annotations
@@ -31,6 +41,7 @@ from pathlib import Path
 import typer
 
 from pipeline import (
+    __version__,
     cards,
     deck as deck_module,
     definition as definition_module,
@@ -475,7 +486,7 @@ def _normalise_video_id(value: str) -> str:
     safety — the transcript fetch reports a bad ID perfectly well.
 
     Args:
-        value: Raw --video-id argument.
+        value: Raw video id argument.
 
     Returns:
         The extracted ID when the input was a URL, otherwise the input
@@ -967,6 +978,45 @@ app = typer.Typer(
     context_settings={"help_option_names": ["-h", "--help"]},
 )
 
+
+def _version_callback(value: bool) -> None:
+    """
+    Print the version and exit, before Typer parses anything else.
+
+    `raise typer.Exit()` is the documented way out of a callback and gives
+    exit code 0. It is what makes this work at all: without it the callback
+    returns, no subcommand was named, and the group falls through to its
+    own help.
+
+    `is_eager` is belt and braces, not load-bearing. Click already
+    processes a group's own options before dispatching, so dropping it
+    changes nothing today -- measured, by dropping it and watching all five
+    tests still pass. It is kept because that stops being true the moment a
+    second eager option is added, and no test pins it.
+
+    The string comes from `pipeline.__version__`, the single source of
+    truth (CLAUDE.md 15). Reading it back from installed metadata instead
+    is stale under an editable install, which reported 0.1.0 long after the
+    file said otherwise.
+    """
+    if value:
+        print(f"tango {__version__}")
+        raise typer.Exit()
+
+
+@app.callback()
+def _app_callback(
+    version: bool = typer.Option(
+        False,
+        "--version",
+        "-V",
+        callback=_version_callback,
+        is_eager=True,
+        help="Print the version and exit.",
+    ),
+) -> None:
+    """YouTube transcripts to Anki flashcard packages."""
+
 # Options shared by the three pipeline modes, defined once so they cannot
 # drift apart the way the argparse versions could.
 _DECK = typer.Option(None, "--deck", "-d", help='Target Anki deck, e.g. "Language::French". Prompts if omitted.')
@@ -1202,7 +1252,7 @@ def _run_doctor() -> int:
     print(f"    installed for  {', '.join(present) if present else 'none'}")
     if not present:
         missing += 1
-        print("    -> python -m pipeline --install-model <code>")
+        print("    -> tango install-model <code>")
     print()
 
     # ── Dictionary indexes: the only source of non-English definitions ──
@@ -1296,7 +1346,7 @@ def _run_install_model(language: str) -> int:
         model = get_spacy_model(language)
     except (SpacyModelUnavailableError, KeyError):
         _err(f"No spaCy model is mapped for '{language}'.")
-        _info("Run 'python -m pipeline --list-languages' to see supported codes.")
+        _info("Run 'tango languages' to see supported codes.")
         return 1
 
     _info(f"Downloading spaCy model: {model}")
@@ -1343,8 +1393,8 @@ def _run_install_translation(pair: str) -> int:
     _err(f"Could not install translation for {from_code} -> {to_code}.")
     _info("argostranslate publishes no model for every pair. It pivots "
           "through English, so try the two halves separately:")
-    _info(f"  python -m pipeline --install-translation {from_code}:en")
-    _info(f"  python -m pipeline --install-translation en:{to_code}")
+    _info(f"  tango install-translation {from_code}:en")
+    _info(f"  tango install-translation en:{to_code}")
     return 1
 
 
