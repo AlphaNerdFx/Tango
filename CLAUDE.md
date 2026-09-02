@@ -30,8 +30,13 @@ code.
 **Repository:** https://github.com/AlphaNerdFx/Tango
 **Virtual environment:** `.tangovenv` — do NOT create `.venv`, it is the wrong name
 **Python:** 3.10. Developed under WSL2 on Windows 11, but that is the
-current environment, not a target: cross-platform support is a v0.8.0 goal
-and the WSL assumptions in `__main__.py` and `ANKI_HOST` are known work.
+current environment, not a target: cross-platform support is a v0.9.0 goal.
+The `ANKI_HOST` half of that is done, and was not what this file said it
+was: the default has always been `http://localhost:8765`, and the gateway
+IP someone read as the shipped default lived in an uncommitted `.env`. WSL
+is now detected and handled by retrying rather than by a different default
+(ARCHITECTURE 8.45). The `/mnt/c` path translation in `__main__.py` is
+already conditional on `is_wsl()`.
 **Current tag:** v0.7.0, the command line as a product, released
 3 September 2026. It carries three items, none of which touches a card:
 every mode is a subcommand (`tango run`, `review`, `backlog`, `languages`,
@@ -330,6 +335,22 @@ back. And a number in this file that nobody re-measured was wrong by 3x for
 months, so see ROADMAP.md v0.9.0, where shrinking this is a release goal
 with acceptance targets.
 
+**The base install, measured 3 September 2026 in a clean venv: 334 MB
+across 58 packages.** No torch, no translation stack. spacy and the numeric
+stack it needs are 236 MB of that, 74%: spacy 119, numpy 41, blis 34,
+numpy.libs 27, thinc 15. That is the floor while spacy is the NLP engine,
+and spacy stays a base dependency because an install that cannot run
+`tango run` is not an install.
+
+`nltk` moved out on the same day, into a `wordnet` extra. It only
+supplements the synonym and antonym fields, every import of it in
+`definition.py` sits inside a function inside a `try/except` returning
+empty lists, and that was verified rather than assumed: blocking the import
+and calling both entry points returns `([], [])` rather than raising. So an
+install without it is a working install with thinner synonyms. `dev`
+depends on `tango-anki[wordnet]`, because dropping it from the base install
+must not drop it from the test run.
+
 ---
 
 ## 4. Coding standards
@@ -435,7 +456,8 @@ pip install -r requirements.txt
 python -m spacy download en_core_web_sm
 python -m spacy download fr_core_news_md     # French is pinned to "md", see issue #13
 python -m spacy download es_core_news_sm     # or any other code in language.SPACY_MODELS
-python -m nltk.downloader wordnet omw-2.0     # not omw-1.4 -- this NLTK version silently ignores it
+pip install -e ".[wordnet]"                   # optional: WordNet synonyms and antonyms
+python -m nltk.downloader wordnet omw-2.0    # needs the line above; not omw-1.4, this NLTK version ignores it
 make dictionary LANGUAGE=fr                  # offline Wiktionary definitions, see below
 ```
 
@@ -485,7 +507,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1005 passing, 24 deselected. The count drifts as tests are added —
+Expected: 1020 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
