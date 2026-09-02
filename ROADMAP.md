@@ -150,15 +150,22 @@ cannot be missed.
 
 ### v0.7.0 — The command line as a product
 
-The first release aimed at someone who did not write it.
+The first release aimed at someone who did not write it. **Released
+3 September 2026, all three items.** No migration: nothing about a card or a
+collection changed, only what you type and what the run says back.
 
 - Migrate argparse → Typer. Done 28 August 2026: `tango run`, `review`,
   `backlog`, `languages`, `doctor`, `setup`, `install-model`,
-  `install-translation`, `build-dictionary`, `build-antonyms`
-- Error messages that name the fix, everywhere (`make doctor` already does
-  this; the pipeline itself does not). Started 27 August 2026: the seven
-  that stopped a run without naming a next step now name one.
-- Progress and timing that make a long run legible
+  `install-translation`, `build-dictionary`, `build-antonyms`. A console
+  entry point exists for the first time, so an install gives you a verb
+  rather than `python -m pipeline`. The old flag surface is gone, broken
+  deliberately now while the interface has no installed users.
+- Error messages that name the fix, everywhere (`make doctor` already did
+  this; the pipeline itself did not). Done 27 August 2026: the seven that
+  stopped a run without naming a next step now name one.
+- Progress and timing that make a long run legible. Done 27 August 2026:
+  per-phase elapsed, and a definition-phase progress line that redraws on a
+  terminal and prints one line per decile into a log file.
 
 ### v0.8.0 — Packaged and installable
 
