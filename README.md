@@ -70,7 +70,7 @@ run the pipeline:
 | MW_API_KEY | No | [Merriam-Webster API key](https://dictionaryapi.com/register/index.htm) (free, 1000 requests/day). Improves English definitions; dictionaryapi.dev is used automatically without one |
 | PROXY_HTTP_URL, PROXY_HTTPS_URL | No | Your own proxy, only needed if YouTube starts rate-limiting your IP. See Proxy notes below before using one |
 | WEBSHARE_USERNAME, WEBSHARE_PASSWORD | No | Alternative to the above if you specifically use Webshare |
-| ANKI_HOST | No | AnkiConnect URL. WSL users: set to your Windows host IP |
+| ANKI_HOST | No | AnkiConnect URL. Defaults to `http://localhost:8765`, which is right everywhere except WSL, and WSL is detected and handled without setting this |
 | LIBRETRANSLATE_URL | No | Local LibreTranslate server URL for translation mode |
 
 ### Proxy notes
@@ -90,7 +90,21 @@ personal VPN).
 arguments (`make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr DEF_LANG=en`), see
 below. Setting them in `.env` has no effect.
 
-WSL users: AnkiConnect must bind to 0.0.0.0 instead of 127.0.0.1. Change this in Anki -> Tools -> Add-ons -> AnkiConnect -> Config. Set ANKI_HOST to your WSL gateway IP (find it with: ip route | grep default).
+### WSL
+
+One setting, and it is in Anki rather than here: AnkiConnect binds to
+127.0.0.1, which WSL cannot reach. Change it to `0.0.0.0` in Anki under
+Tools, Add-ons, AnkiConnect, Config.
+
+You no longer need to set `ANKI_HOST`. Anki runs on the Windows side and
+`localhost` from inside WSL is the Linux VM, so the connection is refused;
+Tango notices, retries once against the Windows host it finds in the routing
+table, and stays on whichever address answered. The old advice was to paste
+that address into `.env` yourself, which worked until Windows rebooted and
+reassigned it.
+
+Setting `ANKI_HOST` explicitly still overrides all of this, and is never
+second-guessed.
 
 ---
 
