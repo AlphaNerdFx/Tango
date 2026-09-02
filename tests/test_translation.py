@@ -640,7 +640,13 @@ class TestErrorMessagesNameTheFix:
 
     def test_model_not_installed_names_the_install_command(self):
         message = str(ModelNotInstalledError("de", "en"))
-        assert "--install-translation de:en" in message
+        # This read "--install-translation de:en" until 3 September 2026,
+        # which is how it kept passing while the message named a flag
+        # v0.7.0 had deleted. Pinning the spelling instead of the intent
+        # let the test and the bug go stale together; see the twin case in
+        # tests/test_deck.py.
+        assert "tango install-translation de:en" in message
+        assert "python -m pipeline" not in message
 
     def test_model_not_installed_names_the_other_way_out(self):
         # Installing is not the only fix, and for a user who does not want
