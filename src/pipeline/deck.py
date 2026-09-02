@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlsplit
 
 import requests
 from rapidfuzz import fuzz, process as fuzz_process
@@ -45,9 +46,9 @@ logger = logging.getLogger(__name__)
 # ── Constants (override in config.py) ────────────────────────────────────────
 
 from pipeline.config import (
-    ANKI_HOST, ANKI_VERSION, ANKI_TIMEOUT, ANKI_IMPORT_TIMEOUT,
+    ANKI_HOST, ANKI_HOST_EXPLICIT, ANKI_VERSION, ANKI_TIMEOUT, ANKI_IMPORT_TIMEOUT,
     CONFIDENCE_HIGH, CONFIDENCE_LOW, SHORT_WORD_THRESHOLD,
-    REVIEW_FILE, DB_PATH,
+    REVIEW_FILE, DB_PATH, is_wsl, wsl_host_ip,
 )
 
 
@@ -119,6 +120,45 @@ class AnkiNotRunningError(Exception):
 _SLOW_ACTIONS = {"importPackage", "exportPackage", "sync"}
 
 
+# The host actually in use. Starts as configured and only ever moves once,
+# to the WSL fallback below, so every later call in the run goes straight to
+# the address that answered.
+_active_host: str = ANKI_HOST
+_wsl_fallback_tried: bool = False
+
+
+def _wsl_fallback_host() -> str | None:
+    """
+    The one alternative address worth trying after localhost is refused.
+
+    Under WSL2's default NAT networking, Anki runs on the Windows side and
+    `localhost` is the Linux VM, so the connection is refused by a machine
+    that was never going to have Anki on it. The Windows host is at the
+    default route (config.wsl_host_ip).
+
+    This is a fallback rather than a default on purpose. Defaulting to the
+    gateway under WSL would break WSL2 mirrored networking, where localhost
+    IS correct and the gateway is not, so a setup that works today would
+    stop. Trying it only after a refusal cannot do that: the refusal has
+    already happened.
+
+    Returns None -- meaning "nothing to try" -- when the user named the
+    host themselves, when this is not WSL, when the gateway cannot be read,
+    when it is where we just failed, and after one attempt, so a run that
+    is going to fail fails at one request per call rather than two.
+    """
+    global _wsl_fallback_tried
+    if _wsl_fallback_tried or ANKI_HOST_EXPLICIT or not is_wsl():
+        return None
+    _wsl_fallback_tried = True
+    ip = wsl_host_ip()
+    if not ip:
+        return None
+    port = urlsplit(_active_host).port or 8765
+    candidate = f"http://{ip}:{port}"
+    return None if candidate == _active_host else candidate
+
+
 def _anki_request(action: str, **params) -> object:
     """
     Send a request to AnkiConnect and return the result field.
@@ -128,20 +168,48 @@ def _anki_request(action: str, **params) -> object:
     importing a package into a large collection exceeded 5s, raised
     AnkiNotRunningError, and looked exactly like Anki being closed.
 
+    A refused connection under WSL is retried once against the Windows host
+    (see _wsl_fallback_host). A timeout is not: something answered, so the
+    address is right and a second address would be a worse guess.
+
     Raises:
         AnkiNotRunningError: If the connection is refused or times out.
         AnkiConnectError:    If AnkiConnect returns an error string.
     """
+    global _active_host
     payload = {"action": action, "version": ANKI_VERSION, "params": params}
     timeout = ANKI_IMPORT_TIMEOUT if action in _SLOW_ACTIONS else ANKI_TIMEOUT
     try:
-        response = requests.post(ANKI_HOST, json=payload, timeout=timeout)
+        response = requests.post(_active_host, json=payload, timeout=timeout)
         response.raise_for_status()
     except requests.exceptions.ConnectionError as exc:
-        raise AnkiNotRunningError(
-            f"AnkiConnect not reachable at {ANKI_HOST}. "
-            "Ensure Anki is running with the AnkiConnect add-on installed."
-        ) from exc
+        fallback = _wsl_fallback_host()
+        if fallback is None:
+            raise AnkiNotRunningError(
+                f"AnkiConnect not reachable at {_active_host}. "
+                "Ensure Anki is running with the AnkiConnect add-on installed."
+            ) from exc
+        try:
+            response = requests.post(fallback, json=payload, timeout=timeout)
+            response.raise_for_status()
+        except requests.exceptions.RequestException as retry_exc:
+            raise AnkiNotRunningError(
+                f"AnkiConnect not reachable at {_active_host}, nor at "
+                f"{fallback}, the Windows host this WSL session routes "
+                f"through.\n"
+                f"  Ensure Anki is running on Windows with the AnkiConnect "
+                f"add-on installed.\n"
+                f"  AnkiConnect binds to 127.0.0.1 by default, which WSL "
+                f"cannot reach. Set its config to \"0.0.0.0\" in Anki: "
+                f"Tools, Add-ons, AnkiConnect, Config."
+            ) from retry_exc
+        _active_host = fallback
+        logger.info(
+            "AnkiConnect answered at %s after %s refused the connection. "
+            "Set ANKI_HOST=%s in .env to skip this retry; the address is "
+            "reassigned when Windows reboots.",
+            fallback, ANKI_HOST, fallback,
+        )
     except requests.exceptions.Timeout as exc:
         raise AnkiNotRunningError(
             f"AnkiConnect timed out after {timeout}s on '{action}'.\n"
@@ -160,7 +228,7 @@ def _anki_request(action: str, **params) -> object:
             f"AnkiConnect error on '{action}': {data['error']}\n"
             f"  Check the deck and notetype exist in the open Anki profile, "
             f"then retry.\n"
-            f"  Run 'python -m pipeline --doctor' to confirm Anki is reachable."
+            f"  Run 'tango doctor' to confirm Anki is reachable."
         )
 
     return data["result"]
@@ -520,7 +588,7 @@ def check_vocabulary(
 
     If AnkiConnect is unreachable, all words are written to the SQLite
     backlog and the result has anki_available=False and empty new/skip/queue.
-    The backlog is processed when the user explicitly runs --process-backlog.
+    The backlog is processed when the user explicitly runs `tango backlog`.
 
     Args:
         vocabulary: Ordered dict from nlp.process_transcript().
@@ -775,7 +843,7 @@ def process_backlog(deck_name: str) -> DeckCheckResult:
     """
     Process all backlogged lemmas for a deck.
 
-    Called explicitly by the user via --process-backlog flag.
+    Called explicitly by the user via the `tango backlog` command.
     Requires Anki to be running — raises AnkiNotRunningError if not.
 
     Returns:
