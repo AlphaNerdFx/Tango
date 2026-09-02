@@ -156,7 +156,7 @@ def is_available(language: str) -> bool:
             if version != _SCHEMA_VERSION:
                 logger.warning(
                     "Dictionary index for '%s' is schema v%s, expected v%s. "
-                    "Rebuild it with --build-dictionary %s.",
+                    "Rebuild it with 'tango build-dictionary %s'.",
                     language, version, _SCHEMA_VERSION, language,
                 )
                 return False
