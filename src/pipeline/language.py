@@ -369,7 +369,7 @@ def list_supported_languages() -> list[tuple[str, str]]:
     Return a deduplicated list of (canonical English name, BCP-47 code) pairs
     for all supported languages, sorted alphabetically by name.
 
-    Used by the --list-languages CLI flag.
+    Used by the `tango languages` command.
     """
     seen_codes: set[str] = set()
     result: list[tuple[str, str]] = []
