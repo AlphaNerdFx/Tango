@@ -32,30 +32,39 @@ code.
 **Python:** 3.10. Developed under WSL2 on Windows 11, but that is the
 current environment, not a target: cross-platform support is a v0.8.0 goal
 and the WSL assumptions in `__main__.py` and `ANKI_HOST` are known work.
-**Current tag:** v0.6.0, card quality, released 27 August 2026. It carries
-five items, all about what is *in* a field rather than which fields exist:
-filler sounds no longer become cards, inflection pointers no longer reach
-cards as definitions, the definition cache key carries both languages, the
-run names the words that got no definition instead of only counting them,
-and the antonym field has an offline source of its own (ADR-010, which took
-a real French deck from 19.7% to 34.8%). No migration: the notetype is
-unchanged and an existing collection needs nothing done to it.
+**Current tag:** v0.7.0, the command line as a product, released
+3 September 2026. It carries three items, none of which touches a card:
+every mode is a subcommand (`tango run`, `review`, `backlog`, `languages`,
+`doctor`, `setup`, `install-model`, `install-translation`,
+`build-dictionary`, `build-antonyms`) behind a real console entry point, the
+seven failures that stopped a run without naming a next step now name one,
+and a long run reports per-phase timing plus a definition-phase progress
+line. No migration: the notetype is unchanged and an existing collection
+needs nothing done to it. The old flag surface is gone, broken deliberately
+while the interface still has no installed users.
 
-The 0.5.x line before it ran v0.5.0 (pronunciation on cards, the one release
-needing a migration), v0.5.1 (pronunciation describes the word on the card),
-v0.5.2 (audio plays inside the card) and v0.5.3 (part of speech in the
-learner's language). Every tag has GitHub release notes.
-**Also on main, and not part of that rung:** the translation install no
+v0.6.0 before it was card quality, five items about what is *in* a field
+rather than which fields exist: filler sounds no longer become cards,
+inflection pointers no longer reach cards as definitions, the definition
+cache key carries both languages, the run names the words that got no
+definition instead of only counting them, and the antonym field has an
+offline source of its own (ADR-010, which took a real French deck from 19.7%
+to 34.8%). The 0.5.x line ran v0.5.0 (pronunciation on cards, the one
+release needing a migration), v0.5.1 (pronunciation describes the word on
+the card), v0.5.2 (audio plays inside the card) and v0.5.3 (part of speech
+in the learner's language). Every tag has GitHub release notes.
+**Also on main, and not part of either rung:** the translation install no
 longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
 5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.9.0,
 where the rest of the size work lives.
-**Working toward:** v0.7.0, the command line as a product, then v0.8.0,
-packaged and installable. That second rung moved forward three places on
-27 August 2026: it sat behind cross-platform support and install size, which
-is the ordering of a project polishing for users who cannot install it. The
-ladder is now sequenced for someone who wants the tool adopted rather than
-finished. Goals per tag
-through v1.0.0 are in `ROADMAP.md`; the rule that picks the number is in
+**Working toward:** v0.8.0, packaged and installable. That rung moved
+forward three places on 27 August 2026: it sat behind cross-platform support
+and install size, which is the ordering of a project polishing for users who
+cannot install it. The ladder is now sequenced for someone who wants the
+tool adopted rather than finished. The distribution name was decided on
+3 September 2026: **`tango-anki` on PyPI**, because `tango` is taken by an
+unrelated project, with `tango` staying the command a user types. Goals per
+tag through v1.0.0 are in `ROADMAP.md`; the rule that picks the number is in
 section 15; the commit and tag format is in section 16; release history is
 in `CHANGELOG.md`.
 
@@ -596,7 +605,7 @@ Before inserting a new section into a Markdown doc, print the existing heading o
 
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
-The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 18 August 2026 all thirteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
+The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all fifteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
 
 ## 16. Commit and tag format
 
