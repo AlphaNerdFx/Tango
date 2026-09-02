@@ -122,7 +122,7 @@ def is_available() -> bool:
             if version != _SCHEMA_VERSION:
                 logger.warning(
                     "Antonym index is schema v%s, expected v%s. "
-                    "Rebuild it with --build-antonyms.",
+                    "Rebuild it with 'tango build-antonyms'.",
                     version, _SCHEMA_VERSION,
                 )
                 return False
