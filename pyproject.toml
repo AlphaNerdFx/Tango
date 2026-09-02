@@ -1,5 +1,8 @@
 [build-system]
-requires      = ["setuptools>=68", "wheel"]
+# 77 is the floor for the SPDX `license` string and `license-files` below.
+# The older `license = { text = "MIT" }` table is deprecated and warns on
+# every build with a current setuptools.
+requires      = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 # =============================================================================
@@ -7,12 +10,32 @@ build-backend = "setuptools.build_meta"
 # =============================================================================
 
 [project]
-name        = "yt-anki-pipeline"
+# The distribution name, decided 3 September 2026 for v0.8.0. `tango` on
+# PyPI is an unrelated project, so the name a user types and the name pip
+# fetches cannot be the same string. They do not have to be: the console
+# script below stays `tango`, which is the only one anybody types twice.
+name        = "tango-anki"
 dynamic     = ["version"]
-description = "YouTube transcript to Anki flashcard pipeline"
+description = "Turn YouTube transcripts into Anki flashcards for language learners"
 readme      = "README.md"
 requires-python = ">=3.10"
-license     = { text = "MIT" }
+license      = "MIT"
+license-files = ["LICENSE"]
+authors     = [{ name = "Youssef Larbi" }]
+keywords    = ["anki", "flashcards", "language-learning", "youtube", "vocabulary", "spaced-repetition"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Natural Language :: English",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Education",
+    "Topic :: Text Processing :: Linguistic",
+]
 
 # =============================================================================
 # Runtime dependencies
@@ -45,12 +68,14 @@ dependencies = [
     # was declared here. Constraint 3.6 is about heavy runtime dependencies
     # and this is not one.
     "typer>=0.12,<1.0",
-
-    # WordNet for synonym/antonym supplementation
-    # After install run: python -m nltk.downloader wordnet omw-2.0
-    # (omw-1.4 is silently ignored by this nltk version -- see CLAUDE.md)
-    "nltk>=3.8",
 ]
+
+# Measured 3 September 2026, in a clean venv: the list above resolves to
+# 58 packages and 334 MB on disk. No torch, no translation stack. 236 MB
+# of it -- 74% -- is spacy and the numeric stack it needs (spacy 119,
+# numpy 41, blis 34, numpy.libs 27, thinc 15), which is not removable
+# while spacy is the NLP engine. Re-measure before quoting this; CLAUDE.md
+# 3.6 records what happens to a number nobody checks.
 
 # =============================================================================
 # Optional dependencies
@@ -59,6 +84,21 @@ dependencies = [
 # =============================================================================
 
 [project.optional-dependencies]
+wordnet = [
+    # Supplements the synonym and antonym fields, and nothing else. Every
+    # import of it in definition.py sits inside a function inside a
+    # try/except that returns empty lists, so an install without this is a
+    # working install with thinner synonyms -- verified 3 September 2026 by
+    # blocking the import and calling both entry points, which returned
+    # ([], []) rather than raising. That is why it is an extra rather than a
+    # base dependency: 13 MB of package plus a separate corpus download at
+    # first run, for a supplementary source.
+    #
+    # After installing run: python -m nltk.downloader wordnet omw-2.0
+    # (omw-1.4 installs without error but this NLTK version never uses it,
+    # see ADR-008)
+    "nltk>=3.8",
+]
 translation = [
     # Required for DEF_LANG translation mode.
     # Install via: make translate-setup
@@ -66,6 +106,10 @@ translation = [
     "libretranslate>=1.6",
 ]
 dev = [
+    # The wordnet extra, so the test suite keeps exercising the paths that
+    # use it. Dropping it from the base install must not drop it from CI.
+    "tango-anki[wordnet]",
+
     # Test runner
     "pytest>=8.0,<10.0",
 
@@ -95,11 +139,20 @@ dev = [
 # Package discovery
 # =============================================================================
 
+# A table header claims every key under it until the next header, so this
+# block sits below the last bare `project.*` key. Put it up beside
+# `classifiers` and the `dependencies` list underneath becomes
+# `project.urls.dependencies`, which fails the build.
+[project.urls]
+Homepage   = "https://github.com/AlphaNerdFx/Tango"
+Repository = "https://github.com/AlphaNerdFx/Tango"
+Changelog  = "https://github.com/AlphaNerdFx/Tango/blob/main/CHANGELOG.md"
+Issues     = "https://github.com/AlphaNerdFx/Tango/issues"
+
 [project.scripts]
-# The command a user types. Deliberately `tango` even though the
-# distribution is still named yt-anki-pipeline: the script name and the
-# PyPI name are independent, and the distribution name is a v0.8.0
-# decision that has not been made yet.
+# The command a user types. `tango` even though the distribution is
+# `tango-anki`, because the script name and the PyPI name are independent
+# and only one of them gets typed more than once.
 tango = "pipeline.__main__:main"
 
 [tool.setuptools.dynamic]
