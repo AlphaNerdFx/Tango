@@ -1,5 +1,5 @@
 # =============================================================================
-# yt-anki-pipeline — Makefile
+# Tango (tango-anki) — Makefile
 # =============================================================================
 # Targets:
 #   make all          — full first-time setup (venv + install + spaCy model)
@@ -211,9 +211,16 @@ spacy-model: venv
 	fi
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading spaCy model: %s\n" "$(SPACY_MODEL_NAME)"
 	@$(VENV_PYTHON) -m spacy download $(SPACY_MODEL_NAME) --quiet
-	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading NLTK WordNet data...\n"
-	@$(VENV_PYTHON) -m nltk.downloader wordnet omw-2.0 --quiet 2>/dev/null || true
-	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  spaCy model and NLTK data ready.\n"
+	@if $(VENV_PYTHON) -c "import nltk" 2>/dev/null; then \
+		printf "$(CYAN)$(BOLD)[info]$(RESET)  Downloading NLTK WordNet data...\n"; \
+		$(VENV_PYTHON) -m nltk.downloader wordnet omw-2.0 --quiet 2>/dev/null || true; \
+		printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  spaCy model and NLTK data ready.\n"; \
+	else \
+		printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  spaCy model ready.\n"; \
+		printf "$(CYAN)$(BOLD)[info]$(RESET)  nltk is not installed, so WordNet data was skipped.\n"; \
+		printf "  It only supplements synonyms and antonyms. To add it:\n"; \
+		printf "    $(CYAN)pip install 'tango-anki[wordnet]'$(RESET)\n"; \
+	fi
 
 # -- translate-setup ---------------------------------------------------------
 
@@ -436,7 +443,7 @@ clean: check-os
 
 help:
 	@printf "\n"
-	@printf "$(BOLD)yt-anki-pipeline$(RESET) — YouTube to Anki flashcard pipeline\n"
+	@printf "$(BOLD)tango$(RESET) — YouTube to Anki flashcard pipeline\n"
 	@printf "\n"
 	@printf "$(BOLD)First-time setup:$(RESET)\n"
 	@printf "  $(CYAN)make all$(RESET)                              Create venv, install deps, download spaCy model\n"
