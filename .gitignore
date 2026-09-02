@@ -12,7 +12,7 @@ src/pipeline/*.py[cod]
 src/pipeline/*.pyo
 src/pipeline/*.pyd
 .Python
-src/yt_anki_pipeline.egg-info/
+src/*.egg-info/
 *.egg
 dist/
 build/
@@ -66,7 +66,6 @@ Thumbs.db
 # spaCy model cache
 # Models are downloaded via 'make spacy-model' — not committed
 *.tar.gz
-src/yt_anki_pipeline.egg-info
 
 # Claude Settings
 .claude/settings.local.json
