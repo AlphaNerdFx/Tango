@@ -14,7 +14,14 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working toward v0.7.0, the command line as a product.
+Working toward v0.8.0, packaged and installable.
+
+## [0.7.0] — 2026-09-03
+
+The command line as a product: the first release aimed at someone who did not
+write it. Nothing here changes a card or asks anything of an existing
+collection. It changes what you type, what the run tells you while it works,
+and what a failure says when it stops.
 
 ### Added
 
@@ -30,6 +37,20 @@ Working toward v0.7.0, the command line as a product.
   `python -m pipeline` rather than a verb. **This is a breaking CLI change**,
   made deliberately now, while the interface has no installed users, rather
   than after v0.8.0 publishes it.
+
+- **A long run says what it is doing, and how long it took.** Pacing
+  Merriam-Webster (8.43) turned the definition phase into minutes of silence
+  on a large English video, and silence is indistinguishable from a hang.
+  Every phase now reports its own elapsed time, and the definition phase
+  carries a progress line with a completion estimate.
+
+  The line redraws in place on a terminal, so a thousand-word run stays one
+  line rather than a thousand. Redirected anywhere else it prints one line
+  per decile instead: carriage returns in a log file are noise, and
+  `tango run ... > run.log` is a normal thing to do here. The estimate is
+  elapsed divided by completed, which is honest because the work per word is
+  uniform, and a cleverer estimate that is wrong is worse than a simple one
+  that is roughly right.
 
 - **English can have an offline index, and should.** `make dictionary
   LANGUAGE=en` used to warn you off. That advice was measured on 7 August,
@@ -464,7 +485,9 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.3...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.6.0...v0.7.0
+[0.6.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.2...v0.5.3
 [0.5.2]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.0...v0.5.1
