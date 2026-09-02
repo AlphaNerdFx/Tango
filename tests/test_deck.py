@@ -14,7 +14,9 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open
 
 import pytest
+import requests
 
+import pipeline.deck as deck_module
 from pipeline.deck import (
     Decision,
     DeckCheckResult,
@@ -990,7 +992,12 @@ class TestErrorMessagesNameTheFix:
         assert "deck was not found: French" in message
         # And the action, which Anki's message never includes.
         assert "addNotes" in message
-        assert "--doctor" in message
+        # And a command that exists. This assertion read "--doctor" until
+        # 3 September 2026, which is how it kept passing while the message
+        # told users to run a flag v0.7.0 had deleted: the test pinned the
+        # spelling rather than the intent, so the two went stale together.
+        assert "tango doctor" in message
+        assert "python -m pipeline" not in message
 
     @patch("pipeline.deck.requests.post")
     def test_timeout_names_the_modal_dialog(self, mock_post):
@@ -1005,3 +1012,117 @@ class TestErrorMessagesNameTheFix:
         with pytest.raises(AnkiNotRunningError) as exc:
             deck_module._anki_request("addNotes")
         assert "dialog" in str(exc.value).lower()
+
+
+# ── WSL host fallback ─────────────────────────────────────────────────────────
+
+class TestWslHostFallback:
+    """
+    v0.8.0. `localhost` is the right default on macOS, native Linux, native
+    Windows and WSL2 mirrored networking. It is wrong on WSL2's default NAT
+    networking, where Anki runs on the Windows side, and the address that
+    reaches it is reassigned whenever Windows reboots -- so writing it into
+    .env works until it silently does not.
+
+    The fix is a retry rather than a different default, because defaulting
+    to the gateway under WSL would break the mirrored-networking setups
+    where localhost is correct. These tests pin that asymmetry: the retry
+    happens only after a refusal, only under WSL, and never over an
+    explicit choice.
+    """
+
+    GATEWAY = "http://172.28.144.1:8765"
+    LOCAL = "http://localhost:8765"
+
+    @pytest.fixture(autouse=True)
+    def _reset_module_state(self):
+        # _active_host and _wsl_fallback_tried are module-level and latch by
+        # design, so a test that skipped this would inherit the previous
+        # one's decision.
+        with patch.object(deck_module, "_active_host", self.LOCAL), \
+             patch.object(deck_module, "_wsl_fallback_tried", False), \
+             patch.object(deck_module, "ANKI_HOST", self.LOCAL), \
+             patch.object(deck_module, "ANKI_HOST_EXPLICIT", False), \
+             patch.object(deck_module, "is_wsl", return_value=True), \
+             patch.object(deck_module, "wsl_host_ip", return_value="172.28.144.1"):
+            yield
+
+    @staticmethod
+    def _ok_response():
+        response = MagicMock()
+        response.json.return_value = {"result": 6, "error": None}
+        return response
+
+    def _refuse_then_answer(self):
+        """Refuse the first POST, answer the second."""
+        return [requests.exceptions.ConnectionError("refused"), self._ok_response()]
+
+    def test_a_refused_localhost_is_retried_against_the_windows_host(self):
+        with patch.object(deck_module.requests, "post",
+                          side_effect=self._refuse_then_answer()) as post:
+            assert deck_module._anki_request("version") == 6
+        assert [c.args[0] for c in post.call_args_list] == [self.LOCAL, self.GATEWAY]
+
+    def test_the_working_host_is_kept_for_the_rest_of_the_run(self):
+        # The point of latching: a 1000-word run must not pay a refused
+        # connection on every single call.
+        with patch.object(deck_module.requests, "post",
+                          side_effect=self._refuse_then_answer()):
+            deck_module._anki_request("version")
+        assert deck_module._active_host == self.GATEWAY
+
+    def test_nothing_is_retried_when_not_under_wsl(self):
+        with patch.object(deck_module, "is_wsl", return_value=False), \
+             patch.object(deck_module.requests, "post",
+                          side_effect=requests.exceptions.ConnectionError("refused")) as post:
+            with pytest.raises(AnkiNotRunningError):
+                deck_module._anki_request("version")
+        assert post.call_count == 1
+
+    def test_an_explicit_host_is_never_second_guessed(self):
+        # Including an explicit localhost. The user said where Anki is.
+        with patch.object(deck_module, "ANKI_HOST_EXPLICIT", True), \
+             patch.object(deck_module.requests, "post",
+                          side_effect=requests.exceptions.ConnectionError("refused")) as post:
+            with pytest.raises(AnkiNotRunningError):
+                deck_module._anki_request("version")
+        assert post.call_count == 1
+
+    def test_no_retry_when_the_gateway_cannot_be_read(self):
+        # WSL2 mirrored networking has no separate host address.
+        with patch.object(deck_module, "wsl_host_ip", return_value=None), \
+             patch.object(deck_module.requests, "post",
+                          side_effect=requests.exceptions.ConnectionError("refused")) as post:
+            with pytest.raises(AnkiNotRunningError):
+                deck_module._anki_request("version")
+        assert post.call_count == 1
+
+    def test_a_timeout_is_not_retried(self):
+        # Something answered, so the address is right. A second address is
+        # a worse guess, and the timeout message already names the cause.
+        with patch.object(deck_module.requests, "post",
+                          side_effect=requests.exceptions.Timeout("slow")) as post:
+            with pytest.raises(AnkiNotRunningError, match="timed out"):
+                deck_module._anki_request("version")
+        assert post.call_count == 1
+
+    def test_both_addresses_failing_names_both_and_the_bind_fix(self):
+        with patch.object(deck_module.requests, "post",
+                          side_effect=requests.exceptions.ConnectionError("refused")):
+            with pytest.raises(AnkiNotRunningError) as exc:
+                deck_module._anki_request("version")
+        message = str(exc.value)
+        assert self.LOCAL in message and "172.28.144.1" in message
+        # AnkiConnect binding to 127.0.0.1 is the actual cause nearly every
+        # time, and no amount of correct addressing fixes it.
+        assert "0.0.0.0" in message
+
+    def test_the_fallback_is_attempted_only_once_per_run(self):
+        # Two failed calls must cost two requests, not four. A run against a
+        # closed Anki queues every word to the backlog, so this is a hot path.
+        with patch.object(deck_module.requests, "post",
+                          side_effect=requests.exceptions.ConnectionError("refused")) as post:
+            for _ in range(2):
+                with pytest.raises(AnkiNotRunningError):
+                    deck_module._anki_request("version")
+        assert post.call_count == 3  # first call tries both, second tries one
