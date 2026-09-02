@@ -16,6 +16,81 @@ rather than list every change.
 
 Working toward v0.8.0, packaged and installable.
 
+### Added
+
+- **A distribution name: `tango-anki`.** `tango` on PyPI is an unrelated
+  project, so the name pip fetches and the name you type cannot be the same
+  string. They do not have to be: the console script stays `tango`, which is
+  the one anybody types twice. `pyproject.toml` said `yt-anki-pipeline` until
+  now, which described the mechanism rather than the product and matched
+  nothing a user ever sees. Also fills in the metadata a published package
+  needs and had none of: authors, keywords, classifiers, project URLs and an
+  SPDX licence.
+
+- **`tango --version`.** The first question about any bug report is which
+  build produced it, and until v0.7.0 there was no installed command to ask.
+  Reads `pipeline.__version__`, the single source of truth, rather than
+  installed metadata, which under an editable install reports whatever the
+  version was when it was installed.
+
+### Changed
+
+- **WSL reaches Anki without being told where it is.** `ANKI_HOST` defaults
+  to `http://localhost:8765`, which is right on macOS, native Linux, native
+  Windows and WSL2 with mirrored networking. On WSL2's default NAT network
+  it is wrong: Anki runs on the Windows side and localhost is the Linux VM.
+  The documented fix was to find the gateway with `ip route` and paste it
+  into `.env`, which worked until Windows rebooted and reassigned it.
+
+  A refused connection is now retried once against the Windows host read
+  from `/proc/net/route`, and the address that answered is kept for the rest
+  of the run. Deliberately a retry and not a different default: defaulting
+  to the gateway under WSL would break mirrored networking, where localhost
+  is correct. An explicit `ANKI_HOST` is never second-guessed, a timeout is
+  never retried, and when both addresses fail the message names both and
+  points at AnkiConnect's `127.0.0.1` bind, which is the real cause most of
+  the time. ARCHITECTURE 8.45.
+
+- **`nltk` is an extra rather than a base dependency.** It supplements the
+  synonym and antonym fields and nothing else, and an install without it is
+  a working install with thinner synonyms, verified by blocking the import
+  and watching both entry points return empty lists instead of raising.
+  `pip install tango-anki[wordnet]` for it. The base install is 334 MB
+  measured in a clean venv, of which 236 MB is spacy and the numeric stack
+  it needs, so this is 13 MB and a corpus download rather than a
+  breakthrough. It is the only saving available while spacy is the NLP
+  engine.
+
+### Fixed
+
+- **Two documented facts that were never true.** ROADMAP and CLAUDE.md both
+  said `ANKI_HOST` defaults to a WSL gateway IP. It defaults to localhost
+  and always has; the gateway IP was in one developer's uncommitted `.env`.
+  ROADMAP also asked for a default install with "no translation, no torch",
+  which it already had. Both corrected by measuring. Left visible rather
+  than quietly rewritten, for the same reason the antonym cause was in
+  v0.6.0.
+
+- **Eight messages told users to run flags that v0.7.0 deleted.** The
+  migration to subcommands left the old spellings behind in shipped output:
+  a missing translation model said `python -m pipeline
+  --install-translation`, an unmapped language said `--list-languages`, a
+  missing spaCy model said `--install-model`, an AnkiConnect error said
+  `--doctor`, and a stale index said `--build-dictionary` or
+  `--build-antonyms`. None of those flags exist. This is a worse failure
+  than a stale document, because naming the fix was v0.7.0's own goal and
+  these named a fix that could only fail.
+
+  One of them had a test, which passed throughout because it asserted the
+  string `--doctor` rather than the intent, so the test and the bug went
+  stale as a matched pair. The replacement asserts the command that exists
+  and that `python -m pipeline` is absent, and a second test scans every
+  module for the deleted spellings so the next one is caught by the suite
+  rather than by a reader.
+
+  The module docstring in `__main__.py` also still documented the removed
+  flag surface in full.
+
 ## [0.7.0] — 2026-09-03
 
 The command line as a product: the first release aimed at someone who did not
