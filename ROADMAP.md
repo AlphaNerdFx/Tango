@@ -176,19 +176,42 @@ plainly: the funnel has no top. Card quality, portability and disk footprint
 all matter more once someone can run the thing, and less than nothing before.
 
 Two things moved with it, because a published package that fails on first
-contact is worse than no package. `ANKI_HOST` is a WSL gateway IP, which is
-wrong on every other platform, and the default install pulls translation and
-its 900 MB whether or not anyone asked for it.
+contact is worse than no package: reaching Anki on the user's own platform,
+and not making everyone pay for translation.
 
-- **Decide the name.** `tango` on PyPI is an unrelated project and
-  `pyproject.toml` currently says `yt-anki-pipeline`. Every tag, link and
-  document written before this decision accrues to a name that cannot ship
-- **A console entry point.** There is no `[project.scripts]` at all today, so
-  even an editable install gives you `python -m pipeline` rather than a verb
-- **A thin default install.** One language, no translation, no torch.
-  `pip install <name>[translate]` for the rest
-- **`ANKI_HOST` that works off WSL.** It defaults to a gateway IP that is
-  meaningless on macOS, native Linux and native Windows
+**Two of the three descriptions below were wrong when they were written, and
+both were corrected on 3 September 2026 by measuring rather than reading.**
+They are left visible because the pattern is the point: a claim nobody
+re-checks is worth less than no claim.
+
+- **Decide the name.** Done 3 September 2026: **`tango-anki`**. `tango` on
+  PyPI is an unrelated project, so the distribution and the command cannot
+  be the same string; the command stays `tango`, which is the one anybody
+  types twice.
+- **A console entry point.** Done in v0.7.0. There was no
+  `[project.scripts]` at all, so even an editable install gave you
+  `python -m pipeline` rather than a verb.
+- **A thin default install.** Was written as "one language, no translation,
+  no torch". Translation and torch were already optional, so that part was
+  asking for what it already had. Measured instead, in a clean venv:
+  `pip install tango-anki` is **334 MB across 58 packages**, of which 236 MB
+  (74%) is spacy and the numeric stack it needs. That is the floor while
+  spacy is the NLP engine, and spacy is not going in an extra: an install
+  that cannot run `tango run` is not an install. What did move is `nltk`,
+  13 MB plus a corpus download, which only supplements synonyms and
+  antonyms and now lives in `pip install tango-anki[wordnet]`.
+- **`ANKI_HOST` that works off WSL.** Was written as "it defaults to a
+  gateway IP that is meaningless on macOS, native Linux and native
+  Windows". It does not, and never did: `config.py` defaults to
+  `http://localhost:8765`. The gateway IP was in one developer's `.env`.
+  The real problem is the mirror image of that: localhost is right
+  everywhere *except* WSL2's default NAT network, where Anki is on the
+  Windows side. Fixed by retrying once against the default route after a
+  refusal, rather than by changing the default, because defaulting to the
+  gateway under WSL would break WSL2 mirrored networking, where localhost
+  is correct. ARCHITECTURE 8.45.
+- **`--version`.** Added with the packaging work. The first question about
+  any bug report is which build produced it.
 - Model and index downloads as a first-run step rather than a README
 - Dockerfile for the "just run it" case
 - Uninstall that actually removes the 800 MB of indexes
