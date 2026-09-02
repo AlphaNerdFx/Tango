@@ -929,7 +929,7 @@ def reset_circuit_breaker() -> None:
     run (mirrors translation.reset_warning_state()) so a source that tripped
     in a previous run/process doesn't stay tripped — this module-level state
     would otherwise leak across multiple calls within the same process (e.g.
-    tests, scratch scripts, or --review/--process-backlog re-invocations).
+    tests, scratch scripts, or `tango review`/`tango backlog` re-invocations).
     """
     with _circuit_lock:
         _circuit_failures.clear()
