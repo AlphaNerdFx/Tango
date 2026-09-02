@@ -16,6 +16,7 @@ import pytest
 from typer.testing import CliRunner
 
 import pipeline.__main__ as main_module
+from pipeline import __version__ as pipeline_version
 from pipeline import cards as cards_module
 from pipeline.__main__ import (
     _prompt_import,
@@ -1125,7 +1126,7 @@ class TestTorchBuildReport:
     names no variant, so pip takes the default PyPI wheel. Since torch 2.x
     that wheel bundles CUDA and pulls nvidia-* and triton. Nothing about the
     pipeline reveals this: it runs correctly either way, just four gigabytes
-    larger, which is why `--doctor` reports it.
+    larger, which is why `tango doctor` reports it.
     """
 
     @staticmethod
@@ -1262,3 +1263,123 @@ class TestProgressRendering:
         assert "\r" in capsys.readouterr().out
         self._tracker(tty=False).finish()
         assert capsys.readouterr().out == ""
+
+
+class TestVersionFlag:
+    """
+    `--version` was added for v0.8.0. A published CLI has to be able to say
+    which build you have, because the first question about any bug report is
+    which version produced it, and until v0.7.0 there was no installed
+    command to ask.
+
+    The interesting case is not that it prints something. It is that it
+    prints the *right* something, and that it answers without a subcommand:
+    `tango` is a Typer group with `no_args_is_help=True`, so a non-eager
+    option would fail for want of a command rather than answering.
+    """
+
+    runner = CliRunner()
+
+    def test_version_prints_the_version_and_exits_clean(self):
+        result = self.runner.invoke(main_module.app, ["--version"])
+        assert result.exit_code == 0
+        assert pipeline_version in result.output
+
+    def test_the_short_flag_does_the_same(self):
+        result = self.runner.invoke(main_module.app, ["-V"])
+        assert result.exit_code == 0
+        assert pipeline_version in result.output
+
+    def test_the_version_is_read_from_the_package_not_hardcoded(self):
+        # CLAUDE.md 15: the version lives in src/pipeline/__init__.py and
+        # nowhere else. A literal copied into __main__.py would satisfy the
+        # two tests above and drift at the next release, which is exactly
+        # how pyproject.toml came to report 0.1.0 at v0.4.4.
+        with patch.object(main_module, "__version__", "9.9.9-sentinel"):
+            result = self.runner.invoke(main_module.app, ["--version"])
+        assert "9.9.9-sentinel" in result.output
+
+    def test_it_answers_without_a_subcommand(self):
+        # The group sets no_args_is_help, so the failure this guards against
+        # is `--version` falling through to the help text instead of
+        # answering. It does NOT pin is_eager: dropping that leaves all five
+        # of these passing, because click processes a group's own options
+        # before dispatch either way.
+        result = self.runner.invoke(main_module.app, ["--version"])
+        assert result.exit_code == 0
+        assert "Usage:" not in result.output
+
+    def test_a_subcommand_still_runs_with_the_callback_in_place(self):
+        # Adding an @app.callback() is the kind of change that can quietly
+        # swallow the commands underneath it.
+        with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            result = self.runner.invoke(main_module.app, ["run", VIDEO_ID, "--deck", DECK_NAME])
+        assert result.exit_code == 0
+        run_pipeline.assert_called_once()
+
+
+class TestNoMessageNamesARemovedFlag:
+    """
+    v0.7.0 replaced the argparse flag surface with subcommands, and left
+    eight user-facing messages telling people to run flags that no longer
+    exist: `python -m pipeline --install-translation`, `--list-languages`,
+    `--install-model`, `--doctor`, `--build-dictionary`, `--build-antonyms`.
+
+    That is worse than a stale document. v0.7.0's own goal was that a
+    failure names its fix, and these named a fix that could only fail. One
+    of them even had a test, which passed the whole time because it asserted
+    the string `--doctor` rather than the intent -- so the test and the bug
+    went stale as a matched pair.
+
+    This scans the source instead of trusting a reviewer to notice, which is
+    the same reasoning as tests/test_hard_constraints.py.
+    """
+
+    # Flags the migration deleted. Each is now a subcommand, so the flag
+    # spelling appearing anywhere in the package means an instruction that
+    # cannot be followed.
+    REMOVED = (
+        "--video-id", "--process-backlog", "--list-languages",
+        "--install-model", "--install-translation", "--doctor",
+        "--build-dictionary", "--build-antonyms", "--setup",
+    )
+
+    # The migration's own commentary explains what was replaced and has to
+    # be able to name it. Prose about the past, not instructions.
+    HISTORICAL = ("__main__.py",)
+
+    @staticmethod
+    def _sources():
+        root = Path(__file__).resolve().parent.parent / "src" / "pipeline"
+        return sorted(root.glob("*.py"))
+
+    def test_no_module_tells_a_user_to_run_a_deleted_flag(self):
+        offenders = []
+        for path in self._sources():
+            if path.name in self.HISTORICAL:
+                continue
+            text = path.read_text(encoding="utf-8")
+            for line_no, line in enumerate(text.splitlines(), 1):
+                for flag in self.REMOVED:
+                    if flag in line:
+                        offenders.append(f"{path.name}:{line_no}: {flag}")
+        assert not offenders, (
+            "These name a flag v0.7.0 deleted. Use the subcommand:\n  "
+            + "\n  ".join(offenders)
+        )
+
+    def test_the_historical_exemption_is_only_comments(self):
+        # __main__.py is exempt because it explains the migration. That
+        # exemption must not become a place where a real instruction hides,
+        # so every occurrence there has to be on a comment line.
+        root = Path(__file__).resolve().parent.parent / "src" / "pipeline"
+        offenders = []
+        for line_no, line in enumerate(
+            (root / "__main__.py").read_text(encoding="utf-8").splitlines(), 1
+        ):
+            if any(flag in line for flag in self.REMOVED) and not line.lstrip().startswith("#"):
+                offenders.append(f"__main__.py:{line_no}: {line.strip()}")
+        assert not offenders, (
+            "A deleted flag outside a comment in the exempt file:\n  "
+            + "\n  ".join(offenders)
+        )
