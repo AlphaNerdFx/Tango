@@ -127,6 +127,28 @@ def _get_model(language: str = "en") -> Language:
     return _nlp_models[model_name]
 
 
+def is_model_installed(language: str) -> bool:
+    """
+    Whether the spaCy model for `language` is installed, without loading it.
+
+    Loading a model costs seconds and hundreds of MB of RAM, which is far too
+    much to spend on a question asked before the run starts. `is_package`
+    answers from the installed distribution list alone.
+
+    Args:
+        language: BCP-47 language code, e.g. "en", "fr", "zh-CN".
+
+    Returns:
+        False when spaCy maps no model to this language at all, as well as
+        when the mapped model is simply not installed. The caller wants to
+        know whether the run can proceed, and both answers are "no".
+    """
+    try:
+        return bool(spacy.util.is_package(get_spacy_model(language)))
+    except Exception:
+        return False
+
+
 # ── Token filter ──────────────────────────────────────────────────────────────
 
 # Unicode-aware "letter" runs joined only by internal hyphens or apostrophes.
