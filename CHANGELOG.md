@@ -14,7 +14,10 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working toward v0.8.2, an install that looks after itself.
+## [0.8.2] - 2026-09-04
+
+An install that looks after itself. Three items cut from v0.8.0 so the name
+could be claimed, plus one gap a reader found in the code.
 
 ### Added
 
@@ -44,6 +47,44 @@ Working toward v0.8.2, an install that looks after itself.
   that took hours of API calls to build. Paths come from `config`, so a user
   who redirected `DICT_DIR` or `DB_PATH` gets their own locations rather than
   the defaults.
+
+- **A Dockerfile, for the "just run it" case.** No Python setup, no
+  virtualenv, no model download:
+
+  ```bash
+  docker build -t tango .
+  docker run --rm -v "$PWD/out:/data/output" tango run <id> --deck "French"
+  ```
+
+  The English model is baked in, so the image works with no setup. Other
+  languages are not, because 24 models would multiply a 663 MB image for
+  something most users never ask for; install one into the mounted volume
+  with `tango install-model fr`. All state lives in `/data`, which is a
+  volume, so the cache survives and the .apkg reaches the host. It runs as a
+  non-root user, since a container writing to a mounted volume as root
+  leaves files the host user cannot delete.
+
+  Built and run before release: 663 MB, `tango --version` answers,
+  `en_core_web_sm` loads, `/data` is writable by uid 1000, and a file written
+  inside reaches the host owned by the host user.
+
+### Fixed
+
+- **Something else on port 8765 produced a traceback.** AnkiConnect answers
+  on 8765 and nothing guarantees AnkiConnect is what is there. A different
+  service on that port, or an `ANKI_HOST` pointing somewhere stale, got as
+  far as a successful HTTP request and then died on `response.json()` with
+  "Expecting value: line 1 column 1 (char 0)". Against CLAUDE.md 4.4, and
+  useless to the reader.
+
+  Three shapes are now typed errors that name the address, the port and
+  `ANKI_HOST`: an answer that is not JSON, an HTTP error status, and JSON
+  with no `result` field. Deliberately not `AnkiNotRunningError`, because
+  the port answered, so "start Anki" is the one piece of advice already
+  ruled out.
+
+  Found by a reader looking at the code, not by a failure, which is why
+  nothing covered it.
 
 ## [0.8.1] - 2026-09-03
 
@@ -645,7 +686,8 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.6.0...v0.7.0
