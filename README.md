@@ -38,7 +38,7 @@ Prerequisites: Python 3.10+, [Anki](https://apps.ankiweb.net/) desktop, [AnkiCon
 
 ```bash
 pip install tango-anki
-python -m spacy download en_core_web_sm
+tango install-model en
 tango run <video-id> --deck "MyDeck"
 ```
 
@@ -66,7 +66,7 @@ make run VIDEO_ID=<id> DECK="MyDeck"
 first, or every card will read "No definition found":
 
 ```bash
-make dictionary LANGUAGE=fr        # any code from `tango languages`
+tango build-dictionary fr        # any code from `tango languages`
 ```
 
 One large download per language (a few hundred MB), then it works offline
@@ -77,7 +77,7 @@ needed and what it gives you.
 
 ## Configuration
 
-All configuration lives in `.env`. Copy `.env.example` (or run `make setup` for
+All configuration lives in `.env`. Copy `.env.example` (or run `tango setup` for
 a guided walkthrough) and fill in what you need. Nothing here is required to
 run the pipeline:
 
@@ -102,9 +102,9 @@ free or paid. If you're actually getting rate-limited, bring your own
 reputable proxy (a paid residential/mobile proxy you already trust, or a
 personal VPN).
 
-`LANGUAGE` and `DEF_LANG` are not `.env` variables. They're `make run` command
-arguments (`make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr DEF_LANG=en`), see
-below. Setting them in `.env` has no effect.
+The transcript language and the definition language are not `.env` variables.
+They are options on the command (`tango run <id> --deck "French" --language fr
+--def-lang en`), see below. Setting them in `.env` has no effect.
 
 ### WSL
 
@@ -127,42 +127,67 @@ second-guessed.
 ## Commands
 
 ```bash
-make run VIDEO_ID=<id> DECK="Deck::Name"              run full pipeline
-make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr       specify subtitle language
-make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr DEF_LANG=en   English definitions
-make review DECK="Deck::Name"                          process deferred review.json
-make backlog DECK="Deck::Name"                         process Anki backlog
-make translate-setup                                   install translation model
-make test                                              unit tests, no network needed
-make test-all                                          full suite with integration tests
-make format                                            auto-format with black
-make lint                                              lint with ruff
-make clean                                             remove venv, output, and cache
+tango run <id> --deck "Deck::Name"                     run the full pipeline
+tango run <id> --deck "French" --language fr           pick the subtitle language
+tango run <id> --deck "French" -l fr --def-lang en     define words in English
+tango run <id> --deck "Deck::Name" --force             reprocess a finished video
+tango review --deck "Deck::Name"                       process deferred review.json
+tango backlog --deck "Deck::Name"                      process the Anki backlog
+
+tango doctor                                           what is installed, what is missing
+tango languages                                        supported language codes
+tango setup                                            guided .env walkthrough
+tango install-model fr                                 spaCy model for one language
+tango install-translation de:en                        translation model for one pair
+tango build-dictionary fr                              offline Wiktionary index
+tango build-antonyms                                   offline antonym index
 ```
 
-To list all supported language codes:
+Every command takes `--help`. Run `tango doctor` first if anything behaves
+oddly: it reports what is installed, what is missing, and the command that
+fixes each.
+
+<details>
+<summary>Working on Tango itself? The Makefile wraps all of the above.</summary>
 
 ```bash
-tango languages
+make run VIDEO_ID=<id> DECK="Deck::Name"   make test        unit tests
+make review DECK="Deck::Name"              make test-all    with integration
+make backlog DECK="Deck::Name"             make format      black
+make dictionary LANGUAGE=fr                make lint        ruff
+make antonyms                              make coverage    line coverage
+make translate-setup                       make clean       remove venv and caches
 ```
+
+`make help` lists all of them. The Makefile is a convenience for working in a
+clone; it is not installed by the package.
+
+</details>
 
 ---
 
 ## Language support
 
-Tango resolves the target language from the deck name (a deck named "French" fetches French subtitles) or from an explicit LANGUAGE flag. The explicit flag always wins.
+Tango resolves the target language from the deck name (a deck named "French" fetches French subtitles) or from an explicit `--language` option. The explicit option always wins.
 
 40 languages are supported including French, Spanish, German, Japanese, Arabic, Russian, Chinese, Korean, and more.
 
-Example sentences, synonyms, and antonyms are always returned in the original transcript language. Definitions and grammatical class are returned in DEF_LANG if set, otherwise in the transcript language.
+Example sentences, synonyms, and antonyms are always returned in the original transcript language. Definitions and grammatical class are returned in the `--def-lang` language if set, otherwise in the transcript language.
 
-Translation between languages uses argostranslate locally or community LibreTranslate mirrors. Run make translate-setup to install the local model for your language pair.
+Translation between languages uses argostranslate locally, or community
+LibreTranslate mirrors. It is an optional extra, because it is by far the
+heaviest dependency:
+
+```bash
+pip install "tango-anki[translation]"
+tango install-translation de:en
+```
 
 ### Definition coverage
 
 English is covered by Merriam-Webster and dictionaryapi.dev out of the box, at around 98%.
 
-**Every other language needs `make dictionary LANGUAGE=<code>`.** Without it, non-English cards show "No definition found" for essentially every word. This is not a limitation of a particular language: dictionaryapi.dev returns nothing usable for any non-English language tested, measured at 0% across French, German, Spanish, Portuguese, Japanese, Russian, Korean and Chinese.
+**Every other language needs `tango build-dictionary <code>`.** Without it, non-English cards show "No definition found" for essentially every word. This is not a limitation of a particular language: dictionaryapi.dev returns nothing usable for any non-English language tested, measured at 0% across French, German, Spanish, Portuguese, Japanese, Russian, Korean and Chinese.
 
 The offline dictionary is built from Wiktionary data and works with no network access once built. Measured against real generated decks:
 
@@ -179,7 +204,7 @@ Measured on a real 1094-lemma English deck, the index supplies IPA for 96.4% of 
 The antonym column above is what the Wiktionary index alone gives. Antonyms have their own optional index, built once for every language at the same time:
 
 ```bash
-make antonyms
+tango build-antonyms
 ```
 
 It is a 498 MB download that is streamed rather than stored, leaving 4.3 MB on disk. Measured end to end on real decks, it takes French from 19.7% to 34.8%, German from 56.2% to 60.3% and Russian from 47.8% to 48.8%. The gain is concentrated in French because both sources extract the same Wiktionary edition with different tools, and they disagree about which words carry an antonym. The French dictionary index has one for 15,045 words and ConceptNet has 12,376, overlapping only partly; German already holds 30,616 against ConceptNet's 3,547, so it gains less. Without it, every card is exactly what it was.
@@ -206,7 +231,7 @@ Each card contains:
 
 - Word (front)
 - Class (part of speech, written in the same language as the Definition)
-- Definition (in DEF_LANG or native language)
+- Definition (in the `--def-lang` language, or the word's own)
 - 1st Example Sentence (from dictionary, in original language)
 - 2nd Example Sentence (from dictionary, in original language)
 - Example from Youtube Video (transcript sentence)
@@ -255,34 +280,68 @@ tango/
 Goals are tracked per release tag in **[ROADMAP.md](docs/planning/ROADMAP.md)**, which also
 records what v1.0.0 freezes and what is deliberately out of scope.
 
-**v1.0.0 is a finished CLI** — installable from a package, running on
+**v1.0.0 is a finished CLI:** installable from a package, running on
 Windows, macOS and Linux, on low-end and high-end hardware alike.
 
-| tag | goal |
-|---|---|
-| v0.5.0 | pronunciation on cards, and a notetype that merges *(current)* |
-| v0.5.1 | pronunciation for every language, starting with English |
-| v0.6.0 | card quality |
-| v0.7.0 | the command line as a product |
-| v0.8.0 | runs on any operating system |
-| v0.9.0 | runs on modest hardware |
-| v0.10.0 | packaged and installable |
-| v1.0.0 | a finished CLI |
+| tag | goal | |
+|---|---|---|
+| v0.5.x | pronunciation on cards, in every language | done |
+| v0.6.0 | card quality, what is *in* a field | done |
+| v0.7.0 | the command line as a product | done |
+| v0.8.0 | packaged and installable | **released, on PyPI** |
+| v0.8.1 | documentation for people who can now install it | released |
+| v0.8.2 | an install that looks after itself | next |
+| v0.9.0 | runs on any operating system | |
+| v0.10.0 | runs on modest hardware | |
+| v1.0.0 | a finished CLI | |
+
+Packaging moved forward three rungs on 27 August 2026, from v0.10.0, after
+an outside review pointed out that the funnel had no top. Card quality,
+portability and disk footprint all matter more once someone can run the
+thing, and less than nothing before.
 
 A browser extension, a web or desktop app, and distribution to other
-language ecosystems are **out of scope** for 1.0.0 — plausibly a separate
+language ecosystems are **out of scope** for 1.0.0, plausibly a separate
 project sharing a common premise. See [ROADMAP.md](docs/planning/ROADMAP.md) §4.
 
 Release history is in **[CHANGELOG.md](CHANGELOG.md)**.
+
+### Where this is today
+
+Published on PyPI as `tango-anki` since 3 September 2026, so
+`pip install tango-anki` works and the command is `tango`. The pipeline is
+in daily use and has generated real decks in French, German, Russian and
+English; the coverage numbers in this README are measured on those decks
+rather than estimated.
+
+Known rough edges, all tracked:
+
+- A fresh install has no spaCy model and no dictionary index, so the first
+  run tells you to fetch them instead of fetching them itself. That is
+  v0.8.2.
+- Uninstalling takes the package and leaves the indexes, which can be
+  several hundred MB. Also v0.8.2.
+- The repository still assumes WSL2 with Anki on the Windows side in a few
+  places. Reaching Anki is handled automatically now; the rest is v0.9.0.
+- Everything depends on one transcript extraction path. If YouTube changes
+  it, there is no fallback yet.
 
 ---
 
 ## Requirements
 
 - Python 3.10+
-- Anki desktop with AnkiConnect add-on (code: 2055492159)
-- Merriam-Webster API key (free tier)
-- spaCy model: python -m spacy download en_core_web_sm
+- Anki desktop with the AnkiConnect add-on (code: 2055492159)
+- A spaCy model for your language: `tango install-model en`
+- An offline dictionary for any non-English language:
+  `tango build-dictionary fr`
+
+Optional: a free [Merriam-Webster API key](https://dictionaryapi.com/register/index.htm)
+for better English definitions, and `pip install "tango-anki[translation]"`
+for cross-language definitions.
+
+`tango doctor` reports which of these you have and prints the command for
+anything missing.
 
 ---
 
