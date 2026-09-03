@@ -1,5 +1,5 @@
 # =============================================================================
-# Tango (tango-anki) — Makefile
+# Tango (tango-anki), Makefile
 # =============================================================================
 # Targets:
 #   make all          — full first-time setup (venv + install + spaCy model)
@@ -443,7 +443,7 @@ clean: check-os
 
 help:
 	@printf "\n"
-	@printf "$(BOLD)tango$(RESET) — YouTube to Anki flashcard pipeline\n"
+	@printf "$(BOLD)tango$(RESET): YouTube to Anki flashcard pipeline\n"
 	@printf "\n"
 	@printf "$(BOLD)First-time setup:$(RESET)\n"
 	@printf "  $(CYAN)make all$(RESET)                              Create venv, install deps, download spaCy model\n"
