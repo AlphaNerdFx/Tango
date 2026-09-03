@@ -37,8 +37,18 @@ IP someone read as the shipped default lived in an uncommitted `.env`. WSL
 is now detected and handled by retrying rather than by a different default
 (ARCHITECTURE 8.45). The `/mnt/c` path translation in `__main__.py` is
 already conditional on `is_wsl()`.
-**Current tag:** v0.7.0, the command line as a product, released
-3 September 2026. It carries three items, none of which touches a card:
+**Current tag:** v0.8.0, packaged and installable, released 3 September
+2026, and **the first release on PyPI: `pip install tango-anki`**. The
+distribution is `tango-anki` because `tango` is an unrelated project; the
+command a user types is still `tango`. It carries the name and its metadata,
+`tango --version`, a WSL AnkiConnect fallback that needs no configuration
+(ARCHITECTURE 8.45), `nltk` moved to a `[wordnet]` extra, and repairs to
+eight messages that named flags v0.7.0 had deleted. Three planned items were
+cut to v0.8.1 so the name could be claimed: first-run downloads, a
+Dockerfile, and an uninstall that removes the indexes.
+
+v0.7.0 before it was the command line as a product, released the same day.
+It carries three items, none of which touches a card:
 every mode is a subcommand (`tango run`, `review`, `backlog`, `languages`,
 `doctor`, `setup`, `install-model`, `install-translation`,
 `build-dictionary`, `build-antonyms`) behind a real console entry point, the
@@ -62,13 +72,10 @@ in the learner's language). Every tag has GitHub release notes.
 longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
 5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.9.0,
 where the rest of the size work lives.
-**Working toward:** v0.8.0, packaged and installable. That rung moved
-forward three places on 27 August 2026: it sat behind cross-platform support
-and install size, which is the ordering of a project polishing for users who
-cannot install it. The ladder is now sequenced for someone who wants the
-tool adopted rather than finished. The distribution name was decided on
-3 September 2026: **`tango-anki` on PyPI**, because `tango` is taken by an
-unrelated project, with `tango` staying the command a user types. Goals per
+**Working toward:** v0.8.1, an install that looks after itself. The
+packaging rung moved forward three places on 27 August 2026, from v0.10.0:
+it had sat behind cross-platform support and install size, which is the
+ordering of a project polishing for users who cannot install it. Goals per
 tag through v1.0.0 are in `ROADMAP.md`; the rule that picks the number is in
 section 15; the commit and tag format is in section 16; release history is
 in `CHANGELOG.md`.
@@ -652,7 +659,7 @@ Before inserting a new section into a Markdown doc, print the existing heading o
 
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
-The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all fifteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
+The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all sixteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
 
 ## 16. Commit and tag format
 
