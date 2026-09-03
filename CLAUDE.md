@@ -507,7 +507,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1020 passing, 24 deselected. The count drifts as tests are added —
+Expected: 1021 passing, 24 deselected. The count drifts as tests are added —
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
@@ -582,24 +582,49 @@ rm -f pipeline.db          # ONLY when a schema change requires it
 
 ## 9. Reference documents
 
+Documents moved under `docs/` on 3 September 2026, split by what each one
+is for. Six markdown files stay at the repository root, and the last two are
+there because something outside this repository looks for them by path:
+
 ```
-docs/ADR_v0.4.0.pdf              Architecture decisions with rationale
-docs/SAD_v0.4.0.pdf              System architecture
-docs/SRD_v0.4.0.pdf              Software requirements, CLI spec, schemas
-docs/PRD_v0.4.0.pdf              Product requirements, user stories
-docs/Code_Walkthrough.pdf        Function-by-function explanation
-docs/ADR-008-per-language-dictionary-sources.md
-docs/ADR-009-card-media-enrichment.md
-docs/ADR-010-conceptnet-antonyms.md
-docs/ADR-011-english-offline-index.md
-ARCHITECTURE.md                  This repo, full system detail
-SESSION.md                       Current working state
-TASKS.md                         Prioritised remaining work
-ROADMAP.md                       One goal per tag to v1.0.0, and what 1.0.0 freezes
-CHANGELOG.md                     What shipped in each release
-CONTRIBUTING.md                  Setup and workflow for outside contributors
-OPERATING_RULES.md               Superseded by this file; kept for its tone
+README.md                           Front page
+CLAUDE.md                           This file
+CODE_OF_CONDUCT.md                  Contributor conduct
+CONTRIBUTING.md                     Setup and workflow for outside contributors
+CHANGELOG.md                        What shipped in each release
+SECURITY.md                         How to report a vulnerability
 ```
+
+`CHANGELOG.md` is the conventional path tools expect and the one the
+published GitHub release notes link to. `SECURITY.md` is recognised by
+GitHub only at the root, `docs/`, or `.github/`; anywhere deeper and the
+"Report a vulnerability" link stops working. Both were moved into `docs/`
+during the reorganisation and moved straight back for those reasons.
+
+```
+docs/architecture/ARCHITECTURE.md   This repo, full system detail
+docs/planning/ROADMAP.md            One goal per tag to v1.0.0, and what 1.0.0 freezes
+docs/planning/TASKS.md              Prioritised remaining work
+docs/sessions/SESSION.md            Current working state
+docs/sessions/HANDOVER.md           State for the next session
+docs/history/OPERATING_RULES.md     Superseded by this file; kept for its tone
+
+docs/adr/ADR-008-per-language-dictionary-sources.md
+docs/adr/ADR-009-card-media-enrichment.md
+docs/adr/ADR-010-conceptnet-antonyms.md
+docs/adr/ADR-011-english-offline-index.md
+
+docs/ADR_v0.4.0.pdf                 Architecture decisions with rationale
+docs/SAD_v0.4.0.pdf                 System architecture
+docs/SRD_v0.4.0.pdf                 Software requirements, CLI spec, schemas
+docs/PRD_v0.4.0.pdf                 Product requirements, user stories
+docs/Code_Walkthrough.pdf           Function-by-function explanation
+```
+
+Code comments still cite documents by bare name, `ARCHITECTURE.md 8.45` and
+so on. The names are unique in the repository, so a search finds them, and
+rewriting several hundred citations into paths would cost more than it
+explains.
 
 The four markdown ADRs are the live ones and are cited throughout the code;
 the v0.4.0 PDF set is the historical record. ADR-010 was accepted and
