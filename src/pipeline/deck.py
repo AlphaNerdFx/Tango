@@ -204,11 +204,16 @@ def _anki_request(action: str, **params) -> object:
                 f"Tools, Add-ons, AnkiConnect, Config."
             ) from retry_exc
         _active_host = fallback
+        # Deliberately does NOT tell the user to set ANKI_HOST to this
+        # address. That was the old advice and it is self-defeating: the
+        # gateway is reassigned when Windows reboots, so hardcoding it
+        # works until it silently does not, which is the failure this
+        # fallback exists to remove.
         logger.info(
-            "AnkiConnect answered at %s after %s refused the connection. "
-            "Set ANKI_HOST=%s in .env to skip this retry; the address is "
-            "reassigned when Windows reboots.",
-            fallback, ANKI_HOST, fallback,
+            "AnkiConnect answered at %s after %s refused, which is normal "
+            "under WSL. Nothing needs setting: the address is read from the "
+            "routing table on each run.",
+            fallback, ANKI_HOST,
         )
     except requests.exceptions.Timeout as exc:
         raise AnkiNotRunningError(
