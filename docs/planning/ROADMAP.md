@@ -49,7 +49,7 @@ entries, having previously had only a tag message and `git log`.
 
 ## 2. The ladder
 
-### v0.5.0 — Pronunciation, and a notetype that merges
+### v0.5.0: Pronunciation, and a notetype that merges
 
 - IPA and Commons audio on cards, sourced from the offline index (ADR-009
   phase 1)
@@ -64,7 +64,7 @@ entries, having previously had only a tag message and `git log`.
 on 2135 real notes with zero changed values — but Anki will ask for one
 full sync afterwards.
 
-### v0.5.1 — Pronunciation for every language
+### v0.5.1: Pronunciation for every language
 
 Today `en` gets no pronunciation at all, because it has no offline index and
 that is the only source wired up. Three groups, one goal:
@@ -84,7 +84,7 @@ than making a new one. A stricter reading would call a new parse path a
 MINOR; if that reading wins, this becomes v0.6.0 and everything below
 shifts.
 
-### v0.5.2 — Audio that plays in the card
+### v0.5.2: Audio that plays in the card
 
 v0.5.0 put a *link* in the Pronunciation field. Clicking it opens a browser,
 which is not reviewing, and it does nothing useful on AnkiDroid or
@@ -104,7 +104,7 @@ run here, it quietly degrades every card past the tenth.
 *Why PATCH:* no migration, no schema change. The Pronunciation field already
 exists and already held content; only what goes in it changed.
 
-### v0.5.3 — Part of speech in the learner's language
+### v0.5.3: Part of speech in the learner's language
 
 Every card carried an English tag in its Class field, because that is what
 wiktextract stores no matter which Wiktionary edition the index came from.
@@ -118,7 +118,7 @@ pt and en.
 *Why PATCH:* nothing migrates and no existing card changes until it is
 re-imported. This finishes a field that was already on the card.
 
-### v0.6.0 — Card quality
+### v0.6.0: Card quality
 
 The fields exist and are filled; this is about what is *in* them. **Released
 27 August 2026, all five items.**
@@ -148,7 +148,7 @@ the learner decides. Guessing here is the expensive direction: a filler that
 slips through costs one card, a word wrongly filtered is never offered and
 cannot be missed.
 
-### v0.7.0 — The command line as a product
+### v0.7.0: The command line as a product
 
 The first release aimed at someone who did not write it. **Released
 3 September 2026, all three items.** No migration: nothing about a card or a
@@ -167,7 +167,7 @@ collection changed, only what you type and what the run says back.
   per-phase elapsed, and a definition-phase progress line that redraws on a
   terminal and prints one line per decile into a log file.
 
-### v0.8.0 — Packaged and installable
+### v0.8.0: Packaged and installable
 
 **Moved here from v0.10.0 on 27 August 2026.** It was three rungs back,
 behind cross-platform support and install size, which is the ordering of a
@@ -223,7 +223,7 @@ running the tool; all three make an existing install pleasanter. An
 unclaimed distribution name can be taken by anyone, and that risk was worth
 more than the polish.
 
-### v0.8.1 — The install looks after itself
+### v0.8.1: The install looks after itself
 
 Cut from v0.8.0 on 3 September 2026 so the name could be claimed. Each one
 is about an install that already works.
@@ -235,7 +235,7 @@ is about an install that already works.
 - Uninstall that actually removes the 800 MB of indexes. `pip uninstall`
   takes the package and leaves the data, which is defensible and surprising
 
-### v0.9.0 — Runs on any operating system
+### v0.9.0: Runs on any operating system
 
 The `ANKI_HOST` half of this moved into v0.8.0, since a package that cannot
 reach Anki on the user's own platform is not installable in any useful
@@ -253,7 +253,7 @@ is load-bearing in more places than it looks.
   CLI the primary path and the Makefile a convenience
 - CI on Linux, macOS and Windows, because "should work" is not evidence
 
-### v0.10.0 — Runs on modest hardware
+### v0.10.0: Runs on modest hardware
 
 **Measured, 15 August 2026: `.tangovenv` is 5.9 GB and `dictionaries/` is
 820 MB.** Step 1 below shipped on 26 August 2026 and took `.tangovenv` to
@@ -352,7 +352,7 @@ High-end hardware should be able to spend more, not merely avoid crashing:
 worker counts, batch sizes and cache behaviour should scale to what the
 machine has rather than being fixed at defaults chosen on one laptop.
 
-### v0.11.0 — Freeze candidate
+### v0.11.0: Freeze candidate
 
 - Write the compatibility document: every item in §3 below, pinned
 - Deprecation policy — what a `0.9 → 1.0` break costs a user
@@ -360,7 +360,7 @@ machine has rather than being fixed at defaults chosen on one laptop.
 - Coverage sweep green across all 16 language pairs, including the new
   pronunciation columns
 
-### v1.0.0 — A finished CLI
+### v1.0.0: A finished CLI
 
 A fully-fledged, optimized command-line tool that installs from a package,
 runs on Windows, macOS and Linux, and works on low-end and high-end hardware
