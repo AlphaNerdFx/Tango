@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import logging
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -409,6 +410,58 @@ class _Progress:
         return time.monotonic() - self._start
 
 
+# ── First run ─────────────────────────────────────────────────────────────────
+#
+# v0.8.2. Before this, a fresh `pip install tango-anki` got as far as fetching
+# the transcript and then stopped with "spaCy model not found. Run: ...". The
+# message was correct and the timing was not: the work was already done, and
+# the user was told to go and run a second command before they could see
+# anything work at all.
+
+
+def _ensure_spacy_model(language: str) -> None:
+    """
+    Make sure the spaCy model for `language` is installed before the run.
+
+    Checked before the transcript is fetched, not after. The check is a
+    lookup in the installed distribution list, so it costs nothing, and
+    failing here wastes none of the user's time.
+
+    On a terminal this offers to install the model and continues on yes.
+    Anywhere else, and on no, it prints the command and exits 1 rather than
+    prompting into a pipe that cannot answer.
+
+    Args:
+        language: BCP-47 language code the run resolved to.
+    """
+    from pipeline.language import get_spacy_model
+
+    if nlp_module.is_model_installed(language):
+        return
+
+    try:
+        model = get_spacy_model(language)
+    except Exception:
+        _err(f"No spaCy model exists for '{language}'.")
+        _info("Run 'tango languages' to see the codes that are supported.")
+        sys.exit(1)
+
+    _warn(f"The spaCy model for '{language}' ({model}) is not installed.")
+    _info("It is a one-off download of a few tens of MB, and the run needs it "
+          "to find words at all.")
+
+    if not sys.stdin.isatty():
+        _info(f"Install it with: tango install-model {language}")
+        sys.exit(1)
+
+    if _ask(f"Download {model} now? [Y/n]: ", default="y") not in ("", "y", "yes"):
+        _info(f"Nothing downloaded. Run 'tango install-model {language}' when ready.")
+        sys.exit(1)
+
+    if _run_install_model(language) != 0:
+        sys.exit(1)
+
+
 # ── Deck selection ────────────────────────────────────────────────────────────
 
 def _select_deck(deck_arg: str | None, session: Session) -> str:
@@ -554,6 +607,9 @@ def _run_pipeline(args: SimpleNamespace, session: Session) -> None:
             _warn(str(exc))
             _warn("No new cards will be created. Use --force to reprocess.")
             sys.exit(0)
+
+    # Checked here, before any work, so a missing model costs nothing.
+    _ensure_spacy_model(language_code)
 
     # ── 2. Fetch transcript ───────────────────────────────────────────────────
     _info(f"Fetching transcript for: {video_id}")
@@ -1133,10 +1189,146 @@ def build_dictionary(
     _run_build_dictionary(language)
 
 
+@app.command()
+def uninstall(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Delete without asking. For scripts."),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be deleted and stop."),
+) -> None:
+    """Report and remove the indexes, caches and packages Tango has written."""
+    raise typer.Exit(_run_uninstall(assume_yes=yes, dry_run=dry_run))
+
+
 @app.command("build-antonyms")
 def build_antonyms() -> None:
     """Download and index ConceptNet's antonyms, for every language at once."""
     _run_build_antonyms()
+
+
+# ── Mode: uninstall ───────────────────────────────────────────────────────────
+#
+# v0.8.2. `pip uninstall tango-anki` removes about 130 KB of Python and
+# leaves everything that actually takes space: the dictionary indexes are
+# 1.1 GB on the machine this was written on. That is defensible, since pip
+# only owns what it installed, and it is still a surprise. Nothing else knows
+# those files exist, so nothing else can offer to remove them.
+
+
+def _path_size(path: Path) -> int:
+    """Bytes used by a file, or by a directory tree. 0 if it is absent."""
+    if not path.exists():
+        return 0
+    if path.is_file():
+        return path.stat().st_size
+    total = 0
+    for child in path.rglob("*"):
+        try:
+            if child.is_file():
+                total += child.stat().st_size
+        except OSError:
+            # A file that vanishes mid-walk is not worth failing over.
+            continue
+    return total
+
+
+def _human(size: int) -> str:
+    """Render a byte count the way a person would say it."""
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} GB"
+
+
+def _data_locations() -> list[tuple[str, Path, str]]:
+    """
+    Everything this tool writes outside its own package, largest first.
+
+    Deliberately built from `config`, not from hardcoded names, so a user who
+    redirected DICT_DIR or DB_PATH gets their own paths reported rather than
+    the defaults, and nothing is missed or wrongly offered for deletion.
+    """
+    from pipeline import antonyms as antonyms_module
+    from pipeline.config import DB_PATH, DICT_DIR, MEDIA_DIR, OUTPUT_DIR
+
+    entries = [
+        ("Dictionary and antonym indexes", DICT_DIR,
+         "rebuild with 'tango build-dictionary <lang>' and 'tango build-antonyms'"),
+        ("Pronunciation audio cache", MEDIA_DIR,
+         "re-downloaded on demand"),
+        ("Definition cache and run history", DB_PATH,
+         "expensive to rebuild: it is every definition ever fetched"),
+        ("Generated .apkg packages", OUTPUT_DIR,
+         "your decks, if you have not imported them yet"),
+    ]
+    # The antonym index lives inside DICT_DIR, so it is already counted.
+    _ = antonyms_module
+    return [(label, path, note) for label, path, note in entries]
+
+
+def _run_uninstall(assume_yes: bool, dry_run: bool) -> int:
+    """
+    Report, and optionally delete, the data this tool has written.
+
+    Never touches the package, the source tree, or `.env`. Never deletes
+    without either a confirmation typed at a terminal or an explicit
+    `--yes`, because two of these four locations hold work the user cannot
+    get back cheaply: the definition cache is every definition ever fetched,
+    and OUTPUT_DIR may hold decks not yet imported.
+
+    Returns:
+        Process exit code.
+    """
+    found = [(label, path, note, _path_size(path))
+             for label, path, note in _data_locations()]
+    found = [row for row in found if row[3] > 0]
+
+    if not found:
+        _ok("No Tango data found. Nothing to remove.")
+        _info("The package itself: pip uninstall tango-anki")
+        return 0
+
+    found.sort(key=lambda row: -row[3])
+    total = sum(row[3] for row in found)
+
+    _rule()
+    print("  Tango data on this machine")
+    _rule()
+    for label, path, note, size in found:
+        print(f"  {_human(size):>9}  {label}")
+        print(f"             {path}")
+        print(f"             {note}")
+    _rule()
+    print(f"  {_human(total):>9}  total")
+    _rule()
+
+    if dry_run:
+        _info("Dry run, nothing deleted. Drop --dry-run to remove it.")
+        return 0
+
+    if not assume_yes:
+        if not sys.stdin.isatty():
+            _info("Nothing deleted. Re-run with --yes to delete without asking.")
+            return 0
+        _warn("This cannot be undone.")
+        if _ask(f"Delete all {_human(total)}? [y/N]: ", default="n") not in ("y", "yes"):
+            _info("Nothing deleted.")
+            return 0
+
+    removed = 0
+    for label, path, _note, size in found:
+        try:
+            if path.is_file():
+                path.unlink()
+            else:
+                shutil.rmtree(path)
+            removed += size
+            _ok(f"Removed {label} ({_human(size)})")
+        except OSError as exc:
+            _err(f"Could not remove {path}: {exc}")
+
+    _ok(f"Freed {_human(removed)}.")
+    _info("The package itself is separate: pip uninstall tango-anki")
+    return 0
 
 
 # ── Mode: doctor ──────────────────────────────────────────────────────────────
