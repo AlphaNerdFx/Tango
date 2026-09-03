@@ -54,9 +54,9 @@ def sample_fronts() -> list[str]:
 def sample_vocabulary() -> dict[str, int]:
     return {
         "contaminate": 2,   # should QUEUE against "contamination"
-        "water":       5,   # should SKIP — exact match
-        "dog":         1,   # should NEW — no match
-        "run":         3,   # short word — exact only
+        "water":       5,   # should SKIP, exact match
+        "dog":         1,   # should NEW, no match
+        "run":         3,   # short word, exact only
     }
 
 
@@ -299,7 +299,7 @@ class TestGetCardFronts:
 
         Taking any field that happens to be present would satisfy that one
         while returning "verb" or "se déplacer" here. Anki identifies a note
-        by its first field, so `order` decides — not position in the dict,
+        by its first field, so `order` decides, not position in the dict,
         which JSON gives no meaning to.
         """
         mock_req.side_effect = [
@@ -387,8 +387,8 @@ class TestGetCardFronts:
     def test_unknown_note_type_without_order_is_skipped(self, mock_req):
         """
         No order and no recognised name: skipped rather than guessed at.
-        Guessing would feed an arbitrary field — a definition, a tag, an
-        audio filename — into the fuzzy matcher as if it were a headword.
+        Guessing would feed an arbitrary field, a definition, a tag, an
+        audio filename, into the fuzzy matcher as if it were a headword.
         """
         mock_req.side_effect = [
             [2007],
@@ -413,13 +413,13 @@ class TestCheckSingle:
     def test_high_fuzzy_match_returns_skip(self):
         # "run" vs "run" is exact, use a pair that scores just above 90
         fronts = ["running"]
-        # "runs" vs "running" — WRatio ~90, but short word rule applies for len<4
+        # "runs" vs "running", WRatio ~90, but short word rule applies for len<4
         # Use longer words to test HIGH band
         result = _check_single("develop", ["developer"])
         assert result.decision in (Decision.SKIP, Decision.QUEUE)
 
     def test_mid_fuzzy_match_returns_queue(self, sample_fronts):
-        # "contaminate" vs "contamination" scores ~83 — should QUEUE
+        # "contaminate" vs "contamination" scores ~83, should QUEUE
         result = _check_single("contaminate", sample_fronts)
         assert result.decision == Decision.QUEUE
         assert result.matched_front == "contamination"
@@ -439,7 +439,7 @@ class TestCheckSingle:
 
     def test_short_word_no_exact_match_returns_new(self):
         # "go" vs "going" would score 90 with WRatio but short word rule
-        # means we use exact match only — should return NEW
+        # means we use exact match only, should return NEW
         result = _check_single("go", ["going", "water"])
         assert result.decision == Decision.NEW
 
@@ -509,12 +509,12 @@ class TestCheckVocabulary:
     def test_queue_written_to_db(self, mock_fronts):
         mock_fronts.return_value = ["contamination"]
         check_vocabulary({"contaminate": 1}, "English")
-        # Queue written to DB — verify via SQLite directly
+        # Queue written to DB, verify via SQLite directly
         import pipeline.deck as deck_module
         conn = sqlite3.connect(deck_module.DB_PATH)
         rows = conn.execute("SELECT * FROM anki_backlog").fetchall()
         conn.close()
-        # Backlog only written when Anki is down — queue uses separate table
+        # Backlog only written when Anki is down, queue uses separate table
         # This confirms the DB was created and accessible
         assert conn is not None
 
@@ -561,7 +561,7 @@ class TestPromptQueue:
 
     def test_s_defers_all_remaining(self):
         queue = self._make_queue()
-        # Answer "y" for first, "s" for second — third should auto-defer
+        # Answer "y" for first, "s" for second, third should auto-defer
         with patch("builtins.input", side_effect=["y", "s"]):
             approved, deferred = prompt_queue(queue)
         assert "contaminate" in approved
@@ -767,7 +767,7 @@ class TestIsSentenceStructuredDeck:
 
     def test_mixed_deck_uses_average(self):
         from pipeline.deck import _is_sentence_structured_deck
-        # Mostly single words with a couple of sentences — average stays low
+        # Mostly single words with a couple of sentences, average stays low
         fronts = ["water", "develop", "permanent", "what does this mean exactly today"]
         # 3 single words (1 word each) + 1 six-word front = 9/4 = 2.25 average
         assert _is_sentence_structured_deck(fronts) is False
@@ -785,7 +785,7 @@ class TestCheckSingleSkipFuzzy:
 
     def test_skip_fuzzy_blocks_substring_false_positive(self):
         from pipeline.deck import _check_single
-        # "give" is a substring of this sentence — would fuzzy-match falsely
+        # "give" is a substring of this sentence, would fuzzy-match falsely
         fronts = ["give an example of a microcosm."]
         result = _check_single("give", fronts, skip_fuzzy=True)
         assert result.decision == Decision.NEW
@@ -805,7 +805,7 @@ class TestCheckSingleSkipFuzzy:
     def test_skip_fuzzy_default_is_false(self):
         from pipeline.deck import _check_single
         fronts = ["contamination"]
-        # No skip_fuzzy arg passed — should behave as before (fuzzy matching active)
+        # No skip_fuzzy arg passed, should behave as before (fuzzy matching active)
         result = _check_single("contaminate", fronts)
         assert result.decision == Decision.QUEUE
 
@@ -845,32 +845,32 @@ class TestThreeConditionFilter:
     """
 
     def test_commencer_vs_comme_is_new(self):
-        """'commencer' should not match 'comme' — pure substring inflation."""
+        """'commencer' should not match 'comme', pure substring inflation."""
         result = _check_single("commencer", ["comme"])
         assert result.decision == Decision.NEW
 
     def test_puis_vs_puissiez_is_new(self):
-        """'puis' should not match 'puissiez' — 'puis' is prefix of 'puissiez'."""
+        """'puis' should not match 'puissiez', 'puis' is prefix of 'puissiez'."""
         result = _check_single("puis", ["puissiez"])
         assert result.decision == Decision.NEW
 
     def test_attend_vs_attendions_is_new(self):
-        """'attend' should not match 'attendions' — length ratio too low."""
+        """'attend' should not match 'attendions', length ratio too low."""
         result = _check_single("attend", ["n'attendions pas"])
         assert result.decision == Decision.NEW
 
     def test_faisiez_vs_fassiez_is_queue(self):
-        """'faisiez' vs 'fassiez' is a genuine near-duplicate — should QUEUE."""
+        """'faisiez' vs 'fassiez' is a genuine near-duplicate, should QUEUE."""
         result = _check_single("faisiez", ["fassiez"])
         assert result.decision == Decision.QUEUE
 
     def test_trouvent_vs_trouve_is_queue(self):
-        """'trouvent' vs 'trouve' — same root, legitimate match."""
+        """'trouvent' vs 'trouve', same root, legitimate match."""
         result = _check_single("trouvent", ["trouve"])
         assert result.decision in (Decision.QUEUE, Decision.SKIP)
 
     def test_arrivé_vs_arrive_is_queue(self):
-        """'arrivé' vs 'arrive' — accented form vs base, legitimate match."""
+        """'arrivé' vs 'arrive', accented form vs base, legitimate match."""
         result = _check_single("arrivé", ["arrive"])
         assert result.decision in (Decision.QUEUE, Decision.SKIP)
 
@@ -880,7 +880,7 @@ class TestThreeConditionFilter:
         assert result.decision == Decision.QUEUE
 
     def test_develop_vs_developer_still_queues(self):
-        """Length ratio 0.78 is above threshold — legitimate match preserved."""
+        """Length ratio 0.78 is above threshold, legitimate match preserved."""
         result = _check_single("develop", ["developer"])
         assert result.decision in (Decision.QUEUE, Decision.SKIP)
 
@@ -919,7 +919,7 @@ class TestHyphenatedCompounds:
         assert result.score == 100.0
 
     def test_hyphenated_matches_unhyphenated_spelling(self):
-        """"week-end" and "weekend" are the same word — a genuine duplicate."""
+        """"week-end" and "weekend" are the same word, a genuine duplicate."""
         assert _check_single("week-end", ["weekend"]).decision == Decision.SKIP
 
     def test_unhyphenated_matches_hyphenated_front(self):
@@ -931,7 +931,7 @@ class TestHyphenatedCompounds:
         assert _check_single("weekend", ["week-end"]).decision == Decision.SKIP
 
     def test_spaced_spelling_matches_hyphenated_lemma(self):
-        """"porte-monnaie" vs "porte monnaie" — hyphen against a space."""
+        """"porte-monnaie" vs "porte monnaie", hyphen against a space."""
         assert _check_single("porte-monnaie", ["porte monnaie"]).decision == Decision.SKIP
 
     def test_compound_does_not_match_its_own_component(self):
@@ -944,7 +944,7 @@ class TestHyphenatedCompounds:
 
     def test_compound_does_not_match_short_components(self):
         """
-        "arc-en-ciel" against "arc" and "ciel" — both are below
+        "arc-en-ciel" against "arc" and "ciel", both are below
         SHORT_WORD_THRESHOLD and excluded from the candidate pool entirely.
         """
         assert _check_single("arc-en-ciel", ["arc", "ciel"]).decision == Decision.NEW
@@ -953,7 +953,7 @@ class TestHyphenatedCompounds:
         """
         Anki decks written on a Mac or by autocorrect hold U+2019, spaCy
         lemmas carry the straight quote. The exact check misses, and fuzzy
-        catches it at 91 — one point above CONFIDENCE_HIGH, so this is a
+        catches it at 91, one point above CONFIDENCE_HIGH, so this is a
         narrow pass rather than a comfortable one.
         """
         assert _check_single("aujourd'hui", ["aujourd’hui"]).decision == Decision.SKIP

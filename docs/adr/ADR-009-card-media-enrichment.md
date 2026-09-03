@@ -1,4 +1,4 @@
-# ADR-009: Card media enrichment — audio, pronunciation, and images
+# ADR-009: Card media enrichment: audio, pronunciation, and images
 
 **Status:** proposed
 **Date:** 10 August 2026
@@ -19,7 +19,7 @@ kinds of media:
 3. Isolated audio of the word alone, for pronunciation
 4. An image representing the word
 
-The pedagogical case is not in dispute — hearing a word in the speaker's own
+The pedagogical case is not in dispute, hearing a word in the speaker's own
 voice, and again in isolation, is most of what separates recognition from
 production. This ADR is about which sources can supply that, what each costs,
 and which of the four can be built without breaking constraints this project
@@ -60,8 +60,8 @@ pronunciation** already linked from the data the index is built from, and
 party at card-build time, and the licence is the Commons licence rather than
 a scraped file of unknown provenance.
 
-The index does not currently store either field — `_joined()` reads only
-definitions, examples, synonyms and antonyms — so capturing them requires an
+The index does not currently store either field, `_joined()` reads only
+definitions, examples, synonyms and antonyms, so capturing them requires an
 index rebuild, not a new source.
 
 ### Transcript timing is already available
@@ -85,7 +85,7 @@ Wikimedia Commons search, no API key required, five German words:
 Concrete nouns return usable images. Abstract nouns, verbs and adjectives
 return noise, and `laufen` shows the specific failure mode: the search matched
 a **place name** spelled the same way. A wrong image is worse than no image
-for memorisation — it teaches the wrong association — so any image feature
+for memorisation, it teaches the wrong association, so any image feature
 needs a relevance gate, not just a search call.
 
 ---
@@ -104,7 +104,7 @@ the terms, not about what any individual's local copyright law permits.
 
 It also carries the heaviest engineering cost of the four:
 
-- `yt-dlp` plus an `ffmpeg` binary — the first is a Python package that needs
+- `yt-dlp` plus an `ffmpeg` binary, the first is a Python package that needs
   frequent updating to keep working, the second is a system dependency this
   project has never required
 - Downloads the whole audio track to extract a few hundred clips of a few
@@ -137,7 +137,7 @@ sentence from a source that already has a recording of it.** Real human audio
 for the exact sentence beats synthesised audio for our sentence, and it
 removes the TTS dependency from the common case entirely.
 
-**Tatoeba** supplies exactly that — a CC-licensed sentence corpus with
+**Tatoeba** supplies exactly that, a CC-licensed sentence corpus with
 native-speaker recordings. Measured against the live API, German, `Haus`:
 
 ```
@@ -155,14 +155,14 @@ sentences_with_audio.tar.bz2      6.4 MB   (audio index, all languages)
 per_language/deu/deu_sentences    12.0 MB
 ```
 
-That is small — three orders of magnitude below the Wiktionary extracts — so
+That is small, three orders of magnitude below the Wiktionary extracts, so
 the index build cost is negligible.
 
 The cost is a design consequence rather than an engineering one: the card's
 example sentence would come from Tatoeba when a recording exists, and from
 Wiktionary otherwise. Two sources for one field, chosen per card by whether
-audio is available. That is a legitimate trade — a heard sentence is worth
-more than a marginally better-chosen written one — but it must be a decision
+audio is available. That is a legitimate trade, a heard sentence is worth
+more than a marginally better-chosen written one, but it must be a decision
 taken deliberately, not a side effect of adding audio.
 
 Caveat found while testing: per-recording licence metadata came back empty on
@@ -184,28 +184,28 @@ offend 3.6 if it lives in an optional group, and its voices are per-language
 downloads that mirror the pattern `make dictionary` already establishes.
 
 gTTS should be rejected for the same reason the Wikimedia rate limit was
-rejected in ADR-008 and issue #8 — it is an unofficial endpoint that would
+rejected in ADR-008 and issue #8, it is an unofficial endpoint that would
 have us engineering around someone else's limits.
 
 ### 3. Isolated audio of the word
 
 To be explicit, since the phrasing invites confusion: the 65.7% figure is
-**real recorded audio** — actual `.ogg` and `.mp3` files of human speakers,
+**real recorded audio**, actual `.ogg` and `.mp3` files of human speakers,
 hosted on Wikimedia Commons and linked from the entry (`De-Hallo.ogg`). It is
 not the IPA. The IPA is the separate 91.5%, useful as a text field beside the
 audio rather than instead of it.
 
 Three tiers, in order:
 
-1. **Commons audio via the index** — 65.7% of German entries, real human
+1. **Commons audio via the index**, 65.7% of German entries, real human
    speakers, already licensed, one URL fetch per word at build time
 2. **Tatoeba word-level recordings** where a single-word sentence exists,
-   using whatever is built for item 2 — free, no key, already downloaded
+   using whatever is built for item 2, free, no key, already downloaded
 3. **Piper TTS** for whatever remains
 
 Rejected for tier 2: **Forvo**, which has the largest pronunciation corpus by
 some distance, because its API requires a key and caps requests on the free
-tier — the same grounds on which ADR-008 rejected PONS and this document
+tier, the same grounds on which ADR-008 rejected PONS and this document
 rejects gTTS. Worth revisiting only if tiers 1-3 leave a gap that matters,
 measured on real vocabulary rather than assumed.
 
@@ -214,16 +214,16 @@ index stores it and is arguably as useful as the audio for pronunciation.
 
 ### 4. Image
 
-- **Wikimedia Commons** — free, no key, licensed, and measured above: good for
+- **Wikimedia Commons**, free, no key, licensed, and measured above: good for
   concrete nouns, noise otherwise
-- **Openverse** — aggregates CC images, no key, same relevance problem
-- **Unsplash / Pixabay** — better relevance, require API keys and have request
+- **Openverse**, aggregates CC images, no key, same relevance problem
+- **Unsplash / Pixabay**, better relevance, require API keys and have request
   caps, which puts them in the category ADR-008 already rejected
 
 The relevance problem is the deciding factor, not the source. A defensible
-rule: attempt an image **only** for concrete nouns — `Class` is already
+rule: attempt an image **only** for concrete nouns, `Class` is already
 recorded per card, so `noun` plus an entry in a concreteness list is a cheap
-gate — and leave the field empty otherwise. Better an empty field than a photo
+gate, and leave the field empty otherwise. Better an empty field than a photo
 of a coin on the card for "to run".
 
 ---
@@ -232,25 +232,25 @@ of a coin on the card for "to run".
 
 Proposed, in dependency order, each independently shippable:
 
-**Phase 1 — IPA and Commons pronunciation.** Extend the index schema to store
+**Phase 1: IPA and Commons pronunciation.** Extend the index schema to store
 `ipa` and the audio URL from the `sounds` block, rebuild the indexes, add two
 card fields. Highest value per unit of work by a wide margin: 91.5% and 65.7%
 coverage from data already downloaded, no new runtime dependency, no new
 service, no licence question beyond attribution.
 
-**Phase 2 — Tatoeba sentence audio.** Bulk index (6.4 MB, negligible beside
+**Phase 2: Tatoeba sentence audio.** Bulk index (6.4 MB, negligible beside
 the dictionaries), real human recordings, and the example sentence taken from
 the recording rather than a recording made for the sentence. TTS via Piper
 becomes the fallback for what Tatoeba does not cover, in an optional
 dependency group with voices installed per language like spaCy models.
 
-**Phase 3 — images, gated to concrete nouns.** Commons, with the POS gate and
+**Phase 3: images, gated to concrete nouns.** Commons, with the POS gate and
 an attribution field. Ship it disabled by default until the relevance gate is
 measured on real vocabulary rather than five hand-picked words.
 
-**Phase 4 — dropped as originally posed.** Downloading YouTube audio is
+**Phase 4: dropped as originally posed.** Downloading YouTube audio is
 contrary to YouTube's terms, and that is settled rather than weighed. What the
-request actually wanted — the word heard in real speech — is delivered by
+request actually wanted, the word heard in real speech, is delivered by
 phases 1-3 from sources that exist to be redistributed. The `Example from
 Youtube Video` field stays as text, which is still the card's most reliable
 field at 100% coverage.
@@ -271,7 +271,7 @@ therefore take indices 10 and upward, and `_build_note()` and
 inserted between existing fields.
 
 **Adding fields to the existing model is a schema change, and MODEL_ID must
-not move.** 3.1 forbids changing `MODEL_ID`, which is right — it would orphan
+not move.** 3.1 forbids changing `MODEL_ID`, which is right, it would orphan
 every existing card's review history. But keeping the ID while changing the
 field list means Anki sees a modified notetype on import and updates it. That
 is supported, and existing notes gain empty fields rather than losing data.
@@ -288,7 +288,7 @@ opt-in per type, and the CLI should report the size it is about to produce.
 **Attribution becomes a requirement, not a courtesy.** Commons content is
 CC BY-SA or similar. A deck that ships those files needs the attribution and
 licence recorded on the card. That is a new field and a new obligation on
-anyone distributing generated decks — which, for a project whose output is
+anyone distributing generated decks, which, for a project whose output is
 meant to be shareable, is a design consideration rather than a footnote.
 
 **The pipeline acquires a network fetch per card at build time**, where today

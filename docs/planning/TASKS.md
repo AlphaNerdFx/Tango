@@ -1,4 +1,4 @@
-# TASKS.md — Tango
+# TASKS.md: Tango
 
 Prioritised remaining work. Checkboxes reflect state at the end of the v0.4.1
 verification session.
@@ -37,7 +37,7 @@ verification session.
 - [x] 400+ unit tests, no external dependencies in the default run
       (exact count drifts as tests are added; check `make test` output
       rather than trusting a hardcoded number here. CONTRIBUTING.md's stale
-      "411" claim was recorded here as "corrected during this session" — it
+      "411" claim was recorded here as "corrected during this session", it
       was not, and still said 411 until 8 August. The note claiming the fix
       outlived the fix it claimed, which is the trailing-edge pattern in its
       purest form.)
@@ -62,13 +62,13 @@ verification session.
       card this pipeline creates.** `get_card_fronts()` read the note field
       literally named `Front`; the generated model's first field is named
       `Word`, so a deck built by Tango returned zero fronts and every word
-      from an earlier run came back NEW — definitions re-fetched, duplicate
+      from an earlier run came back NEW, definitions re-fetched, duplicate
       cards generated, and Anki importing rather than merging them because
       the GUID carries the video ID.
 
       Not limited to our own cards. Measured against the real collection:
       `LangTest_fr2` 0 of 1036 notes visible, `English_Test` 0 of 1041, and
-      the hand-built `French` deck 305 of 2172 across 12 note types — most
+      the hand-built `French` deck 305 of 2172 across 12 note types, most
       real decks are not on Anki's stock Basic type. Reprocessing the video
       already imported into `LangTest_fr2` went from 1054 NEW to 1050 SKIP /
       4 QUEUE / 0 NEW.
@@ -90,18 +90,18 @@ current state.
       Confirmed: gated on `language == "en"`, passes `lemma` not `query_lemma`
       (`definition.py:645`). `TestWordNetLanguageGuard` existed but 3 of its 4
       tests mocked both definition sources dead, so they never actually
-      reached the code they claimed to guard — passed vacuously. Fixed
+      reached the code they claimed to guard, passed vacuously. Fixed
       separately from the guard itself; see commit history.
 
 - [x] **Verify `cards.py` state against HEAD.**
-      Was actually zero diff from HEAD, as an earlier session suspected —
+      Was actually zero diff from HEAD, as an earlier session suspected,
       neither the `added_lemmas` guard nor the outlined-pill CSS existed.
       Filed as issue #2, fixed, verified with 2 live runs (English bypass +
       full CLI via `--process-backlog`), closed.
 
 - [x] **Re-run Step 5 verification after the lemma fixes.**
       No single-letter cards in the real generated `.apkg` (confirmed via its
-      embedded SQLite). Lemma count held at 209, not higher as predicted —
+      embedded SQLite). Lemma count held at 209, not higher as predicted,
       but the *set* changed as expected: the pre-fix run's single-letter `'e'`
       lemma is gone, `'semi-relevé'` is newly admitted. Net zero on count,
       both intended effects confirmed via `vocabulary` table timestamps.
@@ -109,7 +109,7 @@ current state.
 - [x] **Run an English-video verification.**
       39/39 real MW definitions, 0 duplicates, all fields under 256 chars,
       synonyms on 38/39, antonyms on 11/39. Manually opened the result in
-      real Anki — this is how issue #10 (MW synonym parsing breaks on
+      real Anki, this is how issue #10 (MW synonym parsing breaks on
       Synonym Discussion words like "ask"/"shy") was found; SQLite-level
       checks alone didn't catch it.
 
@@ -378,16 +378,16 @@ current state.
       fr` alone now selects `fr_core_news_sm` automatically, no manual
       `SPACY_MODEL` override needed; confirmed against real generated cards that
       `allons`->`aller` and `toujours`->`toujours` now resolve correctly (were
-      `allon`/`toujour`). Surfaced a separate, real gap during verification —
+      `allon`/`toujour`). Surfaced a separate, real gap during verification,
       `fr_core_news_sm`'s own verb-lemmatization accuracy is inconsistent on some
-      conjugated forms (e.g. "sors" vs "sortir") — filed as #13, not part of this
+      conjugated forms (e.g. "sors" vs "sortir"), filed as #13, not part of this
       fix's scope.
 
 - [x] **Resolve the 404-versus-502 distinction in issue #1.**
       Investigated: retried `fr/bonjour` 5x (502, 404, 502, 502, 502) and swept
       18 common French words plus an English control. Finding is more nuanced
-      than either original hypothesis: the 502s are **not** French-specific —
-      English showed the same flakiness in a comparable sample (3/5 failed) — so
+      than either original hypothesis: the 502s are **not** French-specific,
+      English showed the same flakiness in a comparable sample (3/5 failed), so
       this is a general dictionaryapi.dev reliability issue, not a broken French
       backend specifically. But filtering the 502 noise out, the coverage gap is
       still real and confirmed: across those 18 French words, every non-502
@@ -400,16 +400,16 @@ current state.
       Was misdiagnosed here as SQLite connection leakage. Actual root cause,
       found during the v0.4.1 verification pass: `test_cache_hit_skips_fetch_definition_call`
       seeded the cache via `_cache_set()` (bare-lemma key) while
-      `fetch_definitions()` reads via a composite `lemma::language` key — a
+      `fetch_definitions()` reads via a composite `lemma::language` key, a
       deterministic mismatch, not flakiness (confirmed via 3/3 reproduction in
       isolation, which the connection-leak theory couldn't explain since each
       test already gets an isolated tmp_path DB). Fixed in 332b8fd.
 
 - [x] **Circuit breaker for failing API sources.** Closes #4, shipped in v0.4.4.
-      A run with 108 failing lookups exceeded 280 seconds — roughly 2.6 seconds
+      A run with 108 failing lookups exceeded 280 seconds, roughly 2.6 seconds
       per failure. After N consecutive failures against one source, stop
       calling it for the remainder of the run and go straight to the fallback.
-      Note that concurrent fetching does not substitute for this — five
+      Note that concurrent fetching does not substitute for this, five
       threads hitting a dead source at once still waste five timeouts.
 
 - [x] **WSL path translation for Anki auto-import.** Closes #5, shipped in v0.4.4.
@@ -419,7 +419,7 @@ current state.
 
 ---
 
-## High — next up
+## High: next up
 
 Ordered by value. The first three are card quality, which is where the
 remaining user-visible value is; the rest is measurement and hygiene.
@@ -430,7 +430,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
 
       Measured on three real videos before anything was written: of 1209
       lemmas found in the index it changes 60 picks, roughly 39 better
-      against 14 worse (fr 13/3, de 18/9, ru 8/2) — the reverse of
+      against 14 worse (fr 13/3, de 18/9, ru 8/2), the reverse of
       word-overlap's 1 better to 14 worse. 404 of the 1209 have more than
       one row, so ambiguity affects a third of all cards.
 
@@ -464,11 +464,11 @@ remaining user-visible value is; the rest is measurement and hygiene.
       Found while
       measuring 8.29, filed rather than folded into it. German Wiktionary
       indexes every inflected form as its own entry, so a card can read
-      "1. Person Singular Indikativ Präsens Aktiv des Verbs haben" — a
+      "1. Person Singular Indikativ Präsens Aktiv des Verbs haben", a
       pointer to another word, not a definition. Measured on real videos:
       18 of 342 German cards, 10 of 663 Russian, 3 of 204 French.
 
-      Not caused by POS selection and not fixed by it — the count barely
+      Not caused by POS selection and not fixed by it, the count barely
       moves either way (de 18→19, fr 3→2, ru 10→10), which is why it is a
       separate concern. wiktextract tags these senses `form-of` and records
       the word they point at, so the fix is robust and language-agnostic
@@ -511,7 +511,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       Antonyms remain the weakest field, which is the point of this item and
       is unchanged. ConceptNet's bulk dump is the evaluated candidate:
       free, no key, CC BY-SA, one 498 MB download covering every language.
-      Its live API is 502 on every endpoint, so bulk is the only route —
+      Its live API is 502 on every endpoint, so bulk is the only route,
       which is what the rate-limit constraint required anyway.
 
       **Measured 26 August 2026, and written up as ADR-010 (Proposed).**
@@ -541,7 +541,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       part of speech, which is why it is 4.3 MB rather than the 3.06 MB
       predicted here.
 
-- [x] **Filler-word cards.** `Ah`, `Bah`, `Ouai`, `Euh`, `Tss` — 3.4% of
+- [x] **Filler-word cards.** `Ah`, `Bah`, `Ouai`, `Euh`, `Tss`, 3.4% of
       cards, and the ones that look broken to a user. Needs a per-language
       stoplist of filler sounds, not a POS rule: `Bonsoir` is also `INTJ` and
       is worth learning.
@@ -563,14 +563,14 @@ remaining user-visible value is; the rest is measurement and hygiene.
       importantly, for real words that stopped appearing.
 
 - [x] **ADR-009 phase 1: IPA and Commons pronunciation audio.** Shipped for
-      v0.5.0. The ADR's estimates were low for German — real coverage is
-      99.7% IPA and 95.0% audio, not 91.5% and 65.7% — but German is not
+      v0.5.0. The ADR's estimates were low for German, real coverage is
+      99.7% IPA and 95.0% audio, not 91.5% and 65.7%, but German is not
       representative: French is 85.1% / 12.1% and Russian 83.3% / 4.4%
       (ARCHITECTURE 8.30). IPA is dependable everywhere, audio is a German
       feature that degrades elsewhere.
 
       The warning about the notetype was the right one and understated. It is
-      not merely that it "must be tested" — appending a field makes Anki
+      not merely that it "must be tested", appending a field makes Anki
       **fork** the notetype at a bumped ID and strand every existing note,
       which is the same mechanism that had already moved this project's
       MODEL_ID twice. `deck.ensure_model_fields()` now aligns the collection
@@ -586,7 +586,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       Original note follows.
 
       v0.5.0 gives
-      IPA and audio only where an index exists — de, fr, ru. English gets
+      IPA and audio only where an index exists, de, fr, ru. English gets
       nothing, and es/ja/ko/pt/zh have a spaCy model but no index. Three
       groups, one goal, and the English half is nearly free:
 
@@ -594,7 +594,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       audio URL, and the pipeline already calls it. Verified live:
       `/house` → `phonetic: /hʌʊs/`, `phonetics[].text: '/haʊs/'`,
       `phonetics[].audio: https://api.dictionaryapi.dev/media/...`.
-      `_parse_dictapi_response` never reads `phonetics` — the sixth instance
+      `_parse_dictapi_response` never reads `phonetics`, the sixth instance
       of the fetched-parsed-discarded shape (SESSION.md 6.13).
 
       Merriam-Webster is the wrong source and this was checked, not assumed:
@@ -604,7 +604,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
 
       The catch: MW is tried first for English and dictapi only runs `if not
       definition`, so most English cards never reach it. Needs the phonetics
-      lookup to happen even when MW supplied the definition — free, no key,
+      lookup to happen even when MW supplied the definition, free, no key,
       already cached and behind the circuit breaker.
 
       **es, ja, ko, pt, zh:** `make dictionary LANGUAGE=<code>`, below.
@@ -615,7 +615,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       `--skip-anki-check` overrides.
 
 - [x] **Add a `--no-cache` flag for measurement runs.** Shipped, and the
-      sweep defaults to it. Neither reads nor writes the cache — writing
+      sweep defaults to it. Neither reads nor writes the cache, writing
       mattered too, since a sweep that writes is how 4532 rows of Russian
       examples reached German cards. `use_cache` and `write_cache` are
       deliberately separate on `fetch_definition`: the batch path already
@@ -649,7 +649,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       `tests/test_hard_constraints.py`, each mutation-verified.
 
       Two things worth keeping from doing it. 3.1's first version pinned only
-      the *resolved* `MODEL_ID`, which reads through `ANKI_MODEL_ID` — so it
+      the *resolved* `MODEL_ID`, which reads through `ANKI_MODEL_ID`, so it
       passed on any machine with a `.env` while the source default drifted;
       it now pins the literal in `config.py`'s source too. And 3.3 was found
       to have a hole a mutation run walked straight through: the tests sliced
@@ -663,7 +663,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
 - [x] **Re-run the sweep and record the corrected baseline.** Done, 13
       August, all 16 rows, cache off. SESSION.md section 5. English examples
       72% → 97% (the Merriam-Webster fix), en → de antonyms 59% → 24% (the
-      3.3 fix, and the fall is the point — those were German antonyms on
+      3.3 fix, and the fall is the point, those were German antonyms on
       English cards). All 12 cross-language pairs translated; definitions
       94-100% everywhere.
 
@@ -674,7 +674,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       with `--def-lang ru` shipped Russian example sentences. Found by the
       first full coverage sweep, not by tests. Gated at all three call sites;
       see ARCHITECTURE.md 8.25. The measured example coverage on
-      cross-language rows will DROP on the next sweep — the metric had been
+      cross-language rows will DROP on the next sweep, the metric had been
       rewarding the violation.
 
 - [x] **Cross-language runs gave up instead of falling back.** 46 of 459
@@ -707,13 +707,13 @@ remaining user-visible value is; the rest is measurement and hygiene.
       Four phases in dependency order, each independently shippable.
 
       Phase 1 is the clear first move: 91.5% of German entries in the kaikki
-      data already carry IPA and 65.7% carry a Wikimedia Commons audio URL —
+      data already carry IPA and 65.7% carry a Wikimedia Commons audio URL,
       real human pronunciation, already licensed, in data we already
       download. The index does not store either field, so it is a schema
       change plus a rebuild, not a new source.
 
       Phase 2 TTS (Piper, offline, optional group) for example sentences.
-      Phase 3 images from Commons, gated to concrete nouns — measured 2 of 5
+      Phase 3 images from Commons, gated to concrete nouns, measured 2 of 5
       usable, with "laufen" returning a coin from the town of Laufen, so a
       relevance gate is mandatory rather than optional.
       Phase 4 video audio needs a ToS decision before any code: downloading
@@ -729,13 +729,13 @@ remaining user-visible value is; the rest is measurement and hygiene.
       shipping.
 
 - [x] **Sense selection by part of speech.** Shipped; duplicate of the entry
-      under "High — next up" above. ARCHITECTURE.md 8.29.
+      under "High, next up" above. ARCHITECTURE.md 8.29.
 
 - [x] **Add a --no-cache flag for measurement runs.** Shipped; duplicate of
       the entry above.
 
 - [x] **Consider a cache key carrying both languages.** Shipped; duplicate
-      of the entry under "High — next up" above, which carries the detail.
+      of the entry under "High, next up" above, which carries the detail.
 
 - [x] **Re-run the sweep and record the corrected baseline.** Done;
       duplicate of the entry above. SESSION.md section 5.
@@ -748,7 +748,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       `_run_review` and `_run_backlog` called `fetch_definitions()` and
       `build_package()` with no language at all, taking their `"en"`
       default, so `make review DECK="French"` fetched every French word
-      from English sources and built cards tagged English — silently, with
+      from English sources and built cards tagged English, silently, with
       the run reporting success. The GUID half is worse: `build_package`'s
       language feeds `guid_for()`, so a French review card collided with
       the English card for the same spelling, the collision class issue #14
@@ -759,7 +759,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
 
       Both modes now resolve a language the same way the video path does,
       falling back to `"en"` with a warning rather than exiting when a deck
-      name carries no language — review has no subtitle track to select, so
+      name carries no language, review has no subtitle track to select, so
       failing hard would break decks that work today. Both branches checked
       live. `__main__.py` 55% → 82%, suite 83% → 88%, 692 passing.
       See ARCHITECTURE.md 8.24.
@@ -776,7 +776,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       right about the sources it had actually tested, and wrong as a general
       statement, because one obvious candidate had never been evaluated.
 
-      Verified true: OMW returns essentially nothing for non-English — 5
+      Verified true: OMW returns essentially nothing for non-English, 5
       French words yield 469 lemmas and **2** antonyms, against English's 238
       lemmas and 25. Verified true: Datamuse works for English (`big` →
       little, small) and returns **empty** for its Spanish vocabulary, so it
@@ -785,14 +785,14 @@ remaining user-visible value is; the rest is measurement and hygiene.
       Verified false, and this one was my own theory: that the index was
       discarding sense-level antonyms, since `_joined()` reads only
       `raw["antonyms"]` at the entry's top level. Measured against 40000 real
-      kaikki French entries — **0** carry sense-level antonyms; all 1682 are
+      kaikki French entries, **0** carry sense-level antonyms; all 1682 are
       top-level and already read. The indexer leaves nothing on the table,
       and 23.2% is Wiktionary's genuine ceiling for French.
 
       Not evaluated before, and the one that fits: **ConceptNet's bulk
       assertions dump.** Free, no key, CC BY-SA (same licence family as the
       Wiktionary data already shipped), and one 475 MB download covers every
-      language at once rather than one download per language — more
+      language at once rather than one download per language, more
       generalizable than the current per-language dictionary, not less.
       Real French antonyms for `grand`: petit, court, faible, minime,
       minuscule, modeste, médiocre, réduit, exigu, bref. Breadth checked
@@ -801,17 +801,17 @@ remaining user-visible value is; the rest is measurement and hygiene.
 
       Two things to know before building it. Its **live API is currently
       returning 502 on every endpoint including its root**, so an API
-      integration is not viable regardless — which is fine, because bulk is
+      integration is not viable regardless, which is fine, because bulk is
       what the rate-limit constraint demanded anyway, and is why this is not
       a repeat of the Wikimedia 429 problem that killed ADR-008 Option B.
       And the data is **noisy**: `grande` lists itself and `irrelevante` as
       antonyms, `大` lists `郵局`. It needs the same filtering OMW synonyms
-      got — drop self-references, cross-language leakage, and cap the list.
+      got, drop self-references, cross-language leakage, and cap the list.
 
 - [x] **`make install` was broken.** Both it and `translate-setup` called
       `$(VENV_DIR)/bin/pip`, which does not exist in this venv. The earlier
       note here framed it as "whether the venv or the Makefile is wrong is a
-      setup decision" — the diagnosis settles that, and it is the Makefile.
+      setup decision", the diagnosis settles that, and it is the Makefile.
       pip is installed and healthy; only its console script is missing,
       removed by an interrupted `pip install --upgrade pip` that also left
       the orphaned `~ip` and `~ip-26.1.2.dist-info` behind, which is what
@@ -819,7 +819,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       call since. `VENV_PIP` is now `$(VENV_PYTHON) -m pip`, which works
       whenever pip is importable rather than depending on a script an
       installer may or may not have written. The `~ip*` orphans are left in
-      place — deleting things inside someone's venv is not a call to make
+      place, deleting things inside someone's venv is not a call to make
       while they are away. `rm -rf .tangovenv/lib/python3.10/site-packages/~ip*`
       clears the warning.
 
@@ -983,10 +983,10 @@ remaining user-visible value is; the rest is measurement and hygiene.
       The "empty on roughly 99 percent of cards" figure this entry used to
       carry predates OMW and the offline index, and is no longer true.
       Measured antonym coverage now: German 51%, Russian 46%, English 31%,
-      French 20%. Synonyms are 60-83%. Still worth a dedicated source —
+      French 20%. Synonyms are 60-83%. Still worth a dedicated source,
       French in particular lags, and the index is the only antonym source
       for any non-English language, so a language without a built index
-      still gets none. Investigate Datamuse API — free, no key, has an
+      still gets none. Investigate Datamuse API, free, no key, has an
       `rel_ant` parameter for antonyms. **Tested, and rejected on the
       evidence:** `rel_ant=big` returns little/small, `rel_ant=hot` returns
       cold/cool, and the same query against its Spanish vocabulary (`v=es`)
@@ -1015,7 +1015,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       with a `1px solid` coloured border (`cards.py:147-163`), which is the
       intended design. It went in with the issue #2 fix recorded under
       Critical above, and this duplicate entry under Medium was never
-      cleared — it still asked to "verify whether the change was ever
+      cleared, it still asked to "verify whether the change was ever
       applied to `cards.py`" long after the Critical entry recorded that it
       had been, and verified with two live runs.
 
@@ -1109,19 +1109,19 @@ remaining user-visible value is; the rest is measurement and hygiene.
       bundled into a docs-only issue.
 
 - [x] **Hyphenated compound handling in the deck fuzzy match.** Tested, and
-      the concern does not reproduce — the matcher already handles them, so
+      the concern does not reproduce, the matcher already handles them, so
       this closes with regression tests rather than a fix. Verified against
       the real French deck, which holds `semi-relevé` and `avant-garde` as
       actual fronts: `semi-relevé`, the word from the original bug report,
       scores 100 against its own front. `week-end`/`weekend` match in both
       directions, `porte-monnaie` matches `porte monnaie`, and the guards
-      hold the other way — `semi-relevé` does not collide with `relevé`
+      hold the other way, `semi-relevé` does not collide with `relevé`
       (length ratio), and `arc-en-ciel` does not collide with `arc` or
       `ciel` (short-front exclusion).
 
       Two boundary cases worth knowing. A typographic apostrophe
       (`aujourd'hui` vs `aujourd’hui`) passes at 91, one point above
-      CONFIDENCE_HIGH — narrow, not comfortable. An accent difference
+      CONFIDENCE_HIGH, narrow, not comfortable. An accent difference
       (`après-midi` vs `apres-midi`) scores exactly 90 and QUEUEs, since
       SKIP requires strictly above; asking is the right answer there. Both
       are pinned by tests so a threshold change fails loudly.
@@ -1140,7 +1140,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       Anchoring the defaults alone would have fixed nothing in practice.
       `.env.example` ships `DB_PATH=pipeline.db`, `OUTPUT_DIR=output`, and
       `REVIEW_FILE=review.json`, so a documented install always takes the
-      override branch and never reaches the default — the local `.env` here
+      override branch and never reaches the default, the local `.env` here
       does exactly that. Relative values are now anchored whatever their
       source; absolute ones are honoured as given, with `~` expanded first.
 
@@ -1151,7 +1151,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
 - [x] **Investigate whether `token.is_alpha` removal admits junk in languages
       other than French.** Measured across every language processed so far,
       not one video: of 4128 distinct (deck, lemma) pairs in `pipeline.db`,
-      exactly **12** are lemmas `str.isalpha()` rejects — that is, the
+      exactly **12** are lemmas `str.isalpha()` rejects, that is, the
       complete set the removed filter used to block.
 
       | deck | count | lemmas |
@@ -1163,7 +1163,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
 
       0.29% of all vocabulary, and most of it is real: every French entry is
       a common word, `u-bahnfahrer` is an ordinary compound, and `gibt's` /
-      `war's` are standard spoken German contractions. Three are marginal —
+      `war's` are standard spoken German contractions. Three are marginal,
       `gibt'sn` and `kriegt'sn` are dialectal transcription artifacts, and
       `i'm` is English code-switching inside a Chinese video.
 

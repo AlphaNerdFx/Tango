@@ -20,7 +20,7 @@ Supported languages include French, Spanish, German, Italian, Portuguese, Russia
 
 ## Language name variants
 
-The deck name matcher recognises multiple names for each language. For French, any of these work: French, Français, Francais, Frances, Französisch — the point is it checks the language's name as spelled in English, French, Spanish, German, and the language's own name.
+The deck name matcher recognises multiple names for each language. For French, any of these work: French, Français, Francais, Frances, Französisch, the point is it checks the language's name as spelled in English, French, Spanish, German, and the language's own name.
 
 Names are case-insensitive. Sub-deck notation is handled: `Language::French::B2` extracts "French" correctly.
 

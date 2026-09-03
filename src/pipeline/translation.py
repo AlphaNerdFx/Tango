@@ -8,7 +8,7 @@ Responsible for:
   4. Managing the three-tier resolution:
        Tier 1: community mirror (fast, no install)
        Tier 2: local argostranslate (reliable, requires one-time model download)
-       Tier 3: degrade gracefully — warn user, offer options
+       Tier 3: degrade gracefully, warn user, offer options
 
 Translation is only used when DEF_LANG is set and differs from LANGUAGE.
 When LANGUAGE == DEF_LANG or DEF_LANG is absent, this module is not called.
@@ -60,9 +60,9 @@ MODEL_WARMUP_TIMEOUT       = 180  # seconds for the first call of a pair, which
                                    # gets its own budget outside that one.
 LOCAL_TRANSLATION_TIMEOUT  = 15   # seconds max per word for local argostranslate
                                    # argostranslate on CPU can take 30-60s/word
-                                   # with Stanza SBD — abort and warn if exceeded
+                                   # with Stanza SBD, abort and warn if exceeded
 
-# Approximate model sizes in MB — used to inform the user before download
+# Approximate model sizes in MB: used to inform the user before download
 # Updated when argostranslate package index reports sizes
 _MODEL_SIZE_HINT_MB = 150
 
@@ -251,7 +251,7 @@ def is_model_installed(from_code: str, to_code: str) -> bool:
     Return True if a *direct* argostranslate package for this pair is installed.
 
     Direct only. Use is_translation_available() to ask whether translation can
-    actually happen, which is a weaker and more useful question — see there.
+    actually happen, which is a weaker and more useful question, see there.
     """
     try:
         from argostranslate import package as pkg
@@ -277,7 +277,7 @@ def is_translation_available(from_code: str, to_code: str) -> bool:
     With de->en and en->fr installed, de->fr works.
 
     Gating translation on a direct package therefore refused pairs that would
-    have worked, which is most non-English pairs — the whole point of
+    have worked, which is most non-English pairs, the whole point of
     --def-lang for a learner whose own language is not English.
 
     Args:
@@ -308,7 +308,7 @@ def get_translation_route(from_code: str, to_code: str) -> list[tuple[str, str]]
     Returns:
         [(from, to)] when a direct package exists, [(from, "en"), ("en", to)]
         when the pair must pivot through English, or None when neither is
-        possible. Pairs already covered still return their route — the caller
+        possible. Pairs already covered still return their route, the caller
         decides what is missing.
     """
     if from_code == to_code:
@@ -339,7 +339,7 @@ def install_translation(from_code: str, to_code: str) -> bool:
     Install everything needed to translate this pair, pivots included.
 
     A direct package is one download. A pivot pair is two, and both must
-    succeed for the pair to work — argostranslate only composes de->fr once
+    succeed for the pair to work, argostranslate only composes de->fr once
     de->en and en->fr are both present.
 
     Args:
@@ -379,7 +379,7 @@ def install_translation(from_code: str, to_code: str) -> bool:
     try:
         from argostranslate import translate
         translate.get_installed_languages.cache_clear()
-    except Exception:  # pragma: no cover — cache is an implementation detail
+    except Exception:  # pragma: no cover, cache is an implementation detail
         pass
 
     return is_translation_available(from_code, to_code)
@@ -547,7 +547,7 @@ def translate_local(word: str, from_code: str, to_code: str) -> Optional[str]:
     Translate a word using the locally installed argostranslate model.
 
     Enforces LOCAL_TRANSLATION_TIMEOUT per word. argostranslate with the
-    Stanza sentence boundary model can take 30-60s per word on CPU — this
+    Stanza sentence boundary model can take 30-60s per word on CPU, this
     timeout prevents the pipeline hanging silently.
 
     Returns the translated string, or None on failure or timeout.
@@ -609,7 +609,7 @@ def translate_word(
     Resolution order:
         1. Community mirror (fast, no install required)
         2. Local argostranslate model (reliable, requires one-time download)
-        3. User prompt — offer to download, continue without, or exit
+        3. User prompt, offer to download, continue without, or exit
 
     Args:
         word:        Lemma to translate.
@@ -632,7 +632,7 @@ def translate_word(
         return result
 
     # ── Tier 2: Local model ───────────────────────────────────────────────────
-    # Warn once if local translation is about to run — it can be slow on CPU
+    # Warn once if local translation is about to run, it can be slow on CPU
     _warn_local_translation_slow(pair)
     try:
         result = translate_local(word, from_code, to_code)
@@ -682,7 +682,7 @@ def translate_word(
                     f"\n  Or run without --def-lang, which needs no "
                     f"translation."
                 )
-            # "download" — model should now be installed, try again
+            # "download", model should now be installed, try again
             try:
                 return translate_local(word, from_code, to_code)
             except ModelNotInstalledError:
@@ -731,7 +731,7 @@ _prompt_lock = threading.Lock()
 def _warn_local_translation_slow(pair: str) -> None:
     """
     Warn once per run when local argostranslate is about to be used.
-    argostranslate on CPU with Stanza SBD can take 30-60s per word —
+    argostranslate on CPU with Stanza SBD can take 30-60s per word,
     this sets the user's expectation before the first translation starts.
     """
     if pair in _warned_slow:
@@ -764,9 +764,9 @@ def _prompt_translation_options(from_code: str, to_code: str) -> str:
     Prompt the user for how to proceed when translation is unavailable.
 
     Returns:
-        "download" — user wants to install the model now
-        "continue" — user wants to continue without translation
-        "exit"     — user wants to exit
+        "download", user wants to install the model now
+        "continue", user wants to continue without translation
+        "exit"      user wants to exit
     """
     pair = f"{from_code}->{to_code}"
     print("  Options:")
@@ -790,11 +790,11 @@ def _prompt_translation_options(from_code: str, to_code: str) -> str:
             # the run alive and gives native-language definitions, which is
             # what the [f] option does and what a user with no model would
             # almost certainly pick.
-            print("\n  No input available — continuing with native definitions.")
+            print("\n  No input available, continuing with native definitions.")
             return "continue"
         except KeyboardInterrupt:
             # Ctrl-C at a prompt means stop, not crash.
-            print("\n  Interrupted — exiting.")
+            print("\n  Interrupted, exiting.")
             return "exit"
 
         if choice == "d":

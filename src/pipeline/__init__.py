@@ -1,5 +1,5 @@
 """
-Tango — YouTube transcripts to Anki flashcard packages.
+Tango, YouTube transcripts to Anki flashcard packages.
 
 The version lives here and nowhere else. `pyproject.toml` reads it from this
 attribute (`[tool.setuptools.dynamic]`), so the package metadata and the

@@ -15,7 +15,7 @@ For each word the module returns:
     - example_dict     (example sentence from dictionary, or None)
     - example_transcript (sentence from transcript containing the word)
     - synonyms         (list, may be empty)
-    - antonyms         (list, may be empty — rare in free APIs)
+    - antonyms         (list, may be empty, rare in free APIs)
     - part_of_speech   (str)
     - source           ("merriam-webster" | "dictionaryapi" | "not_found")
 
@@ -27,9 +27,9 @@ Dependencies:
     sqlite3 (stdlib)
 
 Environment variables:
-    MW_API_KEY                 — Merriam-Webster Collegiate API key (required for MW)
-    DEFINITION_FETCH_WORKERS   — Max concurrent lookups in flight (default 5)
-    DB_PATH                    — Path to SQLite database (default pipeline.db)
+    MW_API_KEY                  Merriam-Webster Collegiate API key (required for MW)
+    DEFINITION_FETCH_WORKERS    Max concurrent lookups in flight (default 5)
+    DB_PATH                     Path to SQLite database (default pipeline.db)
 
 fetch_definitions() fetches live (non-cached) words concurrently via a
 thread pool rather than one at a time. See ARCHITECTURE.md's design
@@ -355,7 +355,7 @@ class DefinitionNotFoundError(Exception):
 
 
 class MWApiKeyMissingError(Exception):
-    """MW_API_KEY is not set — MW lookups will be skipped."""
+    """MW_API_KEY is not set, MW lookups will be skipped."""
 
 
 def _strip_accents(text: str) -> str:
@@ -479,7 +479,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
     try:
         conn.execute("ALTER TABLE definitions ADD COLUMN example_dict2 TEXT")
     except Exception:
-        pass  # Column already exists — safe to ignore
+        pass  # Column already exists, safe to ignore
     # Same pattern for the ADR-009 phase 1 columns. The cache stores
     # assembled card fields (8.27), so pronunciation has to live here too or
     # every cache hit would ship a card with the section missing.
@@ -487,7 +487,7 @@ def _init_schema(conn: sqlite3.Connection) -> None:
         try:
             conn.execute(f"ALTER TABLE definitions ADD COLUMN {column} TEXT")
         except Exception:
-            pass  # Column already exists — safe to ignore
+            pass  # Column already exists, safe to ignore
     _migrate_cache_keys(conn)
     conn.commit()
 
@@ -735,7 +735,7 @@ def _parse_mw_response(
     Parse a MW Collegiate API response into a DefinitionResult.
 
     MW returns a list. If the first item is a string, it means the word
-    wasn't found and the strings are spelling suggestions — return None.
+    wasn't found and the strings are spelling suggestions, return None.
     """
     if not data or isinstance(data[0], str):
         return None
@@ -780,7 +780,7 @@ def _parse_mw_response(
     example_dict2 = examples_dict[1] if len(examples_dict) > 1 else None
 
     # ── Synonyms (from 'syns' field) ──────────────────────────────────────────
-    # MW's 'syns' field is NOT a flat comma-separated list — for any word with
+    # MW's 'syns' field is NOT a flat comma-separated list, for any word with
     # a real "Synonym Discussion" (a standard MW Collegiate feature covering
     # nuanced near-synonyms), it's full prose with the actual synonym words
     # individually marked {sc}word{/sc} (small-caps) inside complete sentences
@@ -802,7 +802,7 @@ def _parse_mw_response(
     except (KeyError, IndexError, TypeError):
         pass
 
-    # MW free tier rarely includes antonyms — leave empty
+    # MW free tier rarely includes antonyms, leave empty
     antonyms: list[str] = []
 
     return DefinitionResult(
@@ -859,7 +859,7 @@ def _parse_dictapi_response(
     example_dict  = examples_dict[0] if len(examples_dict) > 0 else None
     example_dict2 = examples_dict[1] if len(examples_dict) > 1 else None
 
-    # Synonyms and antonyms — present at both meaning and definition level
+    # Synonyms and antonyms, present at both meaning and definition level
     synonyms: list[str] = (
         meaning.get("synonyms", []) or first_def.get("synonyms", [])
     )
@@ -885,14 +885,14 @@ def _parse_dictapi_response(
 # stop calling it for the rest of the run and treat further calls as an
 # immediate failure, no network request made. A run with 108 failing
 # lookups against a source that was down for the whole run paid a full
-# network timeout on every single one of them — roughly 2.6s/failure, 280s
+# network timeout on every single one of them: roughly 2.6s/failure, 280s
 # total for that source alone.
 #
 # Only counts server errors, timeouts, and connection failures as failures.
-# A 404 does NOT count — it means the source is reachable and healthy, it
+# A 404 does NOT count: it means the source is reachable and healthy, it
 # simply doesn't have this word (see issue #1's 404-vs-502 investigation:
 # "404 means the endpoint works and the word is absent. 502 means the
-# upstream server broke" — those are different failure modes and only the
+# upstream server broke": those are different failure modes and only the
 # second one should trip the breaker). Treating 404s as failures would trip
 # the breaker on any source with genuinely sparse coverage for a language
 # after only a few words, even though the source itself is working fine.
@@ -901,7 +901,7 @@ def _parse_dictapi_response(
 # wiktionary, since a single run's native-language and target-language
 # dictionaryapi.dev calls can have very different reliability (e.g. a
 # French-to-English run: the French native lookups may be failing
-# consistently per issue #1 while the English target lookups work fine —
+# consistently per issue #1 while the English target lookups work fine,
 # one must not trip the other's breaker).
 _circuit_failures: dict[str, int] = {}
 _circuit_tripped: set[str] = set()
@@ -927,7 +927,7 @@ def reset_circuit_breaker() -> None:
     """
     Clear all circuit breaker state. Call once at the start of each pipeline
     run (mirrors translation.reset_warning_state()) so a source that tripped
-    in a previous run/process doesn't stay tripped — this module-level state
+    in a previous run/process doesn't stay tripped, this module-level state
     would otherwise leak across multiple calls within the same process (e.g.
     tests, scratch scripts, or `tango review`/`tango backlog` re-invocations).
     """
@@ -948,7 +948,7 @@ def _circuit_record_failure(source: str) -> None:
         if count >= CIRCUIT_BREAKER_THRESHOLD and source not in _circuit_tripped:
             _circuit_tripped.add(source)
             logger.warning(
-                "Circuit breaker tripped for '%s' after %d consecutive failures — "
+                "Circuit breaker tripped for '%s' after %d consecutive failures, "
                 "skipping it for the rest of this run.",
                 source, count,
             )
@@ -983,11 +983,11 @@ def _fetch_from_mw(lemma: str) -> Optional[list]:
     """
     api_key = MW_API_KEY
     if not api_key:
-        logger.debug("MW_API_KEY not set — skipping MW lookup for '%s'.", lemma)
+        logger.debug("MW_API_KEY not set, skipping MW lookup for '%s'.", lemma)
         return None
 
     if _circuit_is_tripped("mw"):
-        logger.debug("Circuit breaker open for 'mw' — skipping '%s'.", lemma)
+        logger.debug("Circuit breaker open for 'mw', skipping '%s'.", lemma)
         return None
 
     url = f"{MW_API_BASE}/{lemma}?key={api_key}"
@@ -1114,7 +1114,7 @@ def _fetch_from_dictapi(lemma: str, language: str = "en") -> Optional[list]:
     """
     source = f"dictapi:{language}"
     if _circuit_is_tripped(source):
-        logger.debug("Circuit breaker open for '%s' — skipping '%s'.", source, lemma)
+        logger.debug("Circuit breaker open for '%s', skipping '%s'.", source, lemma)
         return None
 
     url = f"{DICT_API_BASE.rstrip('/')}/{language}/{lemma}"
@@ -1143,7 +1143,7 @@ def _fetch_from_wiktionary(lemma: str, language: str) -> Optional[list]:
     Call English Wiktionary's REST definition endpoint for `lemma` and
     return the entry list for `language`'s section, or None.
 
-    Always queries en.wiktionary.org regardless of `language` — see the
+    Always queries en.wiktionary.org regardless of `language`, see the
     WIKTIONARY_API_BASE comment in config.py for why. English is excluded
     by the caller; this source exists to supplement non-English examples.
 
@@ -1152,7 +1152,7 @@ def _fetch_from_wiktionary(lemma: str, language: str) -> Optional[list]:
     """
     source = f"wiktionary:{language}"
     if _circuit_is_tripped(source):
-        logger.debug("Circuit breaker open for '%s' — skipping '%s'.", source, lemma)
+        logger.debug("Circuit breaker open for '%s', skipping '%s'.", source, lemma)
         return None
 
     url = f"{WIKTIONARY_API_BASE}/{lemma}"
@@ -1240,7 +1240,7 @@ def fetch_definition(
 
     Target source (definition + class only):
         If def_language == language or def_language is None:
-            Same as native source — single fetch covers everything.
+            Same as native source, single fetch covers everything.
         If def_language differs:
             Translate lemma then MW -> dictionaryapi.dev/{def_language}/
             Only definition and part_of_speech come from this source.

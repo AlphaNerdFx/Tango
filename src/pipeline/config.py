@@ -5,12 +5,12 @@ Every constant that affects behaviour, paths, or external service
 connections lives here. Modules import from this file rather than
 defining their own values.
 
-Environment variables override defaults at runtime — set them in
+Environment variables override defaults at runtime, set them in
 your .env file (loaded by python-dotenv in __main__.py) or export
 them in your shell before running the pipeline.
 
 Presentation constants (ANSI colours, card CSS, HTML templates)
-remain in their respective modules — they are not deployment config.
+remain in their respective modules, they are not deployment config.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 
 from pipeline import __version__
 
-# Load .env file if present — does nothing if file doesn't exist
+# Load .env file if present: does nothing if file doesn't exist
 load_dotenv()
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ load_dotenv()
 # pipeline from anywhere but the repository root silently uses a *different*
 # set of files, and every one of those failures is silent:
 #
-#   DB_PATH      a second, empty database — the definition cache is gone and
+#   DB_PATH      a second, empty database: the definition cache is gone and
 #                so is the record of which videos have already been processed
 #   DICT_DIR     an unbuilt index directory, so every non-English card loses
 #                its definition and the run still reports success
@@ -105,13 +105,13 @@ def _resolve_path(var: str, default: str, root: Path | None = None) -> Path:
     return (root if root is not None else PROJECT_ROOT) / path
 
 
-# SQLite database — shared across state.py, definition.py, deck.py
+# SQLite database: shared across state.py, definition.py, deck.py
 DB_PATH: Path = _resolve_path("DB_PATH", "pipeline.db")
 
 # Output directory for generated .apkg files
 OUTPUT_DIR: Path = _resolve_path("OUTPUT_DIR", "output")
 
-# Review file — deferred queue words written here for manual resolution
+# Review file: deferred queue words written here for manual resolution
 REVIEW_FILE: Path = _resolve_path("REVIEW_FILE", "review.json")
 
 # Directory for per-language Wiktionary indexes built by wiktdata.py.
@@ -245,7 +245,7 @@ ANKI_HOST: str = os.getenv("ANKI_HOST", "http://localhost:8765")
 # second-guessed, including an explicit localhost.
 ANKI_HOST_EXPLICIT: bool = bool(os.getenv("ANKI_HOST"))
 
-# AnkiConnect API version — do not change unless AnkiConnect upgrades its API
+# AnkiConnect API version: do not change unless AnkiConnect upgrades its API
 ANKI_VERSION: int = 6
 
 # Seconds to wait for AnkiConnect to respond before timing out. Fine for the
@@ -261,7 +261,7 @@ ANKI_TIMEOUT: int = int(os.getenv("ANKI_TIMEOUT", "5"))
 # for a hung server, not a target.
 ANKI_IMPORT_TIMEOUT: int = int(os.getenv("ANKI_IMPORT_TIMEOUT", "300"))
 
-# genanki model ID — NEVER change after first use.
+# genanki model ID: NEVER change after first use.
 # Changing this causes Anki to treat all existing cards as belonging
 # to a new model, breaking review history.
 #
@@ -271,7 +271,7 @@ ANKI_IMPORT_TIMEOUT: int = int(os.getenv("ANKI_IMPORT_TIMEOUT", "300"))
 # notetype named "Simple Model". Any collection that ever imported a deck
 # built from that tutorial already has the ID taken, and Anki then refuses
 # to reuse it: it forks a new notetype with a bumped ID and a suffixed
-# name. Measured on a real collection — 1607392319 held a 7-field "Simple
+# name. Measured on a real collection: 1607392319 held a 7-field "Simple
 # Model" with zero notes, while this pipeline's 2135 cards sat on
 # 1607392321, the ID Anki assigned when it forked.
 #
@@ -280,11 +280,11 @@ ANKI_IMPORT_TIMEOUT: int = int(os.getenv("ANKI_IMPORT_TIMEOUT", "300"))
 # ARCHITECTURE.md 8.31. Do not change it again.
 MODEL_ID: int = int(os.getenv("ANKI_MODEL_ID", "1607392321"))
 
-# genanki deck ID — NEVER change after first use.
+# genanki deck ID: NEVER change after first use.
 # Same constraint as MODEL_ID.
 DECK_ID: int = int(os.getenv("ANKI_DECK_ID", "2059400110"))
 
-# Deck check — confidence interval thresholds
+# Deck check: confidence interval thresholds
 
 # Fuzzy match score above this → word already in deck (SKIP)
 CONFIDENCE_HIGH: int = int(os.getenv("CONFIDENCE_HIGH", "90"))
@@ -293,13 +293,13 @@ CONFIDENCE_HIGH: int = int(os.getenv("CONFIDENCE_HIGH", "90"))
 # Between CONFIDENCE_LOW and CONFIDENCE_HIGH → needs user review (QUEUE)
 CONFIDENCE_LOW: int = int(os.getenv("CONFIDENCE_LOW", "60"))
 
-# Words shorter than this use exact match only — WRatio is unreliable
+# Words shorter than this use exact match only: WRatio is unreliable
 # on short tokens due to partial ratio inflation
 SHORT_WORD_THRESHOLD: int = int(os.getenv("SHORT_WORD_THRESHOLD", "4"))
 
 # Definition APIs
 
-# Merriam-Webster Collegiate API — primary definition source
+# Merriam-Webster Collegiate API: primary definition source
 # Key required: https://dictionaryapi.com/register/index.htm (free tier: 1000/day)
 # Merriam-Webster's terms, quoted from dictionaryapi.com because they shape
 # the architecture rather than merely the setup:
@@ -345,10 +345,10 @@ MW_RATE_LIMIT: float = float(os.getenv("MW_RATE_LIMIT", "4.0"))
 # of a few words pays nothing.
 MW_BURST: int = int(os.getenv("MW_BURST", "8"))
 
-# dictionaryapi.dev — fallback, no key required
+# dictionaryapi.dev: fallback, no key required
 DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
 
-# English Wiktionary's REST definition endpoint — supplements native-language
+# English Wiktionary's REST definition endpoint: supplements native-language
 # example sentences for non-English lemmas when dictionaryapi.dev has none
 # (see issue #1). Only the English-language edition's REST endpoint works
 # reliably; other language editions returned 501 in testing. Query it with
@@ -358,7 +358,7 @@ DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
 # though the site itself is the English edition. No key required, but
 # Wikimedia does enforce anonymous rate limits (a 429 during a burst of
 # ~12 requests was observed in testing) and requests an identifying
-# User-Agent — see https://meta.wikimedia.org/wiki/User-Agent_policy.
+# User-Agent: see https://meta.wikimedia.org/wiki/User-Agent_policy.
 WIKTIONARY_API_BASE: str = "https://en.wiktionary.org/api/rest_v1/page/definition"
 WIKTIONARY_USER_AGENT: str = os.getenv(
     "WIKTIONARY_USER_AGENT",
@@ -369,7 +369,7 @@ WIKTIONARY_USER_AGENT: str = os.getenv(
 API_TIMEOUT: float = float(os.getenv("API_TIMEOUT", "8"))
 
 # Maximum number of definition lookups in flight at once. Replaces the old
-# fixed API_DELAY sleep-between-calls approach — rate limiting is now done
+# fixed API_DELAY sleep-between-calls approach: rate limiting is now done
 # by bounding concurrency rather than pacing a sequential loop. See
 # ARCHITECTURE.md's design-patterns section for why a thread pool was used
 # instead of asyncio/aiohttp.
@@ -377,19 +377,19 @@ DEFINITION_FETCH_WORKERS: int = int(os.getenv("DEFINITION_FETCH_WORKERS", "5"))
 
 # Consecutive server-error/timeout failures against one definition source
 # before the circuit breaker stops calling it for the rest of the run.
-# Does NOT count 404 ("word not found" — the source is healthy, just lacks
-# this word) as a failure, only 5xx/timeout/connection errors — see issue #1's
+# Does NOT count 404 ("word not found": the source is healthy, just lacks
+# this word) as a failure, only 5xx/timeout/connection errors: see issue #1's
 # 404-vs-502 investigation for why that distinction matters.
 CIRCUIT_BREAKER_THRESHOLD: int = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "5"))
 
 # Proxy (youtube-transcript-api)
 #
-# Most users never need one — default traffic already comes from a
+# Most users never need one: default traffic already comes from a
 # residential IP, which is what YouTube blocks least. If you are genuinely
 # rate-limited, bring your own reputable paid or VPN proxy; this project
 # does not recommend a provider. A free-tier datacenter proxy made things
 # measurably worse when tested (repeated 429s through it, success without
-# it) — see issue #8 and SESSION.md 6.5.
+# it): see issue #8 and SESSION.md 6.5.
 # Format: "http://user:pass@host:port" or "socks5://user:pass@host:port"
 PROXY_HTTP_URL: str | None = os.getenv("PROXY_HTTP_URL")
 PROXY_HTTPS_URL: str | None = os.getenv("PROXY_HTTPS_URL")

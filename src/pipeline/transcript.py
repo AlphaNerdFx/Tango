@@ -1,8 +1,8 @@
 """
 Three responsibilities:
-  1. get_transcript()   — fetch a Transcript object for a video ID
-  2. get_properties()   — extract metadata from a fetched transcript
-  3. get_snippets()     — build a timestamp-indexed dict of text per language
+  1. get_transcript()    fetch a Transcript object for a video ID
+  2. get_properties()    extract metadata from a fetched transcript
+  3. get_snippets()      build a timestamp-indexed dict of text per language
 
 The caller (nlp.py) uses get_snippets() to get the clean joined text.
 """
@@ -134,7 +134,7 @@ def get_properties(transcript: Transcript) -> dict:
     Return metadata for a single Transcript object.
 
     Calls .fetch() internally to access snippet-level data (duration, count).
-    The fetched result is NOT cached here — if you need snippets too,
+    The fetched result is NOT cached here, if you need snippets too,
     call get_snippets() separately (it also fetches internally).
 
     Returns:

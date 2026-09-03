@@ -1,4 +1,4 @@
-# ROADMAP.md — Tango
+# ROADMAP.md: Tango
 
 One goal per tag, from here to v1.0.0, and an explicit statement of what
 v1.0.0 freezes.
@@ -27,7 +27,7 @@ this project uses the ordinary 0.x working convention:
 | bump | when | example from this project |
 |---|---|---|
 | `0.x.PATCH` | fixes, and completing something already shipped | the deck duplicate check reading the wrong field (v0.4.5) |
-| `0.MINOR.0` | new capability, **or anything requiring a migration** | v0.5.0 — two new notetype fields, so every collection's notetype must be altered before import |
+| `0.MINOR.0` | new capability, **or anything requiring a migration** | v0.5.0, two new notetype fields, so every collection's notetype must be altered before import |
 | `1.0.0` | the public API below is frozen and will not break without a `2.0.0` | not yet |
 
 **The test that decides it:** does an existing user have to *do* something,
@@ -56,12 +56,12 @@ entries, having previously had only a tag message and `git log`.
 - Index schema v2: pronunciation columns and inflection-pointer following
 - `MODEL_ID` corrected to the notetype this pipeline's cards actually live
   on, once and never again
-- `deck.ensure_model_fields()` — aligns the collection's notetype before
+- `deck.ensure_model_fields()`, aligns the collection's notetype before
   import, so appending a field merges instead of forking it
 - All six hard constraints enforced by mutation-verified tests
 
-**Migration:** adds two fields to the notetype. Non-destructive — verified
-on 2135 real notes with zero changed values — but Anki will ask for one
+**Migration:** adds two fields to the notetype. Non-destructive, verified
+on 2135 real notes with zero changed values, but Anki will ask for one
 full sync afterwards.
 
 ### v0.5.1: Pronunciation for every language
@@ -70,7 +70,7 @@ Today `en` gets no pronunciation at all, because it has no offline index and
 that is the only source wired up. Three groups, one goal:
 
 - **English:** dictionaryapi.dev already returns true IPA (`/haʊs/`) and a
-  ready-made audio URL, and the pipeline already calls it — `phonetics` is
+  ready-made audio URL, and the pipeline already calls it, `phonetics` is
   simply never parsed. Merriam-Webster is the wrong source here: it returns
   its own respelling (`ˈhau̇s`), not IPA. Needs the dictapi call to happen
   for English even when MW supplied the definition.
@@ -78,7 +78,7 @@ that is the only source wired up. Three groups, one goal:
   LANGUAGE=<code>` already does this; nobody has run it.
 - **de, fr, ru:** done in v0.5.0.
 
-*Why PATCH and not MINOR:* no migration and no schema change — the fields
+*Why PATCH and not MINOR:* no migration and no schema change, the fields
 already exist and are empty. This completes a promise v0.5.0 made rather
 than making a new one. A stricter reading would call a new parse path a
 MINOR; if that reading wins, this becomes v0.6.0 and everything below
@@ -94,7 +94,7 @@ inside the `.apkg` as `[sound:...]`.
 ADR-009 rejected this on size grounds using an estimate nobody measured
 ("tens of megabytes"). Real Commons files are 16–30 KB, so a 240-card German
 deck costs about 5 MB. That is the third ADR-009 estimate to be wrong in the
-same direction — see ARCHITECTURE.md 8.35 and CLAUDE.md 3.6.
+same direction, see ARCHITECTURE.md 8.35 and CLAUDE.md 3.6.
 
 Downloads are paced, and this is the part worth remembering: the download
 host rate-limits per IP, and the *first* implementation embedded 13
@@ -123,7 +123,7 @@ re-imported. This finishes a field that was already on the card.
 The fields exist and are filled; this is about what is *in* them. **Released
 27 August 2026, all five items.**
 
-- Filler-word cards (`Ah`, `Bah`, `Euh`, `Tss` — 3.4% of one real French run).
+- Filler-word cards (`Ah`, `Bah`, `Euh`, `Tss`, 3.4% of one real French run).
   Done.
 - Inflection-pointer glosses that still reach cards as definitions. Done;
   Russian was the last language still leaking them.
@@ -268,7 +268,7 @@ is load-bearing in more places than it looks.
   Windows needs no translation but different path handling
 - The Makefile is the documented entry point for 23 targets, and GNU make is
   not a reasonable requirement on Windows. `make help` already prints the CLI
-  equivalent of every user-facing target — the remaining work is making the
+  equivalent of every user-facing target, the remaining work is making the
   CLI the primary path and the Makefile a convenience
 - CI on Linux, macOS and Windows, because "should work" is not evidence
 
@@ -287,10 +287,10 @@ state. Where the 5.9 GB went:
 | `sudachidict_core` | 208 MB | Japanese tokenizer for spaCy |
 | `spacy` | 110 MB | core dependency |
 | `ctranslate2.libs` | 75 MB | argostranslate |
-| `pymupdf` | 63 MB | **nothing — zero references in `src/`, `scripts/` or `tests/`** |
+| `pymupdf` | 63 MB | **nothing, zero references in `src/`, `scripts/` or `tests/`** |
 
 **torch + nvidia + triton is 4.5 GB, 76% of the install, and none of it is
-declared** — it all arrives through `argostranslate`. The CUDA stack lands
+declared**, it all arrives through `argostranslate`. The CUDA stack lands
 on machines that will never have a GPU. CLAUDE.md 3.6 has been saying
 "roughly 1.5GB" for this; the real figure is three times that. Step 1 has
 since removed `nvidia` and `triton` outright and cut torch to 725 MB.
@@ -303,7 +303,7 @@ argostranslate → stanza → torch → nvidia-cudnn/cusparselt/nccl/nvshmem, tr
 
 Translation *inference* does not use torch. It uses `ctranslate2` and
 `sentencepiece`, together about 75 MB. `stanza` is pulled in for **sentence
-boundary detection** — splitting a paragraph into sentences — and it brings
+boundary detection**, splitting a paragraph into sentences, and it brings
 the entire CUDA stack with it. 4.5 GB to find full stops.
 
 argostranslate already knows this: it depends on `minisbd`, a minimal
@@ -312,7 +312,7 @@ when the installed language package ships minisbd rather than stanza.
 
 Two things block simply removing it, both verified in the installed source:
 
-- `argostranslate/sbd.py:12` is a bare `import stanza`, unguarded — unlike
+- `argostranslate/sbd.py:12` is a bare `import stanza`, unguarded, unlike
   the `import spacy` directly above it, which sits in a `try/except`. So
   uninstalling stanza breaks argostranslate at import time, not just on the
   stanza path.
@@ -324,8 +324,8 @@ So the reduction is staged, cheapest first:
 
 | step | saves | risk |
 |---|---|---|
-| 1. install the CPU-only torch wheel (`--index-url .../whl/cpu`) — **done, 26 August 2026** | 3.7 GB measured: `nvidia` and `triton` gone, torch 1.1 GB to 725 MB | none — no code change, no GPU here to lose |
-| 2. drop `pymupdf` | 63 MB | none — zero references in the repo |
+| 1. install the CPU-only torch wheel (`--index-url .../whl/cpu`), **done, 26 August 2026** | 3.7 GB measured: `nvidia` and `triton` gone, torch 1.1 GB to 725 MB | none, no code change, no GPU here to lose |
+| 2. drop `pymupdf` | 63 MB | none, zero references in the repo |
 | 3. install spaCy models on demand, not all nine | ~400 MB (`sudachidict_core` 208 MB + `zh_core_web_sm` 76 MB + others) | none for users who need one language |
 | 4. guard the stanza import upstream, ship minisbd packages | the remaining ~1.1 GB of torch | needs an upstream patch or a vendored shim; verify translation quality is unchanged |
 
@@ -343,7 +343,7 @@ So torch is still the largest single package even after losing 3.7 GB, which
 is what step 4 is about. `dictionaries/` is larger than any one of them, but
 only because three languages are installed; one index is 126 to 404 MB.
 81.4% of the German index is inflected forms (8.30), which are needed for
-lookup but are mostly a word plus a pointer — whether that warrants the
+lookup but are mostly a word plus a pointer, whether that warrants the
 current row format is an open question with a real number attached to it.
 
 A realistic floor for a one-language, no-translation install is therefore
@@ -374,7 +374,7 @@ machine has rather than being fixed at defaults chosen on one laptop.
 ### v0.11.0: Freeze candidate
 
 - Write the compatibility document: every item in §3 below, pinned
-- Deprecation policy — what a `0.9 → 1.0` break costs a user
+- Deprecation policy, what a `0.9 → 1.0` break costs a user
 - Backfill GitHub release notes for v0.4.1–v0.4.5
 - Coverage sweep green across all 16 language pairs, including the new
   pronunciation columns
@@ -383,7 +383,7 @@ machine has rather than being fixed at defaults chosen on one laptop.
 
 A fully-fledged, optimized command-line tool that installs from a package,
 runs on Windows, macOS and Linux, and works on low-end and high-end hardware
-alike. §3 is frozen, documented and tested. No new features — everything
+alike. §3 is frozen, documented and tested. No new features, everything
 above is done or explicitly deferred.
 
 ---
@@ -406,7 +406,7 @@ this project's cards.**
    `DB_PATH`, `DICT_DIR`, and the rest of `.env.example`.
 4. **On-disk schemas.** `pipeline.db` (definition cache, vocabulary, runs,
    backlog) and the dictionary index (currently v2). A schema bump costs a
-   full re-download per language — 288 MB de, 682 MB fr, 278 MB ru — so it
+   full re-download per language, 288 MB de, 682 MB fr, 278 MB ru, so it
    is a real cost to a real user, not an internal detail.
 5. **Output.** The `.apkg` filename pattern `{video_id}_{YYYYMMDD_HHMMSS}`
    and the guarantee that a package imports without forking a notetype.
@@ -424,7 +424,7 @@ should not quietly acquire rungs on it:
 - a Google Chrome extension surfacing vocabulary during playback
 - a desktop or web application, and the FastAPI backend behind it
 - deep-learning work beyond the existing spaCy/argostranslate use
-- distribution to other language ecosystems — npm, crates.io — alongside PyPI
+- distribution to other language ecosystems, npm, crates.io, alongside PyPI
 
 These are plausibly a **separate expansion project sharing a common premise**
 with this one, not later versions of this one. Keeping them off the ladder
@@ -443,7 +443,7 @@ records what the user answers, so the training data for the first half is
 being discarded on every run.
 
 **What that costs now: almost nothing. What it requires now: one thing.**
-The seam those surfaces would consume is the card payload — the name-keyed
+The seam those surfaces would consume is the card payload, the name-keyed
 dicts `cards._build_note()` and `_build_fallback_note()` construct before
 `_note_fields()` flattens them for genanki. That structure is already
 independent of genanki and already keyed by name.
@@ -452,7 +452,7 @@ This matters most for the cross-ecosystem idea, because that one is easy to
 mis-scope. A Rust or JavaScript implementation would not reuse this Python;
 what travels between ecosystems is the **format**, not the code. So the only
 pre-1.0 obligation is to keep that payload clean and, at freeze time,
-specify it — a documented JSON shape for one card. Everything else is the
+specify it, a documented JSON shape for one card. Everything else is the
 other project's problem, and specifying the format is cheap precisely
 because §3 freezes the field list anyway.
 
@@ -467,6 +467,6 @@ Each tag should leave, at minimum:
 - `pyproject.toml`, the git tag, and `CLAUDE.md`'s "Current tag" in agreement
 - GitHub release notes naming what changed and any migration
 - `SESSION.md` §1 updated with the real test count and coverage, re-measured
-  rather than carried forward — that number has gone stale four times
-- `ROADMAP.md` — this file — with the shipped rung marked and the next one
+  rather than carried forward, that number has gone stale four times
+- `ROADMAP.md`, this file, with the shipped rung marked and the next one
   still describing real work

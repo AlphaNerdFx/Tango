@@ -2,23 +2,23 @@
 # Tango (tango-anki), Makefile
 # =============================================================================
 # Targets:
-#   make all          — full first-time setup (venv + install + spaCy model)
-#   make venv         — create virtual environment
-#   make install      — install package and all dependencies into venv
-#   make spacy-model  — download the spaCy model for SPACY_LANG (default: en)
-#   make doctor       — report what is installed and what is missing
-#   make test         — run unit tests only (no network, no Anki required)
-#   make test-all     — run full suite including integration tests
-#   make coverage     — run unit tests with a per-module coverage report
-#   make format       — auto-format source and test files with black
-#   make lint         — check code style with ruff
-#   make typecheck    — static type checking with mypy
-#   make run          — run the pipeline (VIDEO_ID and DECK required;
+#   make all         : full first-time setup (venv + install + spaCy model)
+#   make venv        : create virtual environment
+#   make install     : install package and all dependencies into venv
+#   make spacy-model : download the spaCy model for SPACY_LANG (default: en)
+#   make doctor      : report what is installed and what is missing
+#   make test        : run unit tests only (no network, no Anki required)
+#   make test-all    : run full suite including integration tests
+#   make coverage    : run unit tests with a per-module coverage report
+#   make format      : auto-format source and test files with black
+#   make lint        : check code style with ruff
+#   make typecheck   : static type checking with mypy
+#   make run         : run the pipeline (VIDEO_ID and DECK required;
 #                       optional LANGUAGE, DEF_LANG, FORCE=1)
-#   make review       — process the review.json file (optional LANGUAGE, DEF_LANG)
-#   make backlog      — process the Anki backlog for a deck (optional LANGUAGE, DEF_LANG)
-#   make clean        — remove venv, output, cache files
-#   make check-os     — warn if running on Windows without a compatible shell
+#   make review      : process the review.json file (optional LANGUAGE, DEF_LANG)
+#   make backlog     : process the Anki backlog for a deck (optional LANGUAGE, DEF_LANG)
+#   make clean       : remove venv, output, cache files
+#   make check-os    : warn if running on Windows without a compatible shell
 # =============================================================================
 
 # -- Configuration ------------------------------------------------------------
@@ -45,7 +45,7 @@ MIN_PYTHON    := 3.10
 # directive: "printf: %3D: invalid directive", recipe aborts with Error 2, and
 # the pipeline never ran at all. The user saw an empty deck.
 #
-# Pipeline run defaults — override from CLI:
+# Pipeline run defaults: override from CLI:
 #   make run VIDEO_ID=LV_NoD2M54w DECK="Language::English"
 VIDEO_ID      ?=
 DECK          ?=
@@ -93,7 +93,7 @@ endif
 endif
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Shell environment looks compatible.\n"
 
-# -- all — first-time setup ---------------------------------------------------
+# -- all: first-time setup ---------------------------------------------------
 
 all: check-os venv install spacy-model
 	@printf "\n"
@@ -110,7 +110,7 @@ venv: check-os
 		$(PYTHON) -m venv $(VENV_DIR); \
 		printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Virtual environment created.\n"; \
 	else \
-		printf "$(YELLOW)$(BOLD)[warn]$(RESET)  $(VENV_DIR)/ already exists — skipping creation.\n"; \
+		printf "$(YELLOW)$(BOLD)[warn]$(RESET)  $(VENV_DIR)/ already exists, skipping creation.\n"; \
 	fi
 	@$(VENV_PYTHON) -c \
 		"import sys; v=sys.version_info; \

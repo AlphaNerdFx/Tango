@@ -1,8 +1,8 @@
 """
-Tests for __main__.py — CLI argument parsing, mode dispatch,
+Tests for __main__.py, CLI argument parsing, mode dispatch,
 summary output, and import prompt.
 
-No real pipeline modules are called — all are mocked.
+No real pipeline modules are called, all are mocked.
 
 Run: pytest tests/test_main.py -m "not integration"
 """
@@ -895,7 +895,7 @@ class TestSetupCommands:
 
     @patch("pipeline.__main__.subprocess.run")
     def test_install_model_rejects_an_unsupported_language(self, mock_run):
-        """The pair to the test above — no download attempted for a bad code."""
+        """The pair to the test above, no download attempted for a bad code."""
         with patch("sys.argv", ["tango", "install-model", "zzz"]):
             with pytest.raises(SystemExit) as exc:
                 main()

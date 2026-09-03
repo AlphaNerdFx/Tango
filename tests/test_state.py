@@ -1,5 +1,5 @@
 """
-All tests use tmp_path to redirect the SQLite DB — no files written
+All tests use tmp_path to redirect the SQLite DB, no files written
 to the real filesystem.
 
 Run: pytest tests/test_state.py -m "not integration"

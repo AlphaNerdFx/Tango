@@ -177,7 +177,7 @@ class TestStripMwMarkup:
         assert _strip_mw_markup("see {sx|pollute||}") == "see pollute"
 
     def test_strips_unknown_tokens(self):
-        # {dx}...{/dx} inner text is preserved — only the tags are stripped
+        # {dx}...{/dx} inner text is preserved, only the tags are stripped
         result = _strip_mw_markup("text {dx}cross-ref{/dx} more")
         assert "{dx}" not in result
         assert "cross-ref" in result
@@ -213,7 +213,7 @@ class TestFindTranscriptSentence:
     def test_ignores_metadata_keys(self, sample_snippets):
         # Should not crash on string keys like "_full_text"
         result = _find_transcript_sentence("full", sample_snippets)
-        # "_full_text" key is a string, not a float — should be skipped
+        # "_full_text" key is a string, not a float, should be skipped
         # "full" doesn't appear in any snippet text either
         assert result is None
 
@@ -288,7 +288,7 @@ class TestParseMwResponse:
 
     # -- Synonym Discussion parsing (issue #10) ------------------------------
     # MW's real 'syns' field for words with a Synonym Discussion is full
-    # prose, not a comma-separated list — synonym words are individually
+    # prose, not a comma-separated list, synonym words are individually
     # marked {sc}word{/sc} inside complete sentences. This fixture is the
     # real MW Collegiate API response structure for "ask" (fetched directly
     # against the live API during investigation), not a synthetic guess.
@@ -347,14 +347,14 @@ class TestParseMwResponse:
 
     def test_synonym_discussion_dedupes_across_groups(self, sample_snippets):
         # "ask" (the headword) and "question" both repeat across the two
-        # syn groups / multiple text segments — must not appear twice.
+        # syn groups / multiple text segments, must not appear twice.
         result = _parse_mw_response("ask", self.ASK_SYNS_RESPONSE, sample_snippets)
         lowered = [s.lower() for s in result.synonyms]
         assert len(lowered) == len(set(lowered))
 
     def test_empty_syns_still_returns_empty_list(self, sample_snippets):
         # Regression guard: words with no Synonym Discussion (e.g. "ache",
-        # "too" — verified against the live API) must still return an empty
+        # "too", verified against the live API) must still return an empty
         # list cleanly, not error, so the WordNet fallback can take over.
         result = _parse_mw_response("ache", [
             {"fl": "verb", "shortdef": ["to hurt"], "def": [], "syns": []}
@@ -1231,7 +1231,7 @@ class TestOfflineDictionaryIntegration:
         # This used to assert the index was never touched at all. That was a
         # proxy for the real rule and it stopped holding in v0.5.1, when
         # pronunciation gained a legitimate second reason to consult the
-        # index — one that has nothing to do with where the definition came
+        # index, one that has nothing to do with where the definition came
         # from (ARCHITECTURE 8.34). The intent is unchanged and is now
         # asserted directly: the DEFINITION must still come from
         # Merriam-Webster.
@@ -1588,7 +1588,7 @@ class TestFetchDefinitions:
 
     def test_all_cache_hits_never_start_thread_pool(self, sample_definition_result):
         # If every lemma is cached, fetch_definitions() should never even
-        # construct a ThreadPoolExecutor — there is nothing for it to do.
+        # construct a ThreadPoolExecutor, there is nothing for it to do.
         _cache_set_key(
             _cache_key(sample_definition_result.lemma, "en", "en"),
             sample_definition_result,
@@ -1913,7 +1913,7 @@ class TestWordNetLanguageGuard:
     found" guard (definition.py: `if not definition: ... return None`)
     before the WordNet gate at line ~645 is ever reached. Three of the four
     tests then wrapped their real assertion in `if mock_wn.called:` or
-    `if result:`, so they passed vacuously — they never actually ran the
+    `if result:`, so they passed vacuously, they never actually ran the
     code they were written to guard. Only the fourth test asserted
     unconditionally, which is why it was the only one that failed.
     """
@@ -1994,7 +1994,7 @@ class TestWordNetLanguageGuard:
         language`) never runs at all, so it could never have caught a
         query_lemma leak regardless of the mock setup. Translation only
         happens when the two differ, and WordNet only runs when the
-        transcript `language` is "en" — so the scenario that actually
+        transcript `language` is "en", so the scenario that actually
         exercises both at once is an English transcript translated to a
         different definition language (not the French-transcript direction
         used elsewhere in this class).
@@ -2052,7 +2052,7 @@ class TestWordNetLanguageGuard:
                 "bonjour", use_cache=False, language="fr", def_language="en"
             )
         assert result is not None, (
-            "fetch_definition() returned None — a definition must actually "
+            "fetch_definition() returned None, a definition must actually "
             "be found for this test to meaningfully check the WordNet "
             "language guard rather than passing vacuously."
         )

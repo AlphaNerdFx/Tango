@@ -62,7 +62,7 @@ CARD_CSS = """
     line-height: 1.65;
 }
 
-/* Front — centered word */
+/* Front, centered word */
 .word-front {
     font-size: 36px;
     font-weight: 700;
@@ -72,7 +72,7 @@ CARD_CSS = """
     letter-spacing: 0.5px;
 }
 
-/* Back — main word */
+/* Back, main word */
 .word-back {
     font-size: 30px;
     font-weight: 700;
@@ -355,14 +355,14 @@ def _format_pills(words: list[str], css_class: str, max_chars: int = 256) -> str
     Build pill HTML, skipping any individual pill that would push the
     combined length past max_chars.
 
-    Deliberately does NOT use _truncate() here — that function looks for a
+    Deliberately does NOT use _truncate() here, that function looks for a
     sentence boundary (". "), which pill HTML never contains, so it always
     falls through to a blind character cut that can slice through the
     middle of a <span> tag and produce invalid, unclosed HTML (issue #11).
     Dropping a whole pill is better UX than a garbled partial one anyway.
 
     Skips (via `continue`) rather than stops (via `break`) at an oversized
-    entry — an early entry that alone doesn't fit must not silently drop
+    entry, an early entry that alone doesn't fit must not silently drop
     every entry after it too, including short ones that would fit fine
     (issue #12).
     """
@@ -641,7 +641,7 @@ class PackageResult:
         standard_count:  Cards built from a found DefinitionResult.
         fallback_count:  Cards built from a not_found lemma with a
                          transcript example (word + transcript sentence only).
-        skipped_count:   Lemmas dropped entirely — no definition AND no
+        skipped_count:   Lemmas dropped entirely, no definition AND no
                          transcript example found. These produce no card.
     """
     path:           Path
@@ -672,7 +672,7 @@ def build_package(
     Build an Anki .apkg package from definition results.
 
     Args:
-        video_id:   YouTube video ID — used in filename, GUID, and tags.
+        video_id:   YouTube video ID, used in filename, GUID, and tags.
         deck_name:  Full deck name, supports '::' sub-deck notation.
                     e.g. "Language::English::Vocabulary"
         found:      DefinitionResult list from definition.fetch_definitions().
@@ -713,7 +713,7 @@ def build_package(
     Returns:
         PackageResult with the output path and accurate card counts.
         total_cards = standard_count + fallback_count (these are NOT
-        additive with skipped_count — skipped words produce no card
+        additive with skipped_count, skipped words produce no card
         and are not part of total_cards).
 
     Raises:
@@ -795,7 +795,7 @@ def build_package(
         fallback_antonyms = (not_found_antonyms or {}).get(lemma)
         if not transcript_example and not dict_example:
             logger.warning(
-                "Skipping '%s' — no definition, no dictionary example, and "
+                "Skipping '%s', no definition, no dictionary example, and "
                 "no transcript example.", lemma
             )
             skipped_count += 1

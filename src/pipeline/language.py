@@ -169,7 +169,7 @@ LANGUAGE_MAP: dict[str, str] = {
     "latin": "la", "latina": "la", "latein": "la",
     "latin language": "la",
 
-    # English (needed for completeness — user may have English deck)
+    # English (needed for completeness, user may have English deck)
     "english": "en", "anglais": "en", "englisch": "en",
     "inglés": "en", "ingles": "en",
 }
@@ -303,7 +303,7 @@ def resolve_transcript(
     language code starts with the base code.
 
     Manual transcripts are preferred over auto-generated ones by the
-    library itself — find_transcript() checks manually_created_transcripts
+    library itself, find_transcript() checks manually_created_transcripts
     first and only falls back to generated ones if no manual exists.
 
     Args:

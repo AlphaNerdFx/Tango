@@ -1,7 +1,7 @@
 """
 test_transcript.py
 
-Unit tests use mocking — no real YouTube calls.
+Unit tests use mocking, no real YouTube calls.
 Integration tests (marked) hit YouTube and require network access.
 Run unit tests only:    pytest tests/test_transcript.py -m "not integration"
 Run all including live: pytest tests/test_transcript.py
@@ -193,7 +193,7 @@ class TestGetSnippets:
     def test_empty_snippets_after_cleaning_not_indexed(self):
         """[Music]-only snippet should not appear as a timestamp key."""
         result = get_snippets(SAMPLE_TRANSCRIPT)
-        # 7.1 is the [Music] snippet — it should be absent after cleaning
+        # 7.1 is the [Music] snippet, it should be absent after cleaning
         assert 7.1 not in result
 
     def test_full_text_not_empty(self):

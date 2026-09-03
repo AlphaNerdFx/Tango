@@ -4,7 +4,7 @@ Unit tests for pipeline.config path resolution.
 Every path setting is anchored to the project root rather than the process's
 working directory, because running the pipeline from another directory used
 to silently use a different database, a different review file, and an empty
-dictionary directory — none of which raise.
+dictionary directory, none of which raise.
 
 The tests below come in matched pairs where a single test could pass by
 accident. Anchoring only the default value, for example, satisfies
@@ -76,7 +76,7 @@ class TestResolvePath:
 
         .env.example ships several keys with no value on the right-hand side,
         and python-dotenv loads those as empty strings rather than leaving
-        them absent — an empty DB_PATH must not resolve to the project root
+        them absent, an empty DB_PATH must not resolve to the project root
         directory itself.
         """
         monkeypatch.setenv("DB_PATH", "")

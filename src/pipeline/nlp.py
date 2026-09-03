@@ -4,7 +4,7 @@ nlp.py
 Responsible for one thing: given a clean transcript string, return an
 ordered dict of lemmas and their frequency counts.
 
-Token ordering follows first appearance in the transcript — Python 3.7+
+Token ordering follows first appearance in the transcript, Python 3.7+
 dict insertion order guarantees this.
 
 Frequency is captured as the value: useful immediately for ranking cards
@@ -12,12 +12,12 @@ by relevance, and for vocabulary level modelling in Phase 3.
 
 Dependencies:
     spacy
-    A trained pipeline per language actually processed — see
+    A trained pipeline per language actually processed, see
     language.SPACY_MODELS for which languages are supported and
     `make spacy-model SPACY_LANG=<code>` to install one.
 
 Each language's spaCy model is loaded lazily on first use and cached for
-the lifetime of the process — one model per language, not a single global
+the lifetime of the process, one model per language, not a single global
 model reused for every language regardless (that was the bug: see
 ARCHITECTURE.md 9.1). Importing this module does not load any model.
 """
@@ -65,10 +65,10 @@ from pipeline.language import (  # noqa: E402
 logger = logging.getLogger(__name__)
 
 # ── POS tags to keep ──────────────────────────────────────────────────────────
-# NOUN  — contamination, water, company
-# VERB  — develop, give, contaminate
-# ADJ   — permanent, photographic
-# ADV   — quickly, permanently
+# NOUN : contamination, water, company
+# VERB : develop, give, contaminate
+# ADJ  : permanent, photographic
+# ADV  : quickly, permanently
 ACCEPTED_POS: frozenset[str] = frozenset({"NOUN", "VERB", "ADJ", "ADV"})
 
 # ── Lazy per-language model cache ─────────────────────────────────────────────
@@ -402,7 +402,7 @@ def process_transcript(
               select the matching spaCy model (see language.SPACY_MODELS).
               Defaults to "en" for callers that don't pass one. Passing
               the wrong language here reproduces the original bug this
-              parameter exists to fix — always pass the transcript's
+              parameter exists to fix, always pass the transcript's
               resolved language, not a hardcoded default, in real use.
         surface_forms: Optional dict, populated in place with
               lemma -> list of the forms that word actually took in the
@@ -484,7 +484,7 @@ def process_transcript(
         if lemma in vocabulary:
             vocabulary[lemma] += 1
         else:
-            # First appearance — insert now to preserve ordering
+            # First appearance, insert now to preserve ordering
             vocabulary[lemma] = 1
 
         # Record how the word actually appeared, which is rarely how it is
@@ -535,7 +535,7 @@ def process_transcript(
 def get_sorted_by_frequency(vocabulary: dict[str, int]) -> dict[str, int]:
     """
     Return a copy of the vocabulary dict sorted by frequency descending.
-    Use this when you need ranked output — e.g. most important words first.
+    Use this when you need ranked output, e.g. most important words first.
     The main process_transcript() output remains first-appearance ordered.
     """
     return dict(sorted(vocabulary.items(), key=lambda item: item[1], reverse=True))

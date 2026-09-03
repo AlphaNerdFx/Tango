@@ -256,7 +256,7 @@ def main() -> int:
     print(f"offline index built for: {', '.join(sorted(indexed)) or 'none'}")
     missing = [c for c in langs if c not in indexed and c != "en"]
     if missing:
-        print(f"no index for {', '.join(missing)} — expect near-zero definitions "
+        print(f"no index for {', '.join(missing)}, expect near-zero definitions "
               f"there (make dictionary LANGUAGE=<code>)")
     print()
 

@@ -18,7 +18,7 @@ This creates the virtual environment, installs all dependencies, and downloads t
 make test
 ```
 
-All tests should pass — 692 at the time of writing, though the count moves as tests are added, so trust `make test` over any number written down. If any fail on your machine before you change anything, open an issue before proceeding.
+All tests should pass, 692 at the time of writing, though the count moves as tests are added, so trust `make test` over any number written down. If any fail on your machine before you change anything, open an issue before proceeding.
 
 ## Project structure
 
@@ -52,7 +52,7 @@ make coverage    # per-module line coverage, currently 88%
 
 ### Verifying a release
 
-`make test` cannot check that a real run produces the cards it claims to — it
+`make test` cannot check that a real run produces the cards it claims to, it
 has no Anki, no network, and no spaCy model by design. For that there is a
 release script:
 

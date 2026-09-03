@@ -5,7 +5,7 @@ template is the short version of what a reviewer will look for.
 
 ## What this changes, and why
 
-<!-- The why, not the what — the diff already says what. -->
+<!-- The why, not the what, the diff already says what. -->
 
 ## Related issues
 
@@ -13,15 +13,15 @@ template is the short version of what a reviewer will look for.
 
 ## Checklist
 
-- [ ] `make check` exits 0. Run it bare — piping to `tail` or `head` masks
+- [ ] `make check` exits 0. Run it bare, piping to `tail` or `head` masks
       the exit code.
 - [ ] New tests fail when the code under test is broken. Mutate the target
       (flip a condition, return a wrong constant), confirm the test fails,
-      revert. A green suite is not evidence that anything is checked —
+      revert. A green suite is not evidence that anything is checked,
       six vacuous tests have been found in this suite.
 - [ ] Any claim about behaviour was verified by running it, not inferred
       from the code. Paste real output for anything measured.
-- [ ] Docs updated where the change makes them wrong — `ARCHITECTURE.md` for
+- [ ] Docs updated where the change makes them wrong, `ARCHITECTURE.md` for
       a design decision, `CHANGELOG.md` under `[Unreleased]`, `CLAUDE.md` if
       a constraint moved.
 
@@ -44,7 +44,7 @@ and why:
 Does an existing user have to DO something, or does something they already
 have change shape? If yes this is at least a MINOR version bump, and the
 migration belongs in CHANGELOG.md. Adding a field to the Anki notetype is
-the canonical example — see v0.5.0.
+the canonical example, see v0.5.0.
 -->
 
 - [ ] No migration required, **or** the migration is described above and in

@@ -33,9 +33,9 @@ original reasoning no longer holds. Do not silently reverse a deliberate choice.
 
 Before any claim about how the code behaves, tag it:
 
-`[Certain]` — you read the code and are quoting it
-`[Likely]` — strong inference from related code you did read
-`[Guessing]` — you have not verified this
+`[Certain]`, you read the code and are quoting it
+`[Likely]`, strong inference from related code you did read
+`[Guessing]`, you have not verified this
 
 If most of a diagnosis is guessing, say so in the first line and go read the
 relevant files instead of continuing to guess.

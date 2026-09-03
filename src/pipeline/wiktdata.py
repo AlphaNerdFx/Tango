@@ -1,5 +1,5 @@
 """
-wiktdata.py — offline native-language dictionary built from Wiktionary.
+wiktdata.py, offline native-language dictionary built from Wiktionary.
 
 Solves the problem recorded in ARCHITECTURE.md 9.1 and issue #1:
 dictionaryapi.dev has no usable non-English data, so every non-English
@@ -211,7 +211,7 @@ def pos_for_upos(upos: Optional[str]) -> Optional[str]:
     """
     Return the index `pos` value a spaCy UPOS tag selects, or None.
 
-    None means the tag cannot narrow a lookup — either no tag was supplied
+    None means the tag cannot narrow a lookup, either no tag was supplied
     or it is one this index does not distinguish. Public because the
     definition cache keys on it: a POS that cannot change which row is
     selected must not fragment the cache into rows that differ in nothing.
@@ -224,7 +224,7 @@ def _select_row(rows: list, pos: Optional[str]):
     Choose which of a word's index rows to build the entry from.
 
     The index holds one row per (word, part of speech), so an ambiguous word
-    has several and the first is frequently the wrong one — Russian "вид"
+    has several and the first is frequently the wrong one, Russian "вид"
     led with a river in Germany, "близкий" with an island in the Kara Sea,
     and French "super" with "Supercarburant" for a video using it to mean
     "very".
@@ -234,7 +234,7 @@ def _select_row(rows: list, pos: Optional[str]):
     1. Prefer a row whose part of speech matches the one spaCy assigned the
        word *in its own sentence*. Measured across three real videos (fr,
        de, ru) this changes 60 of 1209 picks, roughly 39 of them for the
-       better against 14 for the worse — the reverse of the word-overlap
+       better against 14 for the worse, the reverse of the word-overlap
        heuristic tried before it, which went 1 better to 14 worse (8.28).
 
     2. Never a `name` row while any other exists, with or without a POS to
@@ -379,7 +379,7 @@ def lookup(word: str, language: str, pos: Optional[str] = None) -> Optional[Dict
         pos:      Optional spaCy UPOS tag for this word as it was used in
                   the transcript, from nlp.process_transcript()'s
                   parts_of_speech output. Used to pick between the word's
-                  senses — see _select_row. Omitting it keeps the previous
+                  senses, see _select_row. Omitting it keeps the previous
                   behaviour apart from the proper-noun rule.
 
     Never raises: a missing, unreadable or corrupt index degrades to None

@@ -1,5 +1,5 @@
 """
-Tests for translation.py — community mirror probing, local model
+Tests for translation.py, community mirror probing, local model
 management, progress bar download, three-tier resolution, and
 the per-run warning deduplication.
 
@@ -378,7 +378,7 @@ class TestTranslateWord:
         mock_local_second.return_value = "hello"
 
         with patch("builtins.input", return_value="d"):
-            # translate_local is called twice — first raises, second succeeds
+            # translate_local is called twice, first raises, second succeeds
             # We need to handle the call sequence correctly
             pass  # covered by download_model mock returning True
 
@@ -486,7 +486,7 @@ class TestTranslationRouting:
     @patch("pipeline.translation.is_model_installed", side_effect=[True, False])
     @patch("pipeline.translation.download_model", return_value=True)
     def test_install_skips_hops_already_present(self, mock_dl, *_):
-        """The pair to the test above — a half-installed route downloads once."""
+        """The pair to the test above, a half-installed route downloads once."""
         install_translation("de", "fr")
         assert mock_dl.call_count == 1
         assert mock_dl.call_args_list[0].args == ("en", "fr")
@@ -514,7 +514,7 @@ class TestPromptTranslationOptions:
 
     @patch("builtins.input", side_effect=EOFError)
     def test_eof_continues_without_translation(self, _):
-        """No one is there to answer — keep the run alive with native defs."""
+        """No one is there to answer, keep the run alive with native defs."""
         assert trans_module._prompt_translation_options("de", "en") == "continue"
 
     @patch("builtins.input", return_value="x")
@@ -592,7 +592,7 @@ class TestPerRunChoiceCaching:
             translate_word("bonjour", "fr", "en", interactive=True)
             translate_word("merci",   "fr", "en", interactive=True)
             translate_word("maison",  "fr", "en", interactive=True)
-        # Input should only be called once — subsequent words use cached choice
+        # Input should only be called once, subsequent words use cached choice
         assert mock_input.call_count == 1
 
     @patch("pipeline.translation.try_community_mirror", return_value=None)

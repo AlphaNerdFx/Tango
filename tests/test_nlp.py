@@ -1,7 +1,7 @@
 """
 test_nlp.py
 
-All tests mock the spaCy model — no model installation required to run
+All tests mock the spaCy model, no model installation required to run
 the unit suite.
 
 Run unit tests:        pytest tests/test_nlp.py -m "not integration"
@@ -55,7 +55,7 @@ def _make_doc(tokens: list) -> MagicMock:
 def reset_model_cache():
     """
     Reset the lazy-loaded per-language model cache before each test so
-    tests are fully isolated — one test loading a mock doesn't leak into
+    tests are fully isolated, one test loading a mock doesn't leak into
     the next.
     """
     original = nlp_module._nlp_models.copy()
@@ -82,15 +82,15 @@ def mock_spacy_model():
 SAMPLE_TOKENS = [
     _make_token("running",       "run",           "VERB"),
     _make_token("quickly",       "quickly",       "ADV"),
-    _make_token("through",       "through",       "ADP"),    # filtered — not in ACCEPTED_POS
+    _make_token("through",       "through",       "ADP"),    # filtered, not in ACCEPTED_POS
     _make_token("contaminated",  "contaminate",   "VERB"),
     _make_token("water",         "water",         "NOUN"),
     _make_token("gives",         "give",          "VERB"),
     _make_token("contamination", "contamination", "NOUN"),
-    _make_token("3",             "3",             "NUM",  is_alpha=False),  # filtered — not alpha
+    _make_token("3",             "3",             "NUM",  is_alpha=False),  # filtered, not alpha
     _make_token("permanent",     "permanent",     "ADJ"),
-    _make_token("run",           "run",           "VERB"),   # duplicate — frequency += 1
-    _make_token("water",         "water",         "NOUN"),   # duplicate — frequency += 1
+    _make_token("run",           "run",           "VERB"),   # duplicate, frequency += 1
+    _make_token("water",         "water",         "NOUN"),   # duplicate, frequency += 1
 ]
 
 
@@ -121,7 +121,7 @@ class TestIsValidToken:
         assert not _is_valid_token(t)
 
     def test_stop_word_kept(self):
-        """Stop words are intentionally kept — beginners need basic vocab."""
+        """Stop words are intentionally kept, beginners need basic vocab."""
         t = _make_token("be", "be", "VERB", is_stop=True)
         assert _is_valid_token(t)
 

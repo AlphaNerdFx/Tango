@@ -131,7 +131,7 @@ class TestInferFromDeckName:
         assert _infer_from_deck_name("Words I Don't Know") is None
 
     def test_level_indicator_ignored(self):
-        # "B2" is not a language — should still find "German"
+        # "B2" is not a language, should still find "German"
         assert _infer_from_deck_name("German B2") == "de"
 
     def test_underscore_and_hyphen_normalised(self):

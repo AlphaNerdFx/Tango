@@ -2,15 +2,15 @@
 deck.py
 -------
 Responsible for:
-  1. AnkiConnect communication  — list decks, fetch card fronts, health check
-  2. Confidence interval check  — classify each lemma as SKIP / QUEUE / NEW
-  3. CLI prompt                 — interactive resolution of queued words
-  4. SQLite backlog             — persist state when Anki is unavailable
-  5. Review file                — write queued words to review.json for later
+  1. AnkiConnect communication , list decks, fetch card fronts, health check
+  2. Confidence interval check , classify each lemma as SKIP / QUEUE / NEW
+  3. CLI prompt                  interactive resolution of queued words
+  4. SQLite backlog              persist state when Anki is unavailable
+  5. Review file                 write queued words to review.json for later
 
 Confidence bands (configurable in config.py):
   score > 90   → SKIP   (word already in deck)
-  score 60–90  → QUEUE  (possible duplicate — needs user decision)
+  score 60–90  → QUEUE  (possible duplicate, needs user decision)
   score < 60   → NEW    (fetch definition and create card)
 
 Short word rule (< 4 chars):
@@ -61,9 +61,9 @@ from pipeline.config import (
 # ── Result types ──────────────────────────────────────────────────────────────
 
 class Decision(str, Enum):
-    SKIP  = "SKIP"   # word exists in deck — do not create card
-    QUEUE = "QUEUE"  # possible duplicate — await user decision
-    NEW   = "NEW"    # no match — create card
+    SKIP  = "SKIP"   # word exists in deck, do not create card
+    QUEUE = "QUEUE"  # possible duplicate, await user decision
+    NEW   = "NEW"    # no match, create card
 
 
 @dataclass(frozen=True)
@@ -91,7 +91,7 @@ class DeckCheckResult:
     Attributes:
         skip:   Words confirmed already in deck.
         queue:  Words needing user review.
-        new:    Words confirmed not in deck — proceed to definition fetch.
+        new:    Words confirmed not in deck, proceed to definition fetch.
         anki_available: False if AnkiConnect was unreachable during this run.
     """
     skip:           list[MatchResult] = field(default_factory=list)
@@ -336,7 +336,7 @@ def ensure_model_fields(model_id: int, fields: Sequence[str]) -> list[str]:
 
 # Field names tried when a note carries no usable "order" key. "Front" is
 # Anki's stock Basic type; "Word" is this pipeline's own model. Only the
-# fallback path below consults these — the ordinary path does not care what
+# fallback path below consults these: the ordinary path does not care what
 # the first field is called.
 _FRONT_FIELD_NAMES = ("Front", "Word")
 
@@ -374,8 +374,8 @@ def _extract_front(fields: dict) -> str:
     """
     Return one note's front text from its AnkiConnect ``fields`` mapping.
 
-    Anki identifies a note by its FIRST field — that is what its own
-    duplicate detection uses — so that is what this reads, via the ``order``
+    Anki identifies a note by its FIRST field, that is what its own
+    duplicate detection uses, so that is what this reads, via the ``order``
     key AnkiConnect returns beside each value.
 
     Reading a field named ``Front`` instead, as this did, was wrong for
@@ -404,7 +404,7 @@ def _extract_front(fields: dict) -> str:
         return _clean_field_value(str(fields[first_field].get("value", "")))
 
     # No order information. Older AnkiConnect responses omit it, and so does
-    # every fixture written against this function before now — which is
+    # every fixture written against this function before now, which is
     # precisely why the bug above survived: no test could express a note
     # whose first field is not called "Front".
     for name in _FRONT_FIELD_NAMES:
@@ -458,7 +458,7 @@ def _is_sentence_structured_deck(fronts: list[str], threshold: float = 3.0) -> b
     Args:
         fronts:    All card fronts fetched from the deck.
         threshold: Average word count above which a deck is considered
-                   sentence-structured. Default 3.0 — a vocabulary deck's
+                   sentence-structured. Default 3.0, a vocabulary deck's
                    fronts are almost always 1-2 words; sentence/question
                    decks average well above this.
 
@@ -482,7 +482,7 @@ def _check_single(
     Run the confidence interval check for one lemma against all card fronts.
 
     Exact match (all words):
-        Always checked first regardless of deck structure — an exact
+        Always checked first regardless of deck structure, an exact
         match is meaningful whether the front is a single word or a
         full sentence containing that word as a standalone token.
 
@@ -495,7 +495,7 @@ def _check_single(
     Short word rule (len < SHORT_WORD_THRESHOLD), applied symmetrically:
         If the INCOMING lemma is short, exact match only.
         If a CANDIDATE front is short, it is excluded from fuzzy matching
-        entirely — WRatio's partial-ratio component finds substring overlaps
+        entirely, WRatio's partial-ratio component finds substring overlaps
         in short strings regardless of which side is short, producing
         false positives like "cartoon" vs "car" scoring 90.
 
@@ -620,7 +620,7 @@ def check_vocabulary(
     if skip_fuzzy:
         logger.info(
             "Deck '%s' appears sentence-structured (questions/sentences as "
-            "fronts) — fuzzy duplicate matching disabled, exact match only.",
+            "fronts), fuzzy duplicate matching disabled, exact match only.",
             deck_name,
         )
 
@@ -653,13 +653,13 @@ def prompt_queue(queue: list[MatchResult]) -> tuple[list[str], list[str]]:
     Interactively prompt the user for each queued word.
 
     Prints each match with its score and asks y / n / s.
-        y — add this word (goes to NEW, proceeds to definition fetch)
-        n — skip this word (treated as already known, no card created)
-        s — skip ALL remaining queued words (write them to review file)
+        y, add this word (goes to NEW, proceeds to definition fetch)
+        n, skip this word (treated as already known, no card created)
+        s, skip ALL remaining queued words (write them to review file)
 
     Returns:
         (approved, deferred)
-        approved:  lemmas the user confirmed as new — proceed to definition fetch
+        approved:  lemmas the user confirmed as new, proceed to definition fetch
         deferred:  lemmas sent to the review file for later resolution
     """
     if not queue:
@@ -743,7 +743,7 @@ def _write_review_file(matches: list[MatchResult]) -> None:
         try:
             existing = json.loads(REVIEW_FILE.read_text(encoding="utf-8"))
         except json.JSONDecodeError:
-            logger.warning("review.json was malformed — overwriting.")
+            logger.warning("review.json was malformed, overwriting.")
 
     existing_lemmas = {entry["lemma"] for entry in existing}
 
@@ -771,12 +771,12 @@ def load_review_decisions() -> tuple[list[str], list[str]]:
     """
     Read review.json and return words the user has marked as add or skip.
 
-    Words with decision=null are ignored — they haven't been reviewed yet.
+    Words with decision=null are ignored, they haven't been reviewed yet.
 
     Returns:
         (to_add, to_skip)
-        to_add:  lemmas marked "add" — proceed to definition fetch
-        to_skip: lemmas marked "skip" — treat as known, no card
+        to_add:  lemmas marked "add", proceed to definition fetch
+        to_skip: lemmas marked "skip", treat as known, no card
     """
     if not REVIEW_FILE.exists():
         return [], []
@@ -849,7 +849,7 @@ def process_backlog(deck_name: str) -> DeckCheckResult:
     Process all backlogged lemmas for a deck.
 
     Called explicitly by the user via the `tango backlog` command.
-    Requires Anki to be running — raises AnkiNotRunningError if not.
+    Requires Anki to be running, raises AnkiNotRunningError if not.
 
     Returns:
         DeckCheckResult as if the backlogged words had just been checked.

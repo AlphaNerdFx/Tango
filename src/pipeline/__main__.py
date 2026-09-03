@@ -137,7 +137,7 @@ def _is_wsl() -> bool:
     Detect whether this process is running inside WSL (Windows Subsystem
     for Linux). Under WSL, paths under /mnt/<drive>/ need translation to
     Windows drive-letter paths before Windows-side AnkiConnect can resolve
-    them — see _translate_wsl_path().
+    them, see _translate_wsl_path().
     """
     try:
         with open("/proc/version") as f:
@@ -157,7 +157,7 @@ def _translate_wsl_path(path: str) -> str:
 
     Anki running natively on Windows under WSL2 is a common setup (see
     the WSL Setup wiki page), and AnkiConnect's importPackage action
-    resolves the path on the Windows side — a Linux path is meaningless
+    resolves the path on the Windows side, a Linux path is meaningless
     to it.
     """
     if not _is_wsl():
@@ -174,7 +174,7 @@ def _prompt_import(apkg_path: Path) -> None:
     Ask the user if they want to auto-import the .apkg into Anki.
 
     Requires Anki to be running with AnkiConnect.
-    Uses the absolute path — AnkiConnect requires this. Under WSL, the
+    Uses the absolute path, AnkiConnect requires this. Under WSL, the
     path is translated to its Windows equivalent first (see
     _translate_wsl_path()) since Windows-side AnkiConnect can't resolve
     a Linux /mnt/... path.
@@ -207,14 +207,14 @@ def _prompt_import(apkg_path: Path) -> None:
         added = deck_module.ensure_model_fields(cards.MODEL_ID, cards.FIELDS)
     except Exception as exc:
         _warn(f"Could not align the Anki notetype: {exc}")
-        _info("Import skipped — importing now could fork the notetype and")
+        _info("Import skipped, importing now could fork the notetype and")
         _info("separate new cards from your existing ones. Retry once Anki")
         _info("is reachable, or import manually after adding the fields.")
         return
 
     if added:
         _info(f"Added {len(added)} field(s) to the Anki notetype: {', '.join(added)}")
-        _info("This is a schema change — Anki will ask for a full sync next time.")
+        _info("This is a schema change, Anki will ask for a full sync next time.")
 
     try:
         import requests as req
@@ -304,7 +304,7 @@ def _print_summary(
     if skipped_count:
         print(f"  {YELLOW}Dropped:  {skipped_count} word(s) had no definition and no transcript example.{RESET}")
     if not_found_count:
-        print(f"  {YELLOW}No definition found for {not_found_count} word(s) — fallback cards created where possible.{RESET}")
+        print(f"  {YELLOW}No definition found for {not_found_count} word(s), fallback cards created where possible.{RESET}")
         # Naming them, not just counting them. Measured on a real 406-card
         # German run, 28 words landed here and 25 of them were transcript
         # damage or names ("Bissch", "Herauszufinde", "Barack") that a
@@ -415,7 +415,7 @@ def _select_deck(deck_arg: str | None, session: Session) -> str:
     """
     Resolve the deck name from --deck arg or interactive selection.
 
-    If --deck is provided it is used directly — no prompt shown.
+    If --deck is provided it is used directly, no prompt shown.
     If not provided, fetches deck list from AnkiConnect and prompts.
 
     Raises:
@@ -464,7 +464,7 @@ def _select_deck(deck_arg: str | None, session: Session) -> str:
 # This only has to recognise a well-formed ID.
 _VIDEO_ID_RE = re.compile(r"^[A-Za-z0-9_-]{11}$")
 
-# watch?v=, youtu.be/, /shorts/, /embed/, /live/ — the forms people paste.
+# watch?v=, youtu.be/, /shorts/, /embed/, /live/: the forms people paste.
 _YOUTUBE_URL_RE = re.compile(
     r"(?:youtube\.com/(?:watch\?(?:.*&)?v=|shorts/|embed/|live/)|youtu\.be/)"
     r"([A-Za-z0-9_-]{11})"
@@ -483,7 +483,7 @@ def _normalise_video_id(value: str) -> str:
     returned unchanged rather than rejected. YouTube's ID format is stable
     today, but refusing to run on anything that fails a regex here would
     turn a future format change into an outage for a check that adds no
-    safety — the transcript fetch reports a bad ID perfectly well.
+    safety, the transcript fetch reports a bad ID perfectly well.
 
     Args:
         value: Raw video id argument.
@@ -498,7 +498,7 @@ def _normalise_video_id(value: str) -> str:
     if match:
         return match.group(1)
 
-    # A URL we could not read an ID out of — better to say so here than to
+    # A URL we could not read an ID out of, better to say so here than to
     # let the transcript API fail on a string that is obviously not an ID.
     if "youtu" in value.lower() or value.startswith(("http://", "https://")):
         raise ValueError(
@@ -538,7 +538,7 @@ def _run_pipeline(args: SimpleNamespace, session: Session) -> None:
     if def_language and def_language != language_code:
         _info(f"Definition language: {def_language} (translation mode)")
     else:
-        def_language = None  # native mode — no translation needed
+        def_language = None  # native mode, no translation needed
 
     # Reset per-run translation warning state and circuit breaker state
     reset_warning_state()
@@ -706,7 +706,7 @@ def _resolve_side_mode_language(
     `make review DECK="French"` fetched every French word from English
     sources and built cards tagged English. Nothing failed: the run
     reported success, the definitions were simply wrong, and the note GUIDs
-    were computed with the wrong language — reintroducing the cross-language
+    were computed with the wrong language, reintroducing the cross-language
     collision issue #14 closed.
 
     Unlike `_run_pipeline`, an unresolvable language is not fatal here.
@@ -1375,7 +1375,7 @@ def _run_install_translation(pair: str) -> int:
         Process exit code.
     """
     if ":" not in pair:
-        _err(f"Expected FROM:TO, for example de:en — got '{pair}'.")
+        _err(f"Expected FROM:TO, for example de:en, got '{pair}'.")
         return 1
     from_code, to_code = (part.strip() for part in pair.split(":", 1))
 

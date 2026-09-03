@@ -1,4 +1,4 @@
-# SESSION.md — Current working state
+# SESSION.md: Current working state
 
 Last updated: 18 August 2026, after the v0.5.x line was tagged and the
 repository was swept for inconsistencies. Sections 3 and 7 were revised on
@@ -161,7 +161,7 @@ ARCHITECTURE 8.41.
 
 ## 4. Uncommitted state
 
-None. `ADR-009 phase 1` is committed in full — the index half (8.30), the
+None. `ADR-009 phase 1` is committed in full, the index half (8.30), the
 model-ID correction (8.31), and the card half with the notetype alignment
 that keeps imports merging (8.32).
 
@@ -197,12 +197,12 @@ Anki is back on the `AI Tester` profile.
 `AI Tester` returned `{"result": true}` while `getActiveProfile` kept
 reporting `User 1`. This file previously recorded that as "almost certainly
 the full-sync confirmation a schema change triggers, which AnkiConnect
-cannot answer" — **that explanation was invented, not verified, and it is
+cannot answer", **that explanation was invented, not verified, and it is
 wrong.** Anki was shut down accidentally shortly afterwards and came back on
 `AI Tester`.
 
 The field addition itself was verified live, against the collection, before
-that shutdown — the 2135-note diff above. That it survived an unclean
+that shutdown, the 2135-note diff above. That it survived an unclean
 shutdown is reported rather than re-measured, since checking it from here
 would mean switching profiles again. Confirm it next time `User 1` is open:
 Tools → Manage Note Types → `YT Anki Pipeline — Recognition-6c3a0` → Fields
@@ -234,11 +234,11 @@ from it.
 
 It has already paid for itself twice. It found that 10 of 12 cross-language
 pairs were silently producing native output for want of a translation model,
-and it found the 3.3 violation above — because cross-language rows scored
+and it found the 3.3 violation above, because cross-language rows scored
 *higher* on examples than native ones, which is impossible if the fields are
 constrained to the transcript language.
 
-**CORRECTED BASELINE — 13 August**, all 16 rows, cache off, after the 3.3
+**CORRECTED BASELINE, 13 August**, all 16 rows, cache off, after the 3.3
 fix, the Merriam-Webster example fix and POS sense selection (8.29). This is
 the number to compare against; the two earlier attempts are recorded below
 because they failed in instructive ways.
@@ -282,7 +282,7 @@ native antonyms measure 26%, so 24% is now consistent with the language the
 fields are required to be in; 59% was German's rate (57%), which is what
 gave the violation away. TASKS.md predicted this exact fall.
 
-*Native rows otherwise flat* — de 91→90 / 65→62 / 59→57, ru 76→75, fr
+*Native rows otherwise flat*, de 91→90 / 65→62 / 59→57, ru 76→75, fr
 identical. POS selection changes which row is read, so a word's synonyms can
 come from a different sense. Within noise, and the sense is more often right.
 
@@ -304,7 +304,7 @@ them:
 1. The first read stale cache rows written before the 3.3 fix (see 6.15).
    Fixed by `--no-cache`, now the default.
 2. The second failed all 16 rows with "Anki is not running. All words written
-   to backlog" — Anki was closed while it ran. The sweep needs AnkiConnect
+   to backlog", Anki was closed while it ran. The sweep needs AnkiConnect
    for the deck check even though it never imports. It now checks up front.
 
 ---
@@ -431,7 +431,7 @@ a follow-up.** ARCHITECTURE 8.27.
 
 ### 6.16 Lesson: a coverage metric can reward the bug it should expose
 
-Cross-language rows scored *higher* on examples than native ones — 87%
+Cross-language rows scored *higher* on examples than native ones, 87%
 against 45%. That is impossible if examples are constrained to the transcript
 language, and the impossibility is what exposed the 3.3 violation. The number
 went up because the field was being filled with content in the wrong
@@ -442,8 +442,8 @@ measuring the defect before concluding the fix regressed something.
 
 ### 6.17 Dead end: sense selection by word overlap
 
-Implemented, measured, reverted. It fixed the case it was written for — the
-`tapa` card defining Polynesian bark cloth for a video about tapas bars — and
+Implemented, measured, reverted. It fixed the case it was written for, the
+`tapa` card defining Polynesian bark cloth for a video about tapas bars, and
 was net-negative on real vocabulary. 146 of 231 lemmas have more than one
 sense; of the 15 picks it changed, one improved and the rest degraded
 (`côté` → "Nom de famille", `gens` → "Clan familial", `fait` → a participle).
@@ -456,7 +456,7 @@ what the data says to build instead (POS filtering).
 
 The `--def-lang` failure was reported four times and "fixed" three times
 before the cause was found, because every check was a `python -c` invocation
-that never loads `.env` — and the cause was a `.env` variable. Each fix along
+that never loads `.env`, and the cause was a `.env` variable. Each fix along
 the way was a real bug, but none was the reported one.
 
 Lesson: reproduce through the same entry point the reporter used, before
@@ -491,8 +491,8 @@ overlap's 1 to 14.
 
 Two things made the second attempt cheap. The measurement script from the
 first run again unchanged against a different signal, so the decision took
-one run rather than a rebuild. And the failure table in 8.28 — `côté` picking
-"Nom de famille", `fait` picking a participle — was specific enough to point
+one run rather than a rebuild. And the failure table in 8.28, `côté` picking
+"Nom de famille", `fait` picking a participle, was specific enough to point
 at the signal that separated them, which a bare "rejected, net-negative"
 note would not have been.
 
@@ -508,13 +508,13 @@ It was two forks. Anki bumps a notetype ID by one each time an import
 arrives whose field list disagrees with the notetype already sitting at that
 ID. The constraint text described the *consequence* of that mechanism
 accurately enough to be frightening, and never once described the mechanism
-— so the pair of numbers recording exactly how many times it had already
+, so the pair of numbers recording exactly how many times it had already
 happened read as arbitrary constants.
 
 Two things followed from finally testing it (8.32). The one-time ID
 correction in 8.31 was correct but incomplete: shipping it alongside two new
 card fields would have forked straight to `1607392322`, and the "never change
-MODEL_ID" rule would have been broken by an import rather than by an edit —
+MODEL_ID" rule would have been broken by an import rather than by an edit,
 which no amount of care about the constant would have caught. And the
 mitigation turned out to be ordinary: add the fields to the notetype first.
 
@@ -537,7 +537,7 @@ That was reasoning, not evidence. Anki had in fact been shut down
 accidentally, and came back on the requested profile with the change intact.
 
 The tell was in the writing: *almost certainly*, attached to a mechanism
-never observed, on the first reading that fit. Nothing was checked — not
+never observed, on the first reading that fit. Nothing was checked, not
 whether a dialog existed, not whether the collection was actually
 schema-modified, not whether `loadProfile` behaves this way at all.
 
@@ -545,9 +545,9 @@ This is 6.7 exactly ("a plausible explanation that requires no verification
 is more dangerous than no explanation at all"), committed to SESSION.md and
 a commit message within the same session that added a lesson about numbers
 in constraints being unexamined evidence. Two guards would have caught it:
-the confidence-marking rule in CLAUDE.md 7.3 — it should have been
+the confidence-marking rule in CLAUDE.md 7.3, it should have been
 `[Guessing]`, and calling it that would have made it obviously unfit to
-write down — and simply stopping at "the cause is unestablished," which
+write down, and simply stopping at "the cause is unestablished," which
 costs nothing and stays true.
 
 The rule this file needs: **an unverified cause goes in the report, never in
@@ -562,19 +562,19 @@ and the useful part is that the report itself could not tell them apart.
 in a minute: the package for that run holds 406 notes, every one German, and
 the deck Anki created for it holds exactly those. The French cards were in a
 **different deck**, built earlier from video `92Mcmx5gVus` with `DEF_LANG=fr`
-as the cross-language proof — 154 French definitions against 43 German ones
+as the cross-language proof, 154 French definitions against 43 German ones
 in the deck next to it. The feature working as designed, one deck over.
 
-Two hypotheses were formed and both were wrong. The first — that the fixed
-`DECK_ID` merged every run into whichever deck claimed it first — was
+Two hypotheses were formed and both were wrong. The first, that the fixed
+`DECK_ID` merged every run into whichever deck claimed it first, was
 plausible enough to be worth checking and is *structurally* true (every
 package this project has ever built declares `2059400110`, whatever name the
 user asked for), yet it did not cause this: Anki matched by name and made a
 new deck. Reading the collection took one query and killed the theory. This
-is 6.22's rule paying off in the other direction — the guess was cheap to
+is 6.22's rule paying off in the other direction, the guess was cheap to
 have and cheap to discard, because it was never written down as a cause.
 
-*"Only the audio, no images"* — correct, and deliberate (ADR-009 phase 3).
+*"Only the audio, no images"*, correct, and deliberate (ADR-009 phase 3).
 But checking it surfaced what the user had not reported and could not see:
 **13 of 377 cards had embedded audio.** The rest silently linked out.
 
@@ -584,8 +584,8 @@ while the CLI configures `WARNING`. The number that names the bug was
 computed, formatted, and dropped on the floor.
 
 **A count that only appears at a log level the tool never enables is not
-instrumentation.** Three of this project's worst bugs — 8.25, 8.34, and this
-— were each found by someone eventually looking at a ratio that was true the
+instrumentation.** Three of this project's worst bugs, 8.25, 8.34, and this
+, were each found by someone eventually looking at a ratio that was true the
 whole time. The fix is not "log more"; it is that a number worth computing to
 diagnose a failure belongs where the user running the tool will see it.
 

@@ -2,9 +2,9 @@
 
 ## Transcript extraction fails with 429 or connection timeout
 
-YouTube is rate-limiting your IP address. This is usually temporary and tied to the volume of requests from one IP — most individual users running Tango from their own home connection won't hit it under normal use.
+YouTube is rate-limiting your IP address. This is usually temporary and tied to the volume of requests from one IP, most individual users running Tango from their own home connection won't hit it under normal use.
 
-If it persists: Webshare's free tier is confirmed to make this *worse*, not better (its datacenter IPs are blocked more aggressively than residential ones — don't use it). If you need a proxy, bring your own reputable one (a paid residential/mobile proxy, or a personal VPN) and set `PROXY_HTTP_URL`/`PROXY_HTTPS_URL` in `.env`. The project doesn't recommend a specific provider.
+If it persists: Webshare's free tier is confirmed to make this *worse*, not better (its datacenter IPs are blocked more aggressively than residential ones, don't use it). If you need a proxy, bring your own reputable one (a paid residential/mobile proxy, or a personal VPN) and set `PROXY_HTTP_URL`/`PROXY_HTTPS_URL` in `.env`. The project doesn't recommend a specific provider.
 
 ## AnkiConnect not reachable
 
@@ -22,7 +22,7 @@ If you get "connection refused", AnkiConnect is not listening.
 
 ## pipeline.db errors about missing columns
 
-The `definitions` table already self-migrates on connect (it adds missing columns automatically), so this shouldn't happen on a current install — if you see it, you're likely on an old version; pull the latest code first. As a last resort, deleting `pipeline.db` does recreate the schema, but note this loses more than "processing history": it also discards the `vocabulary` table (which video introduced which word, frequency, first-appearance position) and the definition cache (every word gets re-fetched from the network on the next run). Your actual Anki cards are unaffected either way — they live in Anki's own collection, not in `pipeline.db`.
+The `definitions` table already self-migrates on connect (it adds missing columns automatically), so this shouldn't happen on a current install, if you see it, you're likely on an old version; pull the latest code first. As a last resort, deleting `pipeline.db` does recreate the schema, but note this loses more than "processing history": it also discards the `vocabulary` table (which video introduced which word, frequency, first-appearance position) and the definition cache (every word gets re-fetched from the network on the next run). Your actual Anki cards are unaffected either way, they live in Anki's own collection, not in `pipeline.db`.
 
 ## Translation model downloads every time
 

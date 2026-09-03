@@ -1,4 +1,4 @@
-# ARCHITECTURE.md — Tango
+# ARCHITECTURE.md: Tango
 
 Complete system documentation. Read alongside `CLAUDE.md`.
 
@@ -108,8 +108,8 @@ Single source of truth for every constant. Calls `load_dotenv()` at import,
 then reads each value with `os.getenv()` and assigns it to a module constant.
 
 Every other module imports from `config` rather than calling `os.getenv()`
-directly. This makes the system testable — a test can monkeypatch a config
-constant without touching environment variables — and means there is exactly
+directly. This makes the system testable, a test can monkeypatch a config
+constant without touching environment variables, and means there is exactly
 one place to look to find what a setting is.
 
 Constants defined here:
@@ -123,8 +123,8 @@ ANKI_HOST                 AnkiConnect URL, default "http://localhost:8765";
                           unset, WSL falls back to the Windows host (8.45)
 ANKI_VERSION              AnkiConnect API version, fixed at 6
 ANKI_TIMEOUT              seconds before AnkiConnect timeout, default 5
-MODEL_ID                  genanki model ID, 1607392319 — NEVER CHANGE
-DECK_ID                   genanki deck ID, 2059400110 — NEVER CHANGE
+MODEL_ID                  genanki model ID, 1607392319, NEVER CHANGE
+DECK_ID                   genanki deck ID, 2059400110, NEVER CHANGE
 CONFIDENCE_HIGH           fuzzy score above which a word is SKIP, default 90
 CONFIDENCE_LOW            fuzzy score below which a word is NEW, default 60
 SHORT_WORD_THRESHOLD      words shorter than this use exact match only, default 4
@@ -149,7 +149,7 @@ Resolves the BCP-47 language code for a run and selects the correct transcript.
 
 `LANGUAGE_MAP` is a dictionary of roughly 200 lowercase language-name keys
 mapping to about 40 distinct BCP-47 codes. Multiple keys map to each language
-because users name decks differently — French is reachable as `french`,
+because users name decks differently, French is reachable as `french`,
 `français`, `francais`, `frances`, and `französisch`.
 
 `resolve_language_code(language_flag, deck_name)` implements the precedence:
@@ -252,7 +252,7 @@ return True
 
 `ACCEPTED_POS` is `{"NOUN", "VERB", "ADJ", "ADV"}`. Prepositions,
 conjunctions, articles, and pronouns are excluded as unlikely to be useful
-vocabulary. Stop words are deliberately kept — beginners need basic words.
+vocabulary. Stop words are deliberately kept, beginners need basic words.
 
 `_is_valid_lemma(lemma)` is a regex predicate permitting Unicode letter runs
 joined by internal hyphens or apostrophes, requiring at least two characters,
@@ -305,7 +305,7 @@ unrelated sentence.
 
 1. Exact match against any front returns `SKIP` with score 100.
 2. If `skip_fuzzy` is True (sentence-structured deck), return `NEW`.
-3. If the lemma is shorter than `SHORT_WORD_THRESHOLD`, return `NEW` — fuzzy
+3. If the lemma is shorter than `SHORT_WORD_THRESHOLD`, return `NEW`, fuzzy
    scoring on short tokens is unreliable.
 4. Filter fronts shorter than `SHORT_WORD_THRESHOLD` out of the candidate pool
    for the same reason in reverse.
@@ -338,7 +338,7 @@ Fetches definitions using a dual-source strategy.
 
 The strategy: example sentences, synonyms, and antonyms always come from
 `dictionaryapi.dev/{transcript_language}/`. The definition and part of speech
-come from the target output language — Merriam-Webster first when the target is
+come from the target output language, Merriam-Webster first when the target is
 English, `dictionaryapi.dev/{target_language}/` otherwise or as fallback.
 
 Rationale: a French learner benefits from French example sentences even when
@@ -457,7 +457,7 @@ Translates a lemma when `DEF_LANG` differs from `LANGUAGE`.
 
 Three-tier resolution in `translate_word()`:
 
-1. Community LibreTranslate mirrors — `translate.argosopentech.com`,
+1. Community LibreTranslate mirrors, `translate.argosopentech.com`,
    `libretranslate.de`. Probed with a `/languages` GET before use.
 2. Locally installed argostranslate model.
 3. Interactive prompt offering download, continue-without, or exit.
@@ -492,8 +492,8 @@ one card template, and the CSS. The template uses Anki conditional sections
 (`{{#FieldName}}...{{/FieldName}}`) so empty fields render nothing rather than
 empty headings.
 
-The CSS uses Anki's own variables — `var(--fg)`, `var(--canvas)`,
-`var(--border)`, `var(--slightly-grey-text)` — with hardcoded fallbacks. This
+The CSS uses Anki's own variables, `var(--fg)`, `var(--canvas)`,
+`var(--border)`, `var(--slightly-grey-text)`, with hardcoded fallbacks. This
 makes cards adapt automatically to the user's light or dark theme.
 
 `_build_note(result, model, video_id, language)` constructs one note. The GUID
@@ -521,7 +521,7 @@ package, writes the `.apkg` with a timestamped filename, and returns a
 `fallback_count`, and `skipped_count`.
 
 `skipped_count` counts words that had neither a definition nor a transcript
-sentence — they produce no card at all.
+sentence, they produce no card at all.
 
 ### 3.11 media.py
 
@@ -586,7 +586,7 @@ vocabulary (
 
 The `vocabulary` composite key means the same word appearing in different
 videos produces separate rows. This is the foundation for future data science
-work — it records which video introduced which word, how often it appeared, and
+work, it records which video introduced which word, how often it appeared, and
 where in the transcript it first occurred.
 
 `state.py` deliberately does NOT own the `definitions` table (owned by
@@ -714,7 +714,7 @@ transcript   nlp      deck    definition   cards    state
               (imports nothing)
 ```
 
-`config.py` is a leaf — it imports nothing from the package, so it can never
+`config.py` is a leaf, it imports nothing from the package, so it can never
 create a cycle despite every module importing it.
 
 `definition.py` imports `translation.py` lazily inside the function body to
@@ -893,7 +893,7 @@ out to be false. See section 9.1.
 ### 8.6 Deduplication at two layers
 
 `fetch_definitions` deduplicates the lemma list before any API call.
-`build_package` maintains an `added_lemmas` set. Defence in depth — a duplicate
+`build_package` maintains an `added_lemmas` set. Defence in depth, a duplicate
 that slips past the first layer cannot produce two cards.
 
 ### 8.7 Composite cache keys
@@ -1574,7 +1574,7 @@ decision.
 ### 8.23 Measured card quality, per field, on real French cards
 
 Coverage numbers elsewhere in this document count what a *source* returned.
-This is what actually reaches a card, read back out of Anki after import —
+This is what actually reaches a card, read back out of Anki after import,
 207 French cards from video `2yHn8uc5_-4`, deck `Tango_Verify_20260807`,
 with the offline index built:
 
@@ -1599,7 +1599,7 @@ rather than a plumbing one. OMW returns no antonyms for any non-English
 language (8.18), so the index is the only source, and Wiktionary entries
 carry antonyms far less often than definitions. German and Russian measure
 better than French here (51% and 46% against 20-23%), so this is
-per-language rather than a global ceiling — an earlier claim that it was
+per-language rather than a global ceiling, an earlier claim that it was
 "at the data ceiling" was measured on French alone and did not generalise.
 
 ### 8.24 Review and backlog modes resolve a language like the video path does
@@ -1613,7 +1613,7 @@ reported success either way.
 The GUID half is the worse half. `build_package`'s language feeds
 `guid_for(lemma, video_id, language)` (8.12), so a French word added
 through review mode carried an `"en"` GUID and collided with the English
-card for the same spelling — the collision class issue #14 closed for the
+card for the same spelling, the collision class issue #14 closed for the
 video path and left open on these two.
 
 Both modes now resolve the language through the same
@@ -1623,7 +1623,7 @@ Both modes now resolve the language through the same
 **An unresolvable language is deliberately not fatal here**, unlike in
 `_run_pipeline`. There the language selects the subtitle track and the run
 cannot proceed without one, so it exits 1. Review and backlog have no
-transcript — the language only steers definitions — so a deck named
+transcript, the language only steers definitions, so a deck named
 "My Words" warns and falls back to `"en"` rather than starting to exit
 non-zero on decks that work today. Both branches verified live.
 
@@ -1885,7 +1885,7 @@ recording for almost every entry, French for one in eight, Russian for one
 in twenty-three. So the "Listen" link is a German feature that degrades
 gracefully elsewhere, not a general one, and any future decision to embed
 audio rather than link it (see `cards._audio_field`) should be costed on
-German alone — it is the only language where most cards would carry a file.
+German alone, it is the only language where most cards would carry a file.
 
 `form_of` splits the same way. The inflection-pointer fix matters enormously
 for German and French, where 81% and 73% of rows are inflected forms, and is
@@ -1970,7 +1970,7 @@ Measured against a real collection holding the 10-field notetype at
 |---|---|
 | notetype created | `YT Anki Pipeline — Recognition-da2c0` at **1607392322** |
 | notes on `1607392321` | 207, untouched, still 10 fields |
-| notes on the fork | 1 — the new card, with IPA and Pronunciation |
+| notes on the fork | 1, the new card, with IPA and Pronunciation |
 
 That is `+1` from `1607392321`, exactly as `1607392321` is `+2` from
 genanki's `1607392319`. The gap in 8.31 was never a mystery; it was two prior
@@ -2027,7 +2027,7 @@ plain name belongs to a different notetype with an incompatible schema from
 an older version of the card model.
 
 Resolving by name therefore picked `1782849352300` and would have added six
-fields — `Class`, the three example fields, `IPA`, `Pronunciation` — to a
+fields, `Class`, the three example fields, `IPA`, `Pronunciation`, to a
 notetype holding 1134 notes that the pipeline does not write to, while the
 import forked anyway because the ID still disagreed. Dry-run on the real
 collection, by ID against by name:
@@ -2045,7 +2045,7 @@ is what the alignment must read.
 
 **Why the 8.32 verification did not catch it.** That was run in a scratch
 profile containing exactly one pipeline notetype, created fresh, whose name
-and ID agreed. The bug is not expressible there — the same shape as
+and ID agreed. The bug is not expressible there, the same shape as
 SESSION.md 6.18 and 6.11: a fixture that cannot represent the failure.
 The `+`, `++`, `+++` names in the table above are the audit trail of every
 earlier schema change, and they were sitting in the collection the whole
@@ -2057,7 +2057,7 @@ v0.5.0 shipped pronunciation that could belong to a different word than the
 one printed on the card.
 
 In `fetch_definition()`, the cross-language branch looks the word up in the
-**target** language, using `query_lemma` — the translation. It assigned:
+**target** language, using `query_lemma`, the translation. It assigned:
 
 ```python
 definition     = entry.definition
@@ -2074,8 +2074,8 @@ real index data, a German video with `--def-lang fr`:
 | field | value | correct? |
 |---|---|---|
 | Word | `Haus` | |
-| Definition | `Bâtiment servant de logis…` | yes — 3.3 permits this |
-| IPA | `\me.zɔ̃\` | **no — that is *maison*** |
+| Definition | `Bâtiment servant de logis…` | yes, 3.3 permits this |
+| IPA | `\me.zɔ̃\` | **no, that is *maison*** |
 | Pronunciation | a French recording | **no** |
 
 The learner is told `Haus` sounds like /mɛ.zɔ̃/, which is worse than the empty
@@ -2090,7 +2090,7 @@ disagree with itself.
 
 That also fixed English for free. `_resolve_pronunciation` falls through to
 dictionaryapi.dev when a language has no index, and the pipeline already
-called that API — it returns real IPA (`/haʊs/`) and a complete audio URL in
+called that API, it returns real IPA (`/haʊs/`) and a complete audio URL in
 a `phonetics` block that nothing ever parsed. The sixth instance of
 fetched-parsed-discarded. English cards now carry pronunciation even when
 Merriam-Webster supplied the definition, which the old per-branch structure
@@ -2098,9 +2098,9 @@ could not express, because MW is tried first and the dictapi branch only ran
 when it missed.
 
 **The lesson is about how the constraint was written.** 3.3 named three
-fields, and was violated three times — each by someone adding a *fourth*
+fields, and was violated three times, each by someone adding a *fourth*
 thing beside the gate. A constraint stated as a list invites that; stated as
-a question — *does this describe the word shown?* — it does not. 3.3 is now
+a question, *does this describe the word shown?*, it does not. 3.3 is now
 written that way, and pronunciation's single-source structure is pinned by
 `test_pronunciation_has_exactly_one_source`, which fails if any branch reads
 `entry.ipa` again.
@@ -2111,8 +2111,8 @@ written that way, and pronunciation's single-source structure is pinned by
 
 Embedding the audio worked. Downloading 400 of them did not.
 
-A real run — `VIDEO_ID=loqocHC9aAU DECK="Test" LANGUAGE=de`, 406 cards, 377
-of them with a pronunciation URL — embedded **13** recordings. The other 364
+A real run, `VIDEO_ID=loqocHC9aAU DECK="Test" LANGUAGE=de`, 406 cards, 377
+of them with a pronunciation URL, embedded **13** recordings. The other 364
 fell back to a link. No error, no warning, a valid `.apkg`, and every one of
 those URLs downloading fine when tried on its own.
 
@@ -2144,7 +2144,7 @@ Two independent mistakes made this total rather than partial:
 module-level `_RateLimiter` hands out time slots `1/MEDIA_RATE_LIMIT` apart
 across every thread, allowing `MEDIA_BURST` of them back-to-back after an
 idle spell so a five-word run pays nothing. Threads hold the lock only long
-enough to claim a slot and sleep outside it, so transfers still overlap — the
+enough to claim a slot and sleep outside it, so transfers still overlap, the
 limiter caps the request *rate*, it does not serialise the downloads. A 429
 is now retried up to `MEDIA_MAX_RETRIES` times, waiting the period the server
 asked for, clamped by `MEDIA_MAX_RETRY_WAIT`; every other status still fails
@@ -2157,7 +2157,7 @@ A cache hit takes no slot, which is what keeps a re-run instant.
 exception, and a number nobody looked at.** `_download_audio` had logged
 "Audio: 13 of 377 cards will play inline" the whole time, at `INFO`, while
 the CLI's default log level is `WARNING`. The line that would have given it
-away was written and then discarded — so the count now also goes to the
+away was written and then discarded, so the count now also goes to the
 `progress` callback the CLI actually prints, alongside a running tally, since
 a paced download of a few hundred files is minutes of otherwise silent work.
 
@@ -2746,9 +2746,9 @@ Line coverage, measured with `make coverage` (88% overall, 1963 statements):
 
 | Module | Cover | What is untested |
 |---|---|---|
-| `cards.py` | 100% | — |
-| `config.py` | 100% | — |
-| `state.py` | 100% | — |
+| `cards.py` | 100% |, |
+| `config.py` | 100% |, |
+| `state.py` | 100% |, |
 | `language.py` | 99% | one branch |
 | `nlp.py` | 93% | model-load failure paths |
 | `deck.py` | 92% | the AnkiConnect transport itself |
@@ -2760,13 +2760,13 @@ Line coverage, measured with `make coverage` (88% overall, 1963 statements):
 
 `__main__.py` was 55% when first measured, with the three run modes
 untested. Writing those tests (8.24) took it to 82% and immediately found a
-real bug — review and backlog silently processing every word as English.
+real bug, review and backlog silently processing every word as English.
 That is the pattern worth remembering: 8.21, 8.22 and 8.24 were all wiring
 rather than logic, none was findable by a unit test of a module in
 isolation, and the modules they sat in reported 92% and 100% at the time.
 
 Mocking strategy: `unittest.mock.patch` and `MagicMock` with pytest as the
-runner. `unittest.mock` is used because there is no pytest-native equivalent —
+runner. `unittest.mock` is used because there is no pytest-native equivalent,
 `pytest-mock` is a thin wrapper around it.
 
 Fixture pattern for spaCy tokens:

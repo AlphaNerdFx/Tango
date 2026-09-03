@@ -112,7 +112,7 @@ English looks useless for the field this ADR was written about:
 | IPA | 9.4% | **96.4%** |
 | audio | 8.6% | **97.0%** |
 | example | 18.1% | **90.3%** |
-| found at all | — | 99.8% |
+| found at all |, | 99.8% |
 
 The row percentage is the wrong denominator and nearly cost this decision.
 An index of 1.49 million entries is mostly rare, archaic and inflected

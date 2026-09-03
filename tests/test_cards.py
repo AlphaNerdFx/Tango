@@ -1,7 +1,7 @@
 """
 test_cards.py
 
-All file I/O uses tmp_path fixtures — no files written to the real filesystem.
+All file I/O uses tmp_path fixtures, no files written to the real filesystem.
 
 Run unit tests:  pytest tests/test_cards.py -m "not integration"
 """
@@ -111,7 +111,7 @@ class TestFormatPills:
         assert len(result) <= 256
 
     def test_overflow_drops_whole_pills_not_partial(self):
-        # Every <span> that appears must have a matching </span> — no pill
+        # Every <span> that appears must have a matching </span>, no pill
         # is ever cut mid-tag, only whole pills are dropped.
         long_words = ["extraordinarily", "incomprehensible", "disproportionately",
                       "unquestionably", "characteristically", "notwithstanding"]
@@ -232,7 +232,7 @@ class TestBuildNote:
 
     def test_empty_synonyms_give_empty_string(self, no_synonym_result):
         note = _build_note(no_synonym_result, _build_model(), VIDEO_ID)
-        # FallbackNote removed — no assertion needed
+        # FallbackNote removed, no assertion needed
 
     def test_guid_is_stable(self, sample_result):
         model = _build_model()
@@ -271,7 +271,7 @@ class TestBuildNote:
 
     def test_fallback_field_empty_on_standard_note(self, sample_result):
         note = _build_note(sample_result, _build_model(), VIDEO_ID)
-        # FallbackNote removed — no assertion needed
+        # FallbackNote removed, no assertion needed
 
 
 # -- _build_fallback_note -----------------------------------------------------
@@ -407,7 +407,7 @@ class TestBuildPackage:
         assert result.standard_count == 0
 
     def test_skipped_count_matches_unresolved_not_found(self):
-        # "philosophy" has no snippet match in empty snippets dict — skipped
+        # "philosophy" has no snippet match in empty snippets dict, skipped
         result = build_package(VIDEO_ID, DECK_NAME, [], ["philosophy"], {})
         assert result.skipped_count == 1
         assert result.total_cards == 0
@@ -423,7 +423,7 @@ class TestBuildPackage:
         assert result.standard_count == 1
         assert result.fallback_count == 1
         assert result.skipped_count == 1
-        assert result.total_cards == 2  # NOT 3 — skipped words produce no card
+        assert result.total_cards == 2  # NOT 3, skipped words produce no card
 
     # -- Wiktionary fallback examples (issue #1) ----------------------------
 
@@ -726,7 +726,7 @@ class TestBuildPackage:
     def test_duplicate_lemma_across_found_and_not_found_produces_one_card(
         self, sample_result, sample_snippets
     ):
-        # Same lemma resolved (found) and also passed as not_found — the
+        # Same lemma resolved (found) and also passed as not_found, the
         # found note must win and no second fallback note gets written.
         result = build_package(
             VIDEO_ID, DECK_NAME, [sample_result], ["contaminate"], sample_snippets

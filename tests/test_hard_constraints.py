@@ -361,7 +361,7 @@ class TestConstraint34ValidateTheLemma:
 
     @staticmethod
     def _source() -> str:
-        """The function's code, without docstring or comments — see _code_only."""
+        """The function's code, without docstring or comments, see _code_only."""
         from pipeline import nlp
         return _code_only(nlp._is_valid_token)
 

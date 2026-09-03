@@ -1,4 +1,4 @@
-# CLAUDE.md — Tango
+# CLAUDE.md: Tango
 
 Read this file first in every session. It is the authoritative description of
 the project, its constraints, and how to work on it.
@@ -15,20 +15,20 @@ extracts the transcript, identifies vocabulary, checks the user's existing deck
 for duplicates, fetches definitions and example sentences, and produces an
 importable `.apkg` file.
 
-**Tango is a CLI, and v1.0.0 is a finished CLI** — installable from a
+**Tango is a CLI, and v1.0.0 is a finished CLI**, installable from a
 package, running on Windows, macOS and Linux, on low-end and high-end
 hardware alike.
 
 A Chrome extension, a web or desktop app, deep-learning work, and
 distribution to other ecosystems (npm, crates.io) are **out of scope**:
 plausibly a separate expansion project sharing a common premise, not later
-versions of this one. ROADMAP.md §4 records what that costs — almost
+versions of this one. ROADMAP.md §4 records what that costs, almost
 nothing now, provided the card payload in `cards.py` stays independent of
 genanki, because what travels between ecosystems is the format, not the
 code.
 
 **Repository:** https://github.com/AlphaNerdFx/Tango
-**Virtual environment:** `.tangovenv` — do NOT create `.venv`, it is the wrong name
+**Virtual environment:** `.tangovenv`, do NOT create `.venv`, it is the wrong name
 **Python:** 3.10. Developed under WSL2 on Windows 11, but that is the
 current environment, not a target: cross-platform support is a v0.9.0 goal.
 The `ANKI_HOST` half of that is done, and was not what this file said it
@@ -117,7 +117,7 @@ Full detail in `ARCHITECTURE.md`.
 
 ---
 
-## 3. Hard constraints — never violate these
+## 3. Hard constraints: never violate these
 
 > **Enforced, not just documented.** All six constraints in this section now
 > have tests in `tests/test_hard_constraints.py` that fail on the specific
@@ -128,7 +128,7 @@ Full detail in `ARCHITECTURE.md`.
 > 3.4 is pinned twice over: `test_nlp.py` pins the *behaviour* with the
 > matched pair described in section 5, and `test_hard_constraints.py` pins
 > the *constraint* by reading `_is_valid_token`'s source. 3.5 and 3.6 test
-> the mechanism rather than each test or package — the marker deselection in
+> the mechanism rather than each test or package, the marker deselection in
 > `pyproject.toml`, that no marker in the suite is misspelled into the
 > default run, and that nothing heavy sits in the base dependency list.
 
@@ -146,7 +146,7 @@ may ever move. The previous value, `1607392319`, is the model ID in
 **genanki's README example**, copied along with the tutorial and paired
 there with a notetype named `Simple Model`. Any collection that ever
 imported a deck built from that tutorial already has the ID taken, and Anki
-will not reuse it — it forks a new notetype with a bumped ID and a suffixed
+will not reuse it, it forks a new notetype with a bumped ID and a suffixed
 name. Measured on a real collection: `1607392319` held a 7-field
 `Simple Model` with **zero** notes, while this pipeline's 2135 cards sat on
 `1607392321`, the ID Anki assigned when it forked. Five separate forked
@@ -154,7 +154,7 @@ notetypes had accumulated that way. The constraint was real; it was
 protecting an ID that held none of our cards. See ARCHITECTURE.md 8.31.
 
 Note the ID resolves through `ANKI_MODEL_ID`, so `.env` overrides the
-default. Pinning only the resolved value is not enough — a test doing that
+default. Pinning only the resolved value is not enough, a test doing that
 passes on any machine with a `.env` while the source default drifts. That
 gap was found by mutation and the tests now pin the source literal too.
 
@@ -194,7 +194,7 @@ What this buys, and why the old rule is retired:
 - The model can never disagree with the builders, because it is derived
   from the same tuple.
 
-Two things that still hold. `Word` must stay at index 0 — Anki treats a
+Two things that still hold. `Word` must stay at index 0, Anki treats a
 note's first field as its identity, and `deck.py`'s duplicate check reads
 the lowest-`order` field (ARCHITECTURE.md 8.22). And new fields are still
 **appended**: indices 0-11 are what every already-imported card in every
@@ -204,26 +204,26 @@ so a new field is index 12.
 
 **Appending is safe for the indices. It is not, by itself, safe for the
 notetype.** Anki matches an incoming notetype by ID, and when that ID
-already exists with a *different* field list it does not merge — it forks
+already exists with a *different* field list it does not merge, it forks
 a new notetype at a bumped ID with a suffixed name, leaves every existing
 note behind on the old one, and puts the new cards on the fork. Measured,
 not reasoned: importing the 12-field package into a collection holding the
-10-field notetype at `1607392321` produced `YT Anki Pipeline —
+10-field notetype at `1607392321` produced `YT Anki Pipeline,
 Recognition-da2c0` at `1607392322` and stranded all 207 existing notes.
 That is the same mechanism that moved this project's ID off genanki's
-`1607392319` in the first place — twice, which is why the gap is +2.
+`1607392319` in the first place, twice, which is why the gap is +2.
 
 So adding a field is a **two-part** change: append it to `cards.FIELDS`,
 and let `deck.ensure_model_fields()` add it to the collection's notetype
 before the import. `__main__._prompt_import()` already calls that, and a
 failed alignment deliberately cancels the import rather than risking the
-fork. Adding a field to a live notetype is the safe direction — verified,
-all 207 notes kept byte-identical values and gained two empty fields — but
+fork. Adding a field to a live notetype is the safe direction, verified,
+all 207 notes kept byte-identical values and gained two empty fields, but
 it is a schema change, so Anki will want a full sync afterwards.
 ARCHITECTURE.md 8.32.
 
 The payload dicts the builders construct are also the intended seam for the
-planned web app and Chrome extension — card content keyed by name and
+planned web app and Chrome extension, card content keyed by name and
 independent of genanki, so another surface can consume pipeline output
 without reimplementing it.
 
@@ -263,7 +263,7 @@ with no entry is shown unchanged rather than dropped. Adding a language is
 one row.
 
 **Stated as a list of three fields, this constraint was violated three
-times** — each time by someone adding a *fourth* thing beside the gate
+times**, each time by someone adding a *fourth* thing beside the gate
 without putting it inside:
 
 1. The WordNet bug, passing `query_lemma` where `lemma` was meant (`SESSION.md`).
@@ -277,7 +277,7 @@ without putting it inside:
 
 So the mechanism now matters more than the list. Pronunciation is resolved
 **once**, by `_resolve_pronunciation(lemma, language)`, and never inside a
-definition branch — the branches differ in which language they hold, and one
+definition branch, the branches differ in which language they hold, and one
 assignment cannot disagree with itself. Examples, synonyms and antonyms are
 still gated per call site: Merriam-Webster, the target-language index, and
 the transcript-language index, of which only the last may fill them
@@ -311,7 +311,7 @@ base `dependencies` list.
 This rule used to say PyTorch adds "roughly 1.5GB" via argostranslate.
 **Measured 15 August 2026, that is a threefold understatement:**
 `.tangovenv` is **5.9 GB**, of which `torch` is 1.1 GB, `nvidia` (the CUDA
-runtime torch pulls in) is 2.7 GB and `triton` a further 689 MB — 4.5 GB,
+runtime torch pulls in) is 2.7 GB and `triton` a further 689 MB, 4.5 GB,
 76% of the install, none of it declared anywhere in `pyproject.toml` and
 none of it useful on a machine without a GPU. `dictionaries/` adds 820 MB
 on top.
@@ -425,7 +425,7 @@ which before editing either the test or the code.
 **Never edit a test to make it pass** without first confirming the test itself
 was wrong. Changing a test to match broken code hides bugs.
 
-**When fixing a bug caused by checking the wrong variable, write two tests** —
+**When fixing a bug caused by checking the wrong variable, write two tests**,
 one that fails if you check the wrong one, one that fails if you check neither.
 A single test can be satisfied accidentally. A matched pair pins the intent.
 
@@ -453,7 +453,7 @@ must pass different values for the two arguments.
 
 ### Setup
 
-Run this first in any new environment, and whenever something behaves oddly —
+Run this first in any new environment, and whenever something behaves oddly,
 nearly every failure investigated in this project has been setup rather than
 logic, and none of it was visible from the failure itself:
 
@@ -585,7 +585,7 @@ rm -f pipeline.db          # ONLY when a schema change requires it
 - Do not pass `query_lemma` to any function expecting the original lemma.
 - Do not add tests that require network, Anki, or installed models to the
   default run.
-- Do not run `pip install tango` — that is an unrelated PyPI package. Install
+- Do not run `pip install tango`, that is an unrelated PyPI package. Install
   this project with `pip install -e .` from the repo root.
 - Do not search the filesystem broadly when a file is not found. First
   hypothesis should be that it does not exist.
@@ -648,7 +648,7 @@ reverses 8.19's decision against an English index, which was measured a week
 before the two card fields that would have used it existed.
 
 ## 10. Pre-commit gate
-Never commit unless `make check` exits 0. Run it as a bare command (`make check`) — do NOT pipe to `tail`, `head`, or any filter, since pipes mask the real exit code. If output is long, redirect to a file and grep it: `make check > /tmp/check.log 2>&1; echo "exit=$?"; tail -50 /tmp/check.log`.
+Never commit unless `make check` exits 0. Run it as a bare command (`make check`), do NOT pipe to `tail`, `head`, or any filter, since pipes mask the real exit code. If output is long, redirect to a file and grep it: `make check > /tmp/check.log 2>&1; echo "exit=$?"; tail -50 /tmp/check.log`.
 
 ## 11. Destructive git commands
 Never run `git checkout -- <file>`, `git restore`, `git reset --hard`, or `git clean` on a dirty working tree without first showing me `git status` + `git diff` and getting explicit confirmation. If a revert is needed, prefer `git stash push -m "<reason>"` so the work is recoverable.
@@ -663,7 +663,7 @@ When working autonomously: commit in small, verified increments; keep a running 
 Before inserting a new section into a Markdown doc, print the existing heading outline (`grep -n '^#' <file>`) and state which heading the new section goes after. Match the surrounding heading level and ordering convention.
 
 ## 15. Versioning
-[SemVer 2.0.0](https://semver.org). While at `0.x`: **PATCH** for fixes and for completing something already shipped; **MINOR** for new capability *or anything requiring a migration*. The deciding question is whether an existing user must do something, or whether something they already have changes shape — if yes, it is at least a MINOR. v0.5.0 is a MINOR because the notetype gains two fields and every collection must be altered before importing.
+[SemVer 2.0.0](https://semver.org). While at `0.x`: **PATCH** for fixes and for completing something already shipped; **MINOR** for new capability *or anything requiring a migration*. The deciding question is whether an existing user must do something, or whether something they already have changes shape, if yes, it is at least a MINOR. v0.5.0 is a MINOR because the notetype gains two fields and every collection must be altered before importing.
 
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
@@ -700,7 +700,7 @@ The tag name is the version and nothing else:
 git tag -a v0.5.3 -m "Part of speech in the learner's language"
 ```
 
-`v0.5.3`, never `v0.5.3 — Part of speech...`. GitHub shows the tag name in
+`v0.5.3`, never `v0.5.3, Part of speech...`. GitHub shows the tag name in
 the release list, so anything after the number turns into visual noise
 repeated down the page. The title goes in the tag message and in the GitHub
 release title, where there is a field for it.

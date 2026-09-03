@@ -1,15 +1,15 @@
 """
 Responsible for all pipeline-level SQLite state:
 
-    processed_videos   — tracks which video IDs have been fully run
-    generated_packages — logs every .apkg file produced
-    vocabulary         — persists NLP output keyed by (lemma, video_id)
+    processed_videos    tracks which video IDs have been fully run
+    generated_packages, logs every .apkg file produced
+    vocabulary          persists NLP output keyed by (lemma, video_id)
 
-This module does NOT own the definitions or anki_backlog tables —
+This module does NOT own the definitions or anki_backlog tables,
 those remain in definition.py and deck.py respectively as deliberate
 fallback isolation. Each module can fail independently.
 
-Session state (selected deck name) is in-memory only — lives in
+Session state (selected deck name) is in-memory only, lives in
 the calling process and not persisted. When the process exits,
 the session ends.
 
@@ -229,7 +229,7 @@ def save_vocabulary(
     """
     Persist the NLP vocabulary output for a video to SQLite.
 
-    Keyed by (lemma, video_id) — the same word across different videos
+    Keyed by (lemma, video_id), the same word across different videos
     produces separate rows, enabling per-video vocabulary tracking for
     Phase 3 domain analysis.
 
@@ -322,7 +322,7 @@ class Session:
     Lightweight in-memory session container.
 
     Holds the user's selected deck for one pipeline run.
-    Not persisted — when the process exits, the session ends.
+    Not persisted, when the process exits, the session ends.
 
     Usage:
         session = Session()

@@ -424,7 +424,7 @@ Pronunciation audio plays inside the card instead of linking out.
   working when the source is down.
 
   ADR-009 rejected this on size grounds and the estimate was wrong. Measured
-  on real Commons files — De-Haus 16 KB, De-Spaziergang 30 KB — a 240-card
+  on real Commons files, De-Haus 16 KB, De-Spaziergang 30 KB, a 240-card
   German deck costs about 5 MB, not the "tens of megabytes" assumed.
   Wikimedia already serves them as MP3, so nothing is converted.
 
@@ -441,8 +441,8 @@ Pronunciation audio plays inside the card instead of linking out.
   `MEDIA_BURST`, and a `429` is retried for the period the server asks for.
 
   Without this the feature above barely worked. `upload.wikimedia.org`
-  rate-limits per IP — about ten requests, then `429` with `Retry-After: 11`
-  — so an 8-worker pool drained the allowance in under a second. A real
+  rate-limits per IP, about ten requests, then `429` with `Retry-After: 11`
+ , so an 8-worker pool drained the allowance in under a second. A real
   406-card German run embedded **13** recordings and linked the other 364,
   with no error and a valid package. Going sequential did not help; only
   spacing the requests did. ARCHITECTURE.md 8.35.
@@ -496,8 +496,8 @@ only alters what goes into them.
 
 ### Changed
 
-- `CLAUDE.md` §3.3 is now stated as a question — *does this field describe
-  the word shown?* — rather than a list of three field names. Written as a
+- `CLAUDE.md` §3.3 is now stated as a question, *does this field describe
+  the word shown?*, rather than a list of three field names. Written as a
   list, it was violated three times, each by someone adding a fourth thing
   beside the gate.
 
@@ -508,8 +508,8 @@ Pronunciation on cards, and a notetype that merges instead of forking.
 > **Migration required.** This release adds two fields to the Anki notetype.
 > `deck.ensure_model_fields()` runs automatically before the auto-import and
 > adds them; a failed alignment cancels the import rather than risk a fork.
-> Adding a field is non-destructive — verified on a real 2135-note
-> collection with zero changed field values — but it is a schema change, so
+> Adding a field is non-destructive, verified on a real 2135-note
+> collection with zero changed field values, but it is a schema change, so
 > **Anki will ask for one full sync afterwards**. Importing by hand via
 > File → Import bypasses the alignment and will fork the notetype.
 
@@ -518,7 +518,7 @@ Pronunciation on cards, and a notetype that merges instead of forking.
 - `IPA` and `Pronunciation` fields on cards, appended at indices 10 and 11
   (ADR-009 phase 1). Sourced from the offline Wiktionary index, which schema
   v2 extended with `ipa`, `audio_url` and `form_of` columns.
-- Pronunciation on fallback cards — those with no definition from any
+- Pronunciation on fallback cards, those with no definition from any
   source, which are the cards that benefit from it most.
 - `deck.ensure_model_fields()`: aligns the collection's notetype with
   `cards.FIELDS` before importing, so appending a field merges rather than
@@ -526,7 +526,7 @@ Pronunciation on cards, and a notetype that merges instead of forking.
 - `cards.FIELDS` as the single source of truth for card fields. The model is
   generated from it and both note builders address fields by name, so a
   misspelled field now raises instead of silently shifting every later one.
-- `tests/test_hard_constraints.py` — one mutation-verified test per hard
+- `tests/test_hard_constraints.py`, one mutation-verified test per hard
   constraint in `CLAUDE.md` §3.
 - `ROADMAP.md`: one goal per tag to v1.0.0, and an explicit list of what
   v1.0.0 freezes.
@@ -538,7 +538,7 @@ Pronunciation on cards, and a notetype that merges instead of forking.
 
 - **`ANKI_MODEL_ID` moved from `1607392319` to `1607392321`**, once and
   never again. The old value is the model ID from genanki's README example
-  and never held any of this project's cards — Anki had already forked away
+  and never held any of this project's cards, Anki had already forked away
   from it. See `ARCHITECTURE.md` §8.31.
 - `pyproject.toml` version now tracks the tag. It never has before: it read
   `0.1.0` at both v0.4.3 and v0.4.4, and `0.4.4` at v0.4.5.
@@ -552,7 +552,7 @@ Pronunciation on cards, and a notetype that merges instead of forking.
   name come apart. On a real collection this would have added six fields to
   an unrelated 1134-note notetype. Now resolved by ID.
 - Cross-language runs could take examples from the Merriam-Webster entry
-  without the language gate — the one call site of three that
+  without the language gate, the one call site of three that
   `CLAUDE.md` §3.3's tests never inspected.
 
 ### Known issues
@@ -572,7 +572,7 @@ Correctness release, 67 commits.
   of 1036 notes visible in one real deck. Now reads the lowest-`order`
   field, which is what Anki treats as a note's identity.
 - Cross-language definitions were broken four ways at once, each hiding the
-  next — including `ARGOS_PACKAGES_DIR` pointing at an empty directory,
+  next, including `ARGOS_PACKAGES_DIR` pointing at an empty directory,
   which argostranslate reads itself.
 - `importPackage` shared the 5-second timeout meant for quick queries, so
   imports that worked at 40k notes failed at 57k.
