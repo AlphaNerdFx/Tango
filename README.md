@@ -62,6 +62,22 @@ make run VIDEO_ID=<id> DECK="MyDeck"
 
 </details>
 
+<details>
+<summary>Prefer Docker? No Python setup at all.</summary>
+
+```bash
+docker build -t tango .
+docker run --rm -v "$PWD/out:/data/output" tango run <video-id> --deck "French"
+```
+
+The English model is baked in. All state lives in `/data`, so mount it to
+keep the definition cache between runs and to get the .apkg out. Anki runs on
+your host, not in the container: on Docker Desktop the default
+`ANKI_HOST=http://host.docker.internal:8765` already points at it, and on
+native Linux add `--network host`.
+
+</details>
+
 **Learning a language other than English?** Build its offline dictionary
 first, or every card will read "No definition found":
 
@@ -291,8 +307,8 @@ Windows, macOS and Linux, on low-end and high-end hardware alike.
 | v0.7.0 | the command line as a product | done |
 | v0.8.0 | packaged and installable | **released, on PyPI** |
 | v0.8.1 | documentation for people who can now install it | released |
-| v0.8.2 | an install that looks after itself | next |
-| v0.9.0 | runs on any operating system | |
+| v0.8.2 | an install that looks after itself | released |
+| v0.9.0 | runs on any operating system | next |
 | v0.10.0 | runs on modest hardware | |
 | v1.0.0 | a finished CLI | |
 
@@ -319,8 +335,8 @@ Known rough edges, all tracked:
 
 - A fresh install still needs a dictionary index built per non-English
   language before definitions work. The spaCy model is offered
-  automatically; the index is not, because it is a much larger download.
-- The Dockerfile is not published yet.
+  automatically; the index is not, because it is a several-hundred-MB
+  download per language and not something to start without being asked.
 - The repository still assumes WSL2 with Anki on the Windows side in a few
   places. Reaching Anki is handled automatically now; the rest is v0.9.0.
 - Everything depends on one transcript extraction path. If YouTube changes
