@@ -212,9 +212,28 @@ re-checks is worth less than no claim.
   is correct. ARCHITECTURE 8.45.
 - **`--version`.** Added with the packaging work. The first question about
   any bug report is which build produced it.
-- Model and index downloads as a first-run step rather than a README
+
+**Released 3 September 2026, and published to PyPI as `tango-anki`.** That
+is the goal of the rung: the funnel now has a top, and
+`pip install tango-anki` is a thing a stranger can type.
+
+Three items were cut from this rung rather than delaying the name claim,
+and are listed under v0.8.1 below. None of them stops anyone installing or
+running the tool; all three make an existing install pleasanter. An
+unclaimed distribution name can be taken by anyone, and that risk was worth
+more than the polish.
+
+### v0.8.1 — The install looks after itself
+
+Cut from v0.8.0 on 3 September 2026 so the name could be claimed. Each one
+is about an install that already works.
+
+- Model and index downloads as a first-run step rather than a README. Today
+  a fresh install runs `tango run` and is told it has no spaCy model, which
+  is a correct message and a poor welcome
 - Dockerfile for the "just run it" case
-- Uninstall that actually removes the 800 MB of indexes
+- Uninstall that actually removes the 800 MB of indexes. `pip uninstall`
+  takes the package and leaves the data, which is defensible and surprising
 
 ### v0.9.0 — Runs on any operating system
 
