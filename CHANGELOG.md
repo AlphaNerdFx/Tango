@@ -14,7 +14,18 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working toward v0.8.0, packaged and installable.
+Working toward v0.8.1, an install that looks after itself.
+
+## [0.8.0] — 2026-09-03
+
+Packaged and installable, and **published to PyPI as `tango-anki`**. The
+funnel finally has a top: `pip install tango-anki` is something a stranger
+can type, where before the only route in was cloning the repository.
+
+Three planned items were cut to v0.8.1 rather than delay claiming the name,
+since an unclaimed distribution name can be taken by anyone: first-run model
+downloads, a Dockerfile, and an uninstall that removes the indexes. None of
+them stops anyone installing or running the tool.
 
 ### Added
 
@@ -560,7 +571,8 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.3...v0.6.0
 [0.5.3]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.2...v0.5.3
