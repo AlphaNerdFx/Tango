@@ -6,11 +6,14 @@
 !.env.example
 
 # Python
-tests/__pycache__
-src/pipeline/__pycache__
-src/pipeline/*.py[cod]
-src/pipeline/*.pyo
-src/pipeline/*.pyd
+# Global patterns, not per-directory ones. This listed tests/ and
+# src/pipeline/ by name, so scripts/__pycache__ was never covered and a .pyc
+# was committed. Anchoring to directory names catches every directory,
+# including ones that do not exist yet.
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
 .Python
 src/*.egg-info/
 *.egg
