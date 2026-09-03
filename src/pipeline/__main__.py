@@ -12,15 +12,15 @@ Or via Makefile:
     make backlog DECK="<name>"
 
 Commands:
-    run       — full pipeline: transcript → NLP → deck check → definitions → .apkg
-    review    — process review.json decisions and build .apkg for approved words
-    backlog   — process the SQLite backlog left when Anki was unavailable
-    doctor    — report what is installed and missing, with the command to fix each
-    languages — list the language codes this pipeline supports
-    setup     — guided .env setup for the optional Merriam-Webster key
+    run         Full pipeline: transcript, NLP, deck check, definitions, .apkg
+    review      Process review.json decisions and build .apkg for approved words
+    backlog     Process the SQLite backlog left when Anki was unavailable
+    doctor      Report what is installed and missing, and the command to fix each
+    languages   List the language codes this pipeline supports
+    setup       Guided .env setup for the optional Merriam-Webster key
 
     install-model, install-translation, build-dictionary, build-antonyms
-              — one-off installs; `tango --help` lists every option.
+                One-off installs. `tango --help` lists every option.
 
 `tango run` is the entry point declared in [project.scripts]. `python -m
 pipeline` still reaches the same place, and was the only way in before
