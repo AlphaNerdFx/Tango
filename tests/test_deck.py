@@ -9,6 +9,7 @@ Run all (Anki needed):  pytest tests/test_deck.py
 """
 
 import json
+import logging
 import sqlite3
 from pathlib import Path
 from unittest.mock import MagicMock, patch, mock_open
@@ -1116,6 +1117,23 @@ class TestWslHostFallback:
         # AnkiConnect binding to 127.0.0.1 is the actual cause nearly every
         # time, and no amount of correct addressing fixes it.
         assert "0.0.0.0" in message
+
+    def test_the_success_message_does_not_tell_the_user_to_hardcode_it(self, caplog):
+        # Verified against a real Anki on 3 September 2026, which is how the
+        # original wording was caught: it said "Set ANKI_HOST=<gateway> in
+        # .env to skip this retry; the address is reassigned when Windows
+        # reboots" -- advice against itself, recommending the exact hardcode
+        # whose staleness this fallback exists to remove.
+        #
+        # Pinned as intent, not as a sentence. The wording may change; what
+        # must not come back is telling the user to write the address down.
+        with patch.object(deck_module.requests, "post",
+                          side_effect=self._refuse_then_answer()):
+            with caplog.at_level(logging.INFO, logger=deck_module.logger.name):
+                deck_module._anki_request("version")
+        message = caplog.text
+        assert "172.28.144.1" in message          # says where it got through
+        assert "ANKI_HOST=" not in message        # but never "go and set this"
 
     def test_the_fallback_is_attempted_only_once_per_run(self):
         # Two failed calls must cost two requests, not four. A run against a
