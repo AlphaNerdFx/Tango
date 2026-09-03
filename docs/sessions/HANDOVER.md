@@ -7,8 +7,8 @@ Written 3 September 2026.
 | | |
 |---|---|
 | branch | `main`, clean, in sync with `tango-origin` |
-| last tag | **`v0.8.0`**, released 3 September 2026 |
-| `__version__` | `0.8.0`, matching the tag and CLAUDE.md section 1 |
+| last tag | **`v0.8.1`**, released 3 September 2026 |
+| `__version__` | `0.8.1`, matching the tag and CLAUDE.md section 1 |
 | `make check` | **exit 0** |
 | tests | **1021 passing, 24 integration deselected** |
 | PyPI | **published: `pip install tango-anki`** |
@@ -17,21 +17,29 @@ No background jobs are running.
 
 ## What shipped this session
 
-**Two releases.** v0.7.0, the command line as a product, and v0.8.0,
-packaged and installable. Sixteen tags, sixteen GitHub releases, all with
-notes.
+**Three releases: v0.7.0, v0.8.0 and v0.8.1.** Seventeen tags, seventeen
+GitHub releases, all with notes.
 
 **Tango is on PyPI as `tango-anki`.** Verified end to end: a clean
-virtualenv running `pip install tango-anki` gets 0.8.0 and `tango --version`
-answers. The distribution is `tango-anki` because `tango` is an unrelated
-project; the command is still `tango`.
+virtualenv running `pip install tango-anki` gets the package and
+`tango --version` answers. The distribution is `tango-anki` because `tango`
+is an unrelated project; the command is still `tango`.
 
-- https://pypi.org/project/tango-anki/0.8.0/
-- https://github.com/AlphaNerdFx/Tango/releases/tag/v0.8.0
+- https://pypi.org/project/tango-anki/
+- https://github.com/AlphaNerdFx/Tango/releases/tag/v0.8.1
 
-Also in v0.8.0: `tango --version`, a WSL AnkiConnect fallback needing no
+In v0.8.0: `tango --version`, a WSL AnkiConnect fallback needing no
 configuration (ARCHITECTURE 8.45), `nltk` moved to a `[wordnet]` extra, and
 repairs to eight messages naming flags v0.7.0 had deleted.
+
+**v0.8.1 fixed the shop window.** The README is the PyPI description, and
+every command in it assumed a cloned repository, so a page published that
+morning told pip users to run `make`. PyPI freezes a description at upload
+time, so the fix cost a release. It also unstuck a version badge hardcoded
+at v0.5.3 for five releases, corrected a roadmap table still showing the
+pre-27-August ordering, and untracked a committed `.pyc` that slipped past a
+`.gitignore` naming two `__pycache__` directories instead of anchoring the
+pattern.
 
 **All markdown except six files moved under `docs/`**, split by purpose.
 `CHANGELOG.md` and `SECURITY.md` were moved and then deliberately moved
@@ -39,21 +47,31 @@ back: tools expect the changelog at the root, and GitHub only recognises a
 security policy at the root, `docs/`, or `.github/`. CLAUDE.md section 9
 records why, so a later tidy-up does not move them again.
 
-## Do this first
+## Publishing
 
-**Replace the PyPI token in `.env` with a project-scoped one.** The token
-currently there is account-wide, so anyone who reads that file can publish
-to every project on the account, not just this one. Now that `tango-anki`
-exists on PyPI a scoped token can be created for it:
-PyPI, Account settings, API tokens, Add API token, scope `tango-anki`.
+Both done and verified. `.env` now holds a project-scoped token in `PYPI_API`
+and the literal `__token__` in `PYPI_USER`, which is what PyPI requires when
+the password is a `pypi-` token. An account name there is rejected with a 403
+that does not say why, and that is what tripped the first upload.
+`.env.example` documents both keys with a placeholder.
 
-Also note `PYPI_USER` in `.env` is a real username, which does not work for
-token auth. PyPI requires the literal `__token__` as the username when the
-password is a `pypi-` token. The upload used `__token__`; the file still
-says otherwise and will mislead the next person.
+`.env` is gitignored, untracked, and no token has ever been committed. That
+was checked across all history.
 
-`.env` is gitignored, untracked, and the token has never been committed.
-That was checked, including across all history.
+To release: bump `__version__`, update CHANGELOG, ROADMAP and CLAUDE.md
+section 1, `make check`, commit per file, tag, push, then:
+
+```bash
+rm -rf dist build src/tango_anki.egg-info
+.tangovenv/bin/python -m build
+.tangovenv/bin/python -m twine check dist/*
+export TWINE_USERNAME="$(grep -oP '(?<=^PYPI_USER=).*' .env)"
+export TWINE_PASSWORD="$(grep -oP '(?<=^PYPI_API=).*' .env)"
+.tangovenv/bin/python -m twine upload dist/*
+```
+
+Check the sdist for secrets before every upload. A PyPI version number is
+burned permanently, even if the file is deleted.
 
 ## Three documented facts that were wrong
 
@@ -73,8 +91,9 @@ without measuring.
 
 ## The exact next step
 
-v0.8.1, an install that looks after itself. Three items cut from v0.8.0 so
-the name could be claimed:
+v0.8.2, an install that looks after itself. Three items cut from v0.8.0 so
+the name could be claimed, renumbered when v0.8.1 became a documentation
+fix:
 
 1. Model and index downloads as a first-run step rather than a README. A
    fresh `pip install` currently runs `tango run` and is told it has no
@@ -121,3 +140,7 @@ Environmental notes that are not this repository's bugs:
   claim rather than leaving it standing.
 - Docs ship with the change, not on a second request.
 - Measure before quoting a number, and date it.
+- No em dashes, anywhere: prose, headings, code comments, CLI output.
+- Update CLAUDE.md section 1 *before* tagging. `__version__`, the tag and
+  that line must agree at the moment of tagging, and v0.8.1 was tagged with
+  section 1 still reading v0.8.0.
