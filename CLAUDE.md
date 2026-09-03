@@ -514,7 +514,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1021 passing, 24 deselected. The count drifts as tests are added —
+Expected: 1021 passing, 24 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
@@ -659,7 +659,7 @@ Before inserting a new section into a Markdown doc, print the existing heading o
 
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
-The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied — `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all sixteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
+The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied. `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all sixteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
 
 ## 16. Commit and tag format
 
