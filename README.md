@@ -141,6 +141,7 @@ tango install-model fr                                 spaCy model for one langu
 tango install-translation de:en                        translation model for one pair
 tango build-dictionary fr                              offline Wiktionary index
 tango build-antonyms                                   offline antonym index
+tango uninstall                                        remove the indexes and caches
 ```
 
 Every command takes `--help`. Run `tango doctor` first if anything behaves
@@ -316,11 +317,10 @@ rather than estimated.
 
 Known rough edges, all tracked:
 
-- A fresh install has no spaCy model and no dictionary index, so the first
-  run tells you to fetch them instead of fetching them itself. That is
-  v0.8.2.
-- Uninstalling takes the package and leaves the indexes, which can be
-  several hundred MB. Also v0.8.2.
+- A fresh install still needs a dictionary index built per non-English
+  language before definitions work. The spaCy model is offered
+  automatically; the index is not, because it is a much larger download.
+- The Dockerfile is not published yet.
 - The repository still assumes WSL2 with Anki on the Windows side in a few
   places. Reaching Anki is handled automatically now; the rest is v0.9.0.
 - Everything depends on one transcript extraction path. If YouTube changes
