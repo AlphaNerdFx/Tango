@@ -244,15 +244,29 @@ re-checks drifts, and publishing makes the drift public.
 ### v0.8.2: The install looks after itself
 
 Cut from v0.8.0 on 3 September 2026 so the name could be claimed, then
-renumbered when v0.8.1 became a documentation fix. Each one is about an
-install that already works.
+renumbered when v0.8.1 became a documentation fix. **Released 4 September
+2026, all three items, plus one gap a reader found in the code.**
 
-- Model and index downloads as a first-run step rather than a README. Today
-  a fresh install runs `tango run` and is told it has no spaCy model, which
-  is a correct message and a poor welcome
-- Dockerfile for the "just run it" case
-- Uninstall that actually removes the 800 MB of indexes. `pip uninstall`
-  takes the package and leaves the data, which is defensible and surprising
+Each was about an install that already works.
+
+- **The spaCy model is offered, not reported.** Done. The check moved to
+  before the transcript fetch, where it costs nothing, and on a terminal it
+  downloads the model and carries the run on. The dictionary index is
+  deliberately still manual: it is a several-hundred-MB download per
+  language, which is not something to start without being asked.
+- **Dockerfile for the "just run it" case.** Done, and built and run before
+  release rather than written and hoped for: 663 MB, English model baked in,
+  all state in a `/data` volume, non-root so the files it writes are
+  deletable by the host user.
+- **Uninstall that removes what pip leaves.** Done, and the number in this
+  line was wrong. It said 800 MB; measured on the development machine it is
+  1.2 GB, of which 1.1 GB is dictionary indexes. `tango uninstall` reports
+  every location with its size and what losing it costs, then asks.
+
+Also fixed here, and not planned: **something other than AnkiConnect
+answering on port 8765** produced a raw `JSONDecodeError` rather than a
+message. Found by a reader looking at the code, which is the second time
+this rung a real gap came from reading rather than from a failure.
 
 ### v0.9.0: Runs on any operating system
 
