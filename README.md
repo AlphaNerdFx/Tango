@@ -236,7 +236,7 @@ tango/
 
 ## Roadmap
 
-Goals are tracked per release tag in **[ROADMAP.md](ROADMAP.md)**, which also
+Goals are tracked per release tag in **[ROADMAP.md](docs/planning/ROADMAP.md)**, which also
 records what v1.0.0 freezes and what is deliberately out of scope.
 
 **v1.0.0 is a finished CLI** — installable from a package, running on
@@ -255,7 +255,7 @@ Windows, macOS and Linux, on low-end and high-end hardware alike.
 
 A browser extension, a web or desktop app, and distribution to other
 language ecosystems are **out of scope** for 1.0.0 — plausibly a separate
-project sharing a common premise. See [ROADMAP.md](ROADMAP.md) §4.
+project sharing a common premise. See [ROADMAP.md](docs/planning/ROADMAP.md) §4.
 
 Release history is in **[CHANGELOG.md](CHANGELOG.md)**.
 
