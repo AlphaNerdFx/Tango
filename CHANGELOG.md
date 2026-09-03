@@ -16,7 +16,7 @@ rather than list every change.
 
 Working toward v0.8.1, an install that looks after itself.
 
-## [0.8.0] — 2026-09-03
+## [0.8.0] - 2026-09-03
 
 Packaged and installable, and **published to PyPI as `tango-anki`**. The
 funnel finally has a top: `pip install tango-anki` is something a stranger
@@ -102,7 +102,7 @@ them stops anyone installing or running the tool.
   The module docstring in `__main__.py` also still documented the removed
   flag surface in full.
 
-## [0.7.0] — 2026-09-03
+## [0.7.0] - 2026-09-03
 
 The command line as a product: the first release aimed at someone who did not
 write it. Nothing here changes a card or asks anything of an existing
@@ -198,7 +198,7 @@ and what a failure says when it stops.
   instead of naming a private function and a private dict key; and the three
   CLI paths that could fail without a next step now print one.
 
-## [0.6.0] — 2026-08-27
+## [0.6.0] - 2026-08-27
 
 Card quality: what is *in* the fields, rather than which fields exist.
 
@@ -342,7 +342,7 @@ Card quality: what is *in* the fields, rather than which fields exist.
   sampled inflected forms, Russian went from 286 resolved to 298. German and
   French were already at 299 and 297 and are unchanged. ARCHITECTURE.md 8.38.
 
-## [0.5.3] — 2026-08-17
+## [0.5.3] - 2026-08-17
 
 The part of speech is written in the learner's language.
 
@@ -366,7 +366,7 @@ The part of speech is written in the learner's language.
 - Existing cards keep whatever they were imported with. Re-import to update
   them; nothing needs migrating and no review history is affected.
 
-## [0.5.2] — 2026-08-17
+## [0.5.2] - 2026-08-17
 
 Pronunciation audio plays inside the card instead of linking out.
 
@@ -422,7 +422,7 @@ Pronunciation audio plays inside the card instead of linking out.
   measured 2 of 5 usable, with `laufen` returning a coin from the town of
   Laufen. They need a relevance gate before they are worth having.
 
-## [0.5.1] — 2026-08-16
+## [0.5.1] - 2026-08-16
 
 Pronunciation now describes the word on the card, in every mode and in
 English. No migration: the fields added in v0.5.0 are unchanged, and this
@@ -456,7 +456,7 @@ only alters what goes into them.
   list, it was violated three times, each by someone adding a fourth thing
   beside the gate.
 
-## [0.5.0] — 2026-08-15
+## [0.5.0] - 2026-08-15
 
 Pronunciation on cards, and a notetype that merges instead of forking.
 
@@ -518,7 +518,7 @@ Pronunciation on cards, and a notetype that merges instead of forking.
   carry a recording, against 12.1% French and 4.4% Russian. IPA is
   dependable everywhere (83–99%).
 
-## [0.4.5] — 2026-08-09
+## [0.4.5] - 2026-08-09
 
 Correctness release, 67 commits.
 
@@ -534,40 +534,40 @@ Correctness release, 67 commits.
 - A pasted YouTube URL aborted `make run` before the pipeline started: the
   video id was interpolated into printf's *format string*.
 
-## [0.4.4] — 2026-08-05
+## [0.4.4] - 2026-08-05
 
 - Circuit breaker for definition sources.
 - WSL auto-import path translation, so AnkiConnect on the Windows side can
   resolve a package generated under `/mnt/c`.
 
-## [0.4.3] — 2026-08-04
+## [0.4.3] - 2026-08-04
 
 - Language-aware spaCy model selection (closes #3). An English model
   applying English morphology to French text had been misattributed to
   caption quality.
 
-## [0.4.2] — 2026-08-04
+## [0.4.2] - 2026-08-04
 
 - Synonym and antonym pill rendering fixes.
 
-## [0.4.1] — 2026-08-04
+## [0.4.1] - 2026-08-04
 
 - Card-quality and bug-fix release.
 
-## [0.4.0] — 2026-07-19
+## [0.4.0] - 2026-07-19
 
 - Multilingual definitions via the offline Wiktionary index, card redesign,
   adaptive CSS for Anki's light and dark themes, fuzzy matching improvements.
 
-## [0.3.0] — 2026-07-13
+## [0.3.0] - 2026-07-13
 
 - Card template redesign, multilingual definition fixes, translation timeout.
 
-## [0.2.0] — 2026-07-08
+## [0.2.0] - 2026-07-08
 
 - Language filter: subtitle selection by language code or deck name.
 
-## [0.1.0] — 2026-07-02
+## [0.1.0] - 2026-07-02
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
