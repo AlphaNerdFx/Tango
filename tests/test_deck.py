@@ -1144,3 +1144,110 @@ class TestWslHostFallback:
                 with pytest.raises(AnkiNotRunningError):
                     deck_module._anki_request("version")
         assert post.call_count == 3  # first call tries both, second tries one
+
+
+class TestSomethingElseOnThePort:
+    """
+    v0.8.2. AnkiConnect answers on 8765, and nothing guarantees AnkiConnect
+    is what is there. A different service on that port, or an ANKI_HOST
+    pointing somewhere stale, got as far as a successful HTTP request and
+    then died on `response.json()` with "Expecting value: line 1 column 1
+    (char 0)": a traceback, and one that explains nothing.
+
+    Reported by a user reading the code, not by a failure, which is why
+    there were no tests for it. The three shapes below are what a wrong
+    service actually does.
+
+    These are deliberately distinct from AnkiNotRunningError. The port
+    answered, so Anki being closed is the one cause already ruled out, and
+    telling someone to start an app that is already running wastes their
+    time.
+    """
+
+    @staticmethod
+    def _response(status=200, json_exc=None, payload=None, text="body"):
+        r = MagicMock()
+        r.status_code = status
+        if json_exc is not None:
+            r.json.side_effect = json_exc
+        else:
+            r.json.return_value = payload
+        if status >= 400:
+            r.raise_for_status.side_effect = requests.exceptions.HTTPError(
+                "%s Server Error" % status)
+        else:
+            r.raise_for_status.return_value = None
+        r.text = text
+        return r
+
+    @pytest.fixture(autouse=True)
+    def _explicit_host(self):
+        # An explicit host, so the WSL fallback never fires and the test is
+        # about the response rather than the address.
+        with patch.object(deck_module, "_active_host", "http://localhost:8765"), \
+             patch.object(deck_module, "ANKI_HOST_EXPLICIT", True), \
+             patch.object(deck_module, "_wsl_fallback_tried", True):
+            yield
+
+    def test_a_non_json_answer_is_typed_not_a_traceback(self):
+        resp = self._response(json_exc=ValueError("Expecting value"))
+        with patch.object(deck_module.requests, "post", return_value=resp):
+            with pytest.raises(AnkiConnectError) as exc:
+                deck_module._anki_request("version")
+        message = str(exc.value)
+        assert "not AnkiConnect" in message
+        assert "not JSON" in message
+        # The unhelpful original must not be what the user reads.
+        assert "Expecting value" not in message
+
+    def test_an_http_error_status_is_typed(self):
+        resp = self._response(status=500)
+        with patch.object(deck_module.requests, "post", return_value=resp):
+            with pytest.raises(AnkiConnectError) as exc:
+                deck_module._anki_request("version")
+        assert "HTTP 500" in str(exc.value)
+
+    def test_json_without_a_result_field_is_typed(self):
+        resp = self._response(payload={"ok": True})
+        with patch.object(deck_module.requests, "post", return_value=resp):
+            with pytest.raises(AnkiConnectError) as exc:
+                deck_module._anki_request("version")
+        assert "no 'result' field" in str(exc.value)
+
+    def test_every_message_names_the_port_and_the_address(self):
+        # What the user has to act on: which address answered, and that 8765
+        # is the one AnkiConnect uses.
+        for resp in (self._response(json_exc=ValueError("x")),
+                     self._response(status=503),
+                     self._response(payload={"ok": True})):
+            with patch.object(deck_module.requests, "post", return_value=resp):
+                with pytest.raises(AnkiConnectError) as exc:
+                    deck_module._anki_request("version")
+            message = str(exc.value)
+            assert "http://localhost:8765" in message
+            assert "8765" in message
+            assert "ANKI_HOST" in message
+
+    def test_a_wrong_service_is_not_reported_as_anki_being_closed(self):
+        # AnkiNotRunningError sends the user to start Anki. Here the port
+        # answered, so that advice is actively wrong.
+        resp = self._response(json_exc=ValueError("x"))
+        with patch.object(deck_module.requests, "post", return_value=resp):
+            with pytest.raises(AnkiConnectError) as exc:
+                deck_module._anki_request("version")
+        assert not isinstance(exc.value, AnkiNotRunningError)
+        assert "Ensure Anki is running" not in str(exc.value)
+
+    def test_a_real_ankiconnect_reply_still_works(self):
+        # The guards must not reject the shape they exist to protect.
+        resp = self._response(payload={"result": 6, "error": None})
+        with patch.object(deck_module.requests, "post", return_value=resp):
+            assert deck_module._anki_request("version") == 6
+
+    def test_a_null_result_is_still_a_valid_reply(self):
+        # AnkiConnect returns {"result": null} for actions with no return
+        # value, e.g. guiDeckBrowser. Checking truthiness instead of
+        # presence would reject those.
+        resp = self._response(payload={"result": None, "error": None})
+        with patch.object(deck_module.requests, "post", return_value=resp):
+            assert deck_module._anki_request("guiDeckBrowser") is None
