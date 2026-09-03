@@ -159,6 +159,31 @@ def _wsl_fallback_host() -> str | None:
     return None if candidate == _active_host else candidate
 
 
+def _describe_wrong_service(host: str, symptom: str) -> str:
+    """
+    Build the "something is there, but it is not Anki" message.
+
+    Worth its own function because the advice is identical in all three
+    cases and easy to let drift apart. The symptom leads, since it is the
+    part that differs; the advice follows, because it is what the user acts
+    on.
+
+    Telling them to start Anki would be wrong here. The port answered, so
+    Anki being closed is the one cause already ruled out.
+
+    Args:
+        host:    The address that answered.
+        symptom: What was wrong with the answer, as a sentence fragment.
+    """
+    return (
+        f"Something is listening at {host}, but it is not AnkiConnect: "
+        f"{symptom}\n"
+        f"  Check that nothing else is using that port, and that ANKI_HOST "
+        f"points at Anki.\n"
+        f"  AnkiConnect answers on port 8765 by default."
+    )
+
+
 def _anki_request(action: str, **params) -> object:
     """
     Send a request to AnkiConnect and return the result field.
@@ -223,8 +248,39 @@ def _anki_request(action: str, **params) -> object:
             f"  A slow import can also need a longer ANKI_IMPORT_TIMEOUT "
             f"in .env."
         ) from exc
+    except requests.exceptions.HTTPError as exc:
+        # Something answered and refused. That is not Anki being closed, so
+        # it gets its own message rather than "not reachable", which would
+        # send the user to restart an app that is already running.
+        raise AnkiConnectError(
+            _describe_wrong_service(
+                _active_host,
+                f"it answered '{action}' with HTTP {response.status_code}.")
+        ) from exc
 
-    data = response.json()
+    # Everything below assumes an AnkiConnect JSON envelope. Nothing has
+    # checked that yet: the address is only a host and a port, and any
+    # service can be sitting on it.
+    try:
+        data = response.json()
+    except ValueError as exc:
+        # requests raises its own JSONDecodeError, a ValueError subclass.
+        # Unguarded this reached the user as "Expecting value: line 1
+        # column 1 (char 0)", which explains nothing and is a traceback,
+        # against CLAUDE.md 4.4.
+        raise AnkiConnectError(
+            _describe_wrong_service(
+                _active_host, "it answered with something that is not JSON.")
+        ) from exc
+
+    if not isinstance(data, dict) or "result" not in data:
+        raise AnkiConnectError(
+            _describe_wrong_service(
+                _active_host,
+                "it answered with JSON that has no 'result' field, which "
+                "every AnkiConnect reply has.")
+        )
+
     if data.get("error"):
         # Anki's own wording, then the two things that actually fix it.
         # "deck was not found" and "model was not found" are the common
