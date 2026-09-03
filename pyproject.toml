@@ -110,6 +110,13 @@ dev = [
     # use it. Dropping it from the base install must not drop it from CI.
     "tango-anki[wordnet]",
 
+    # Building and uploading the distribution. `python -m build` produces
+    # the sdist and wheel; `twine check` validates the metadata renders on
+    # PyPI before an upload that cannot be undone, since a version number
+    # is burned even if the file is later deleted.
+    "build>=1.0",
+    "twine>=5.0",
+
     # Test runner
     "pytest>=8.0,<10.0",
 
