@@ -3,7 +3,8 @@
 [![CI](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml/badge.svg)](https://github.com/AlphaNerdFx/Tango/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Version](https://img.shields.io/badge/version-v0.5.3-orange)](https://github.com/AlphaNerdFx/Tango/releases/tag/v0.5.3)
+[![PyPI](https://img.shields.io/pypi/v/tango-anki?color=orange&label=pypi)](https://pypi.org/project/tango-anki/)
+[![Release](https://img.shields.io/github/v/release/AlphaNerdFx/Tango?color=orange&label=release)](https://github.com/AlphaNerdFx/Tango/releases/latest)
 
 Turn any YouTube video into Anki flashcards, automatically.
 
