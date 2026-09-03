@@ -1383,3 +1383,157 @@ class TestNoMessageNamesARemovedFlag:
             "A deleted flag outside a comment in the exempt file:\n  "
             + "\n  ".join(offenders)
         )
+
+
+class TestEnsureSpacyModel:
+    """
+    v0.8.2. A fresh `pip install tango-anki` used to get as far as fetching
+    the transcript before stopping with "spaCy model not found". The message
+    was right and the timing was not: the work was already done, and the user
+    was sent away to run a second command before seeing anything work.
+
+    The check now runs before the transcript is fetched, and on a terminal it
+    offers to do the download itself.
+    """
+
+    def test_an_installed_model_asks_nothing(self):
+        with patch.object(main_module.nlp_module, "is_model_installed", return_value=True), \
+             patch.object(main_module, "_ask") as ask:
+            main_module._ensure_spacy_model("en")
+        ask.assert_not_called()
+
+    def test_a_missing_model_is_offered_and_installed(self):
+        with patch.object(main_module.nlp_module, "is_model_installed", return_value=False), \
+             patch.object(main_module.sys.stdin, "isatty", return_value=True), \
+             patch.object(main_module, "_ask", return_value="y"), \
+             patch.object(main_module, "_run_install_model", return_value=0) as install:
+            main_module._ensure_spacy_model("fr")
+        install.assert_called_once_with("fr")
+
+    def test_declining_exits_rather_than_running_on(self):
+        # Continuing without a model would fail later anyway, having spent a
+        # transcript fetch on it.
+        with patch.object(main_module.nlp_module, "is_model_installed", return_value=False), \
+             patch.object(main_module.sys.stdin, "isatty", return_value=True), \
+             patch.object(main_module, "_ask", return_value="n"), \
+             patch.object(main_module, "_run_install_model") as install:
+            with pytest.raises(SystemExit) as exc:
+                main_module._ensure_spacy_model("fr")
+        assert exc.value.code == 1
+        install.assert_not_called()
+
+    def test_a_pipe_is_never_prompted(self):
+        # Prompting into a pipe hangs or reads EOF. `echo s | tango run ...`
+        # is a documented recipe, so this path is real.
+        with patch.object(main_module.nlp_module, "is_model_installed", return_value=False), \
+             patch.object(main_module.sys.stdin, "isatty", return_value=False), \
+             patch.object(main_module, "_ask") as ask, \
+             patch.object(main_module, "_run_install_model") as install:
+            with pytest.raises(SystemExit) as exc:
+                main_module._ensure_spacy_model("fr")
+        assert exc.value.code == 1
+        ask.assert_not_called()
+        install.assert_not_called()
+
+    def test_a_failed_download_does_not_continue(self):
+        with patch.object(main_module.nlp_module, "is_model_installed", return_value=False), \
+             patch.object(main_module.sys.stdin, "isatty", return_value=True), \
+             patch.object(main_module, "_ask", return_value="y"), \
+             patch.object(main_module, "_run_install_model", return_value=1):
+            with pytest.raises(SystemExit) as exc:
+                main_module._ensure_spacy_model("fr")
+        assert exc.value.code == 1
+
+
+class TestUninstall:
+    """
+    v0.8.2. `pip uninstall tango-anki` removes about 130 KB of Python and
+    leaves the indexes, measured at 1.1 GB on the machine this was written
+    on. pip only owns what it installed, so nothing else could offer to
+    remove the rest.
+
+    Two of the four locations hold work that is expensive or impossible to
+    get back, so the safety rules matter more than the reporting.
+    """
+
+    runner = CliRunner()
+
+    @staticmethod
+    def _populate(root: Path):
+        (root / "dictionaries").mkdir()
+        (root / "media").mkdir()
+        (root / "output").mkdir()
+        (root / "dictionaries" / "idx.sqlite").write_bytes(b"x" * 3000)
+        (root / "media" / "a.ogg").write_bytes(b"x" * 2000)
+        (root / "output" / "d.apkg").write_bytes(b"x" * 1000)
+        (root / "pipeline.db").write_bytes(b"x" * 500)
+        return [
+            ("Dictionary and antonym indexes", root / "dictionaries", "note"),
+            ("Pronunciation audio cache", root / "media", "note"),
+            ("Definition cache and run history", root / "pipeline.db", "note"),
+            ("Generated .apkg packages", root / "output", "note"),
+        ]
+
+    def test_dry_run_deletes_nothing(self, tmp_path):
+        # assume_yes=True on purpose. With assume_yes=False the confirmation
+        # guard also blocks deletion, so the test would pass even with the
+        # dry-run check removed, which is exactly what a mutation showed.
+        # Only dry_run can stop this one.
+        entries = self._populate(tmp_path)
+        with patch.object(main_module, "_data_locations", return_value=entries):
+            assert main_module._run_uninstall(assume_yes=True, dry_run=True) == 0
+        assert (tmp_path / "dictionaries" / "idx.sqlite").exists()
+        assert (tmp_path / "pipeline.db").exists()
+
+    def test_a_pipe_without_yes_deletes_nothing(self, tmp_path):
+        # The dangerous case: a script that runs `tango uninstall` and cannot
+        # answer a prompt must not lose the user's data by default.
+        entries = self._populate(tmp_path)
+        with patch.object(main_module, "_data_locations", return_value=entries), \
+             patch.object(main_module.sys.stdin, "isatty", return_value=False):
+            assert main_module._run_uninstall(assume_yes=False, dry_run=False) == 0
+        assert (tmp_path / "dictionaries" / "idx.sqlite").exists()
+
+    def test_declining_at_the_prompt_deletes_nothing(self, tmp_path):
+        entries = self._populate(tmp_path)
+        with patch.object(main_module, "_data_locations", return_value=entries), \
+             patch.object(main_module.sys.stdin, "isatty", return_value=True), \
+             patch.object(main_module, "_ask", return_value="n"):
+            assert main_module._run_uninstall(assume_yes=False, dry_run=False) == 0
+        assert (tmp_path / "dictionaries" / "idx.sqlite").exists()
+
+    def test_yes_removes_every_location(self, tmp_path):
+        entries = self._populate(tmp_path)
+        with patch.object(main_module, "_data_locations", return_value=entries):
+            assert main_module._run_uninstall(assume_yes=True, dry_run=False) == 0
+        assert not (tmp_path / "dictionaries").exists()
+        assert not (tmp_path / "media").exists()
+        assert not (tmp_path / "output").exists()
+        assert not (tmp_path / "pipeline.db").exists()
+
+    def test_absent_locations_are_not_reported(self, tmp_path, capsys):
+        entries = [("Dictionary and antonym indexes", tmp_path / "nope", "note")]
+        with patch.object(main_module, "_data_locations", return_value=entries):
+            assert main_module._run_uninstall(assume_yes=True, dry_run=False) == 0
+        assert "No Tango data found" in capsys.readouterr().out
+
+    def test_sizes_are_reported_largest_first(self, tmp_path, capsys):
+        entries = self._populate(tmp_path)
+        with patch.object(main_module, "_data_locations", return_value=entries):
+            main_module._run_uninstall(assume_yes=False, dry_run=True)
+        out = capsys.readouterr().out
+        order = [out.index(label) for label, _p, _n in entries[:2]]
+        # dictionaries (3000 bytes) must be listed above media (2000).
+        assert order == sorted(order)
+
+    def test_a_path_that_cannot_be_removed_is_reported_not_swallowed(self, tmp_path, capsys):
+        entries = self._populate(tmp_path)
+        with patch.object(main_module, "_data_locations", return_value=entries), \
+             patch.object(main_module.shutil, "rmtree", side_effect=OSError("busy")):
+            main_module._run_uninstall(assume_yes=True, dry_run=False)
+        # _err writes to stderr, and readouterr() drains the buffer, so it is
+        # read once into a variable rather than called twice in one assert.
+        captured = capsys.readouterr()
+        assert "Could not remove" in captured.err
+        # The directories it could not remove must still be there.
+        assert (tmp_path / "dictionaries").exists()
