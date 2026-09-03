@@ -16,6 +16,35 @@ rather than list every change.
 
 Working toward v0.8.2, an install that looks after itself.
 
+### Added
+
+- **A missing spaCy model is offered, not just reported.** A fresh
+  `pip install tango-anki` got as far as fetching the transcript and then
+  stopped with "spaCy model not found. Run: ...". The message was correct and
+  the timing was not: the work was already spent, and the user was sent away
+  to run a second command before seeing anything work.
+
+  The check now runs before the transcript is fetched, where it costs
+  nothing, and on a terminal it offers to do the download. Answering yes
+  installs the model and the run carries straight on. Answering no, or
+  running with the output piped, prints `tango install-model <lang>` and
+  exits 1 rather than prompting into something that cannot answer.
+
+- **`tango uninstall`.** `pip uninstall tango-anki` removes about 130 KB of
+  Python and leaves everything that takes space. Measured on the development
+  machine: 1.1 GB of dictionary indexes, 82 MB of generated packages, 46 MB
+  of cached audio and a 4.9 MB definition cache. That is reasonable, since
+  pip only owns what it installed, and it is still a surprise. Nothing else
+  knew those files existed, so nothing else could offer to remove them.
+
+  It lists every location with its size and what losing it would cost, then
+  asks. `--dry-run` reports and stops. `--yes` skips the prompt for scripts.
+  Run with the output piped and no `--yes`, it reports and deletes nothing,
+  because the alternative is a script silently destroying a definition cache
+  that took hours of API calls to build. Paths come from `config`, so a user
+  who redirected `DICT_DIR` or `DB_PATH` gets their own locations rather than
+  the defaults.
+
 ## [0.8.1] - 2026-09-03
 
 Documentation, for the people who can now install this.
