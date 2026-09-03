@@ -36,15 +36,30 @@ Between extraction and card creation, Tango:
 Prerequisites: Python 3.10+, [Anki](https://apps.ankiweb.net/) desktop, [AnkiConnect](https://ankiweb.net/shared/info/2055492159) add-on.
 
 ```bash
+pip install tango-anki
+python -m spacy download en_core_web_sm
+tango run <video-id> --deck "MyDeck"
+```
+
+The command is `tango`; the package is `tango-anki`, because `tango` on PyPI
+is an unrelated project. Run `tango doctor` at any point and it reports what
+is installed, what is missing, and the command that fixes each.
+
+Then import the generated .apkg from `output/` into Anki, or say yes when it
+offers to import for you.
+
+<details>
+<summary>Working on Tango itself?</summary>
+
+```bash
 git clone https://github.com/AlphaNerdFx/Tango.git
-cd tango
+cd Tango
 make all
 cp .env.example .env
-# fill in your API keys in .env
 make run VIDEO_ID=<id> DECK="MyDeck"
 ```
 
-Then import the generated .apkg from `output/` into Anki.
+</details>
 
 **Learning a language other than English?** Build its offline dictionary
 first, or every card will read "No definition found":
