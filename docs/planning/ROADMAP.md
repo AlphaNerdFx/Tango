@@ -223,10 +223,29 @@ running the tool; all three make an existing install pleasanter. An
 unclaimed distribution name can be taken by anyone, and that risk was worth
 more than the polish.
 
-### v0.8.1: The install looks after itself
+### v0.8.1: Documentation for the people who can now install it
 
-Cut from v0.8.0 on 3 September 2026 so the name could be claimed. Each one
-is about an install that already works.
+Released 3 September 2026, the same day as v0.8.0 and for a reason worth
+recording. The README is the PyPI description, and every command in it
+assumed a cloned repository: `make run`, `make dictionary`, `make antonyms`.
+None of that exists after `pip install tango-anki`. The shop window for a
+package published that morning was telling its first visitors to run a build
+tool they did not have.
+
+PyPI freezes a description at upload time and will not let it be edited, so
+correcting the published page costs a release. That is the whole of this
+one, plus a version badge that had been stuck at v0.5.3 for five releases
+because it was hardcoded, and a `.pyc` committed because `.gitignore` named
+two `__pycache__` directories instead of anchoring the pattern.
+
+The lesson is the same one this project keeps relearning: a thing nobody
+re-checks drifts, and publishing makes the drift public.
+
+### v0.8.2: The install looks after itself
+
+Cut from v0.8.0 on 3 September 2026 so the name could be claimed, then
+renumbered when v0.8.1 became a documentation fix. Each one is about an
+install that already works.
 
 - Model and index downloads as a first-run step rather than a README. Today
   a fresh install runs `tango run` and is told it has no spaCy model, which
