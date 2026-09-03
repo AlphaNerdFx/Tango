@@ -232,7 +232,7 @@ def wsl_host_ip() -> str | None:
     return None
 
 
-# AnkiConnect host — change if running Anki on a non-default port.
+# AnkiConnect host. Change it if Anki runs on another machine or port.
 #
 # localhost is correct on macOS, native Linux, native Windows and on WSL2
 # with mirrored networking. It is wrong on WSL2's default NAT networking,
