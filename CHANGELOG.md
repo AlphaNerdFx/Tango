@@ -14,7 +14,52 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working toward v0.8.1, an install that looks after itself.
+Working toward v0.8.2, an install that looks after itself.
+
+## [0.8.1] - 2026-09-03
+
+Documentation, for the people who can now install this.
+
+### Fixed
+
+- **The README told pip users to run `make`.** Every command in it assumed a
+  cloned repository: `make run VIDEO_ID=... DECK=...`, `make dictionary`,
+  `make antonyms`, `make translate-setup`. None of that exists after
+  `pip install tango-anki`, and the README is also the PyPI description, so
+  it was the first thing a new user read and none of it worked for them.
+  Every command is now a `tango` subcommand, with the Makefile equivalents
+  kept in a collapsed section for people working in a clone.
+
+  PyPI freezes a release's description at upload time and will not let it be
+  edited, so correcting the published page needs a release of its own. That
+  is what this one is.
+
+- **The version badge was stuck at v0.5.3**, five releases behind, because it
+  was hardcoded. It now reads live from PyPI and from the GitHub releases
+  API, alongside a new badge for the package itself, so neither can go stale
+  again.
+
+- **The roadmap table in the README was wrong about the plan**, not just the
+  version. It still showed the ordering from before 27 August 2026, when
+  packaging sat at v0.10.0 behind cross-platform support. It now shows the
+  real sequence and where the project actually is.
+
+- **A `.pyc` was committed.** `.gitignore` listed `tests/__pycache__` and
+  `src/pipeline/__pycache__` by name, so `scripts/__pycache__` was never
+  covered. Replaced with the directory-anchored `__pycache__/` and
+  `*.py[cod]`, which catch every directory including ones that do not exist
+  yet.
+
+- **Em dashes removed** from the documents and code comments that had them,
+  per the project's own writing style rule in CLAUDE.md 17.
+
+### Added
+
+- **`.env.example` documents the PyPI publishing keys.** `PYPI_USER` must be
+  the literal string `__token__`, not a PyPI account name; an account name
+  paired with a `pypi-` token is rejected with a 403 that does not say why.
+  That is what tripped this project's first upload, and it is worth writing
+  down rather than rediscovering.
 
 ## [0.8.0] - 2026-09-03
 
@@ -571,7 +616,8 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.5.3...v0.6.0
