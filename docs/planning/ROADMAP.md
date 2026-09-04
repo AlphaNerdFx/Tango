@@ -340,6 +340,33 @@ is load-bearing in more places than it looks.
   CLI the primary path and the Makefile a convenience
 - CI on Linux, macOS and Windows, because "should work" is not evidence
 
+**All three items done 5 September 2026, and the CI item paid for itself on
+its first run.** macOS passed. Windows failed five tests in three classes:
+
+1. **A real portability bug.** An interrupted index build unlinked the
+   partial `.building` file while its SQLite connection was still open.
+   POSIX allows that; Windows refuses with `WinError 32` and the partial
+   file survives for the next run to inherit. Both `wiktdata.py` and
+   `antonyms.py` had it.
+2. **Three tests comparing paths against POSIX literals**, when `str(Path)`
+   uses the native separator. They were testing the platform.
+3. **One test patching `Path.resolve` to a `/mnt/c` path**, which on Windows
+   is a drive-relative `WindowsPath` the WSL regex cannot match.
+
+Only the first could reach a user. The other four had simply never run
+anywhere but Linux, which is the argument for the job in one sentence.
+
+A second gap came out of the same work: a WSL user who clones to `~` rather
+than `/mnt/c` writes the package somewhere Windows-side Anki cannot open,
+and saw only AnkiConnect's file-not-found. That now explains itself, gated
+on which host answered rather than on being under WSL, since WSLg users run
+Anki inside WSL where POSIX paths are correct.
+
+And a third, recorded in TASKS.md rather than fixed here: **the suite reads
+the developer's `.env`**, so three tests passed on all six CI jobs and
+failed on the machine the project is developed on. ARCHITECTURE 8.39's shape
+for the third time.
+
 ### v0.11.0: Images on cards, gated to concrete nouns
 
 ADR-009 phase 3, designed on 17 August 2026 and deliberately unbuilt since.
