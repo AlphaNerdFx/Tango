@@ -18,11 +18,55 @@ This creates the virtual environment, installs all dependencies, and downloads t
 make test
 ```
 
-All tests should pass, 692 at the time of writing, though the count moves as tests are added, so trust `make test` over any number written down. If any fail on your machine before you change anything, open an issue before proceeding.
+All tests should pass. The count moves as tests are added, so trust
+`make test` over any number written down here. If any fail on your machine
+before you change anything, open an issue before proceeding.
+
+Users install the published package instead, which needs none of the above:
+
+```bash
+pip install tango-anki
+tango doctor
+```
+
+`tango doctor` reports what is installed, what is missing, and the command
+that fixes each. It is the fastest way to tell a broken environment from a
+broken change.
 
 ## Project structure
 
-The pipeline lives in `src/pipeline/`. Each module has a single responsibility described in the code walkthrough document in `docs/`. Tests mirror the module structure in `tests/`.
+```
+src/pipeline/     the importable package, and the only thing in src/
+tests/            mirrors the module structure
+scripts/          one-off measurement scripts, not part of the package
+docs/adr/         architecture decisions
+docs/architecture/  ARCHITECTURE.md, the full system detail
+docs/planning/    ROADMAP.md and TASKS.md
+docs/sessions/    working state between sessions
+docs/assets/      diagrams and icons
+```
+
+`src/` holds the importable package and nothing else. That is the
+src-layout convention, and it is enforced by a test: assets and scripts
+belong outside it. Each module has a single responsibility, described in
+the code walkthrough PDF in `docs/`.
+
+## Before you open a pull request
+
+`make check` must exit 0. A hook enforces it on every commit.
+
+Read `CLAUDE.md` section 18 first. It records the practices that have
+actually caught bugs in this project, and two of them will save you a
+review round:
+
+- **Run the feature and watch it work before writing tests for it**, and
+  exercise the real path rather than one that returns early.
+- **Mutation-verify every new test.** Break the code deliberately and
+  confirm your test fails. If it still passes, the test is wrong. This has
+  caught vacuous tests three times in a single session.
+
+Section 3 lists six hard constraints that must never be violated. All six
+have tests that fail on the specific mistake each one describes.
 
 ## What to work on
 
@@ -47,7 +91,7 @@ Run the formatter and linter before committing.
 ```bash
 make format
 make lint
-make coverage    # per-module line coverage, currently 88%
+make coverage    # per-module line coverage
 ```
 
 ### Verifying a release
