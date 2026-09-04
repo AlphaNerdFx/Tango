@@ -14,7 +14,7 @@ youtube-transcript-api==1.2.4
 # NLP
 # spaCy model downloaded separately:
 #   python -m spacy download en_core_web_sm
-spacy==3.8.15
+spacy==3.8.16
 
 # spaCy core transitive dependencies — pinned for stability
 thinc==8.3.13
