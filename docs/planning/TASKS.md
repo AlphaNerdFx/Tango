@@ -1007,7 +1007,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       package, and only an upstream change to the unguarded `import stanza`
       removes it; and nine spaCy models are installed where one is used.
       Consider three tiers: core (~100MB), `[nlp]` adding spaCy (~600MB),
-      `[translation]` adding argostranslate. ROADMAP.md v0.9.0 has the staged
+      `[translation]` adding argostranslate. ROADMAP.md v0.12.0 has the staged
       plan and the measurements.
 
 - [x] **Outlined pill CSS.** Already shipped; this entry was stale.
@@ -1255,7 +1255,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       exactly as much as anyone. What does shrink it is shipping the index
       **sliced by frequency rank**: an A2 learner needs the top few
       thousand lemmas and their inflections, not 1.93 million entries. That
-      is one mechanism serving both the filter and the ROADMAP v0.9.0 size
+      is one mechanism serving both the filter and the ROADMAP v0.12.0 size
       goal, and it is worth designing once rather than twice.
 
       **The error asymmetry is already settled in this repository and
