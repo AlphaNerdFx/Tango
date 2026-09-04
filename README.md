@@ -65,7 +65,11 @@ make run VIDEO_ID=<id> DECK="MyDeck"
 <details>
 <summary>Prefer Docker? No Python setup at all.</summary>
 
+The Dockerfile is in the repository, and in the sdist if you would rather
+not clone:
+
 ```bash
+git clone https://github.com/AlphaNerdFx/Tango.git && cd Tango
 docker build -t tango .
 docker run --rm -v "$PWD/out:/data/output" tango run <video-id> --deck "French"
 ```
