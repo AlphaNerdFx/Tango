@@ -14,7 +14,7 @@ an editable install records whatever the version was when it was installed,
 which reported 0.1.0 long after the file said otherwise.
 """
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 
 class TangoError(Exception):
