@@ -248,6 +248,14 @@ dependency group with voices installed per language like spaCy models.
 an attribution field. Ship it disabled by default until the relevance gate is
 measured on real vocabulary rather than five hand-picked words.
 
+*Scheduled 4 September 2026 as ROADMAP v0.11.0, with that measurement as an
+explicit acceptance target. It had been designed and deliberately unbuilt
+since 17 August, which made it invisible to anyone reading only the roadmap.
+The sequencing warning below still stands in part: sense selection by part of
+speech shipped in v0.5.x (ARCHITECTURE 8.29), but 8.25 and the `Tapa` card
+record that the pipeline still takes the first dictionary entry rather than
+the sense matching the video.*
+
 **Phase 4: dropped as originally posed.** Downloading YouTube audio is
 contrary to YouTube's terms, and that is settled rather than weighed. What the
 request actually wanted, the word heard in real speech, is delivered by
