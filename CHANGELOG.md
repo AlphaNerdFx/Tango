@@ -14,6 +14,55 @@ rather than list every change.
 
 ## [Unreleased]
 
+Working toward v0.10.0, runs on any operating system.
+
+### Added
+
+- **CI on Linux, macOS and Windows.** The rung's own words were "because
+  should work is not evidence", and until this job existed every claim about
+  the other two platforms was an assertion: development happens on WSL2.
+  Linux covers the Python range, macOS and Windows run one version each,
+  because what they test is the operating system rather than the
+  interpreter. Five jobs, not nine.
+
+  It found a real bug on its first run.
+
+### Fixed
+
+- **An interrupted index build left a partial file behind on Windows.**
+  `wiktdata.py` and `antonyms.py` both deleted the `.building` file in their
+  error handler while the SQLite connection was still open. POSIX unlinks an
+  open file happily and frees the inode when the last handle closes; Windows
+  refuses with `WinError 32` and the partial file survived for the next run
+  to inherit. Both now close before unlinking.
+
+- **A WSL user who clones to `~` could not import.** Anki runs on the
+  Windows side and can only open paths Windows can see. `/mnt/<drive>` paths
+  are translated; anything under `/home` or `/tmp` cannot be, because it has
+  no Windows equivalent. What the user saw was AnkiConnect's own
+  file-not-found, which says nothing about why a file that plainly exists
+  cannot be found. It now names the cause and both ways out.
+
+  Gated on which host answered rather than on being under WSL, because a WSL
+  user can run Anki inside WSL through WSLg, and there localhost is right
+  and POSIX paths are exactly what AnkiConnect wants. Blocking those would
+  have broken a setup that works.
+
+- **Four tests had only ever run on Linux.** Three compared paths against
+  POSIX literals, when `str(Path)` uses the native separator, and one
+  patched `Path.resolve` to a `/mnt/c` path that becomes a drive-relative
+  `WindowsPath` the WSL regex cannot match. They were testing the platform
+  rather than the code.
+
+### Changed
+
+- **The CLI is the primary path and the Makefile is a convenience.** GNU
+  make is not a reasonable requirement on Windows, and `make check-os`
+  correctly refuses to run there without Git Bash, WSL or Cygwin. Every
+  user-facing target already had a `tango` equivalent, so the change is to
+  the documentation: CLAUDE.md section 6 now leads with the command a user
+  actually has.
+
 ## [0.9.0] - 2026-09-05
 
 Nothing fails without saying why.
