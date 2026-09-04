@@ -10,7 +10,7 @@ Run: pytest tests/test_main.py -m "not integration"
 import json
 import logging
 import time
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import DEFAULT, MagicMock, patch, call
 
 import pytest
@@ -379,11 +379,17 @@ class TestPromptImport:
         # translated path to AnkiConnect, under a real /mnt/<drive> path
         # this time (unlike tmp_apkg, which lives under /tmp and never
         # exercised the translation at all).
+        # PurePosixPath for the resolved value, not Path. A WSL path is a
+        # POSIX path by definition, and on the Windows runner
+        # Path("/mnt/c/...") is a WindowsPath whose str() uses backslashes
+        # and no drive, which the /mnt/<drive> regex cannot match. The test
+        # then failed for a reason unrelated to the wiring it checks.
         apkg_path = Path("/mnt/c/fake/output/video_20260101_000000.apkg")
+        resolved = PurePosixPath("/mnt/c/fake/output/video_20260101_000000.apkg")
         mock_response = MagicMock()
         mock_response.json.return_value = {"result": True, "error": None}
         with patch("pipeline.__main__._is_wsl", return_value=True), \
-             patch("pipeline.__main__.Path.resolve", return_value=apkg_path), \
+             patch("pipeline.__main__.Path.resolve", return_value=resolved), \
              patch("builtins.input", return_value="y"), \
              patch("requests.post", return_value=mock_response) as mock_post:
             _prompt_import(apkg_path)
