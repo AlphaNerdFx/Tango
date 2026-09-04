@@ -30,6 +30,7 @@ v0.7.0 gave the project a console script.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -52,6 +53,7 @@ from pipeline import (
 from pipeline.translation import reset_warning_state
 
 from pipeline.config import MW_RATE_LIMIT
+from pipeline.config import is_wsl as config_is_wsl
 from pipeline.definition import reset_circuit_breaker
 from pipeline.language import (
     LanguageResolutionError,
@@ -133,18 +135,12 @@ def _ask(prompt: str, default: str = "") -> str:
         return default
 
 
-def _is_wsl() -> bool:
-    """
-    Detect whether this process is running inside WSL (Windows Subsystem
-    for Linux). Under WSL, paths under /mnt/<drive>/ need translation to
-    Windows drive-letter paths before Windows-side AnkiConnect can resolve
-    them, see _translate_wsl_path().
-    """
-    try:
-        with open("/proc/version") as f:
-            return "microsoft" in f.read().lower()
-    except FileNotFoundError:
-        return False
+# WSL detection has one implementation, in config, and this is an alias to
+# it. There were briefly two, added on 4 September 2026 when deck.py needed
+# the same answer: both read /proc/version, and two implementations of one
+# fact are two chances to disagree. The private name is kept because it is
+# what the tests patch and what _translate_wsl_path reads.
+_is_wsl = config_is_wsl
 
 
 def _translate_wsl_path(path: str) -> str:
@@ -1662,9 +1658,55 @@ def _run_build_antonyms() -> None:
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
+# The environment variable that turns the safety net off. A developer
+# chasing a bug wants the traceback, and deleting it to get one is a poor
+# trade.
+_DEBUG_ENV = "TANGO_DEBUG"
+
+
 def main() -> None:
-    """Console entry point, named in pyproject.toml's [project.scripts]."""
-    app()
+    """
+    Console entry point, named in pyproject.toml's [project.scripts].
+
+    Wraps the app in the last line of defence. Every *expected* failure is
+    already a typed exception caught by the command that raised it, with a
+    message naming the fix, per CLAUDE.md 4.4. This catches what is left:
+    the genuine bug, which by definition nobody wrote a message for.
+
+    A traceback is the correct thing to record and the wrong thing to show.
+    It tells the user nothing they can act on and looks like the tool
+    breaking rather than a case it does not handle, so it goes to the debug
+    log while the terminal gets a sentence and somewhere to report it. Set
+    TANGO_DEBUG=1 to get the traceback on screen instead.
+
+    Ctrl-C is deliberately not handled here. Click catches KeyboardInterrupt
+    itself and exits 130, the shell convention for SIGINT, before anything
+    here sees it. Measured on click 8.4.2: a handler added at this level was
+    never entered. A branch that cannot run is worse than no branch, because
+    it reads as a guarantee.
+    """
+    try:
+        app()
+    # `except Exception`, never `except BaseException`. SystemExit and
+    # KeyboardInterrupt are BaseExceptions and must pass straight through:
+    # the first carries Typer's own exit codes, including every typed
+    # failure that already printed its message, and the second is Ctrl-C.
+    # An explicit `except SystemExit: raise` was here and was removed as
+    # redundant, since `except Exception` never sees one.
+    except Exception as exc:
+        # debug, not exception: at the default WARNING level this records
+        # nothing, so the traceback does not appear above the message that
+        # replaced it. Under --verbose it is emitted in full.
+        logging.getLogger(__name__).debug(
+            "Unhandled %s", type(exc).__name__, exc_info=True)
+        if os.getenv(_DEBUG_ENV):
+            raise
+        _err(f"Unexpected {type(exc).__name__}: {exc}")
+        _info("This is a bug in Tango, not something you did wrong.")
+        _info(f"Re-run with {_DEBUG_ENV}=1 to see the full traceback.")
+        _info("Please report it: "
+              "https://github.com/AlphaNerdFx/Tango/issues")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
