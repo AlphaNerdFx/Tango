@@ -2,12 +2,22 @@
 
 ## Supported versions
 
-Only the latest release of Tango receives security fixes. If you are on an older version, upgrade before reporting.
+Only the latest release receives security fixes. Anything older is
+unsupported, so upgrade before reporting:
 
-| Version | Supported |
-|---|---|
-| v0.4.x (latest) | Yes |
-| v0.3.x and below | No |
+```bash
+pip install --upgrade tango-anki
+```
+
+Deliberately no version table. The one that was here said "v0.4.x (latest)"
+while the project was on v0.8.2, four minor versions later, because a
+hardcoded number goes stale silently and nobody re-reads a policy file. The
+current release is the one on
+[PyPI](https://pypi.org/project/tango-anki/) and on the
+[releases page](https://github.com/AlphaNerdFx/Tango/releases/latest), both
+of which are always right.
+
+While the project is pre-1.0.0, only the newest MINOR line is supported.
 
 ## Reporting a vulnerability
 
