@@ -29,6 +29,8 @@ OMW rather than replacing it -- see definition.py's call site.
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 import gzip
 import json
 import logging
@@ -48,7 +50,7 @@ logger = logging.getLogger(__name__)
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 
-class DictionaryError(Exception):
+class DictionaryError(TangoError):
     """Base for every error raised by this module."""
 
 
