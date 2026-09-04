@@ -37,7 +37,18 @@ IP someone read as the shipped default lived in an uncommitted `.env`. WSL
 is now detected and handled by retrying rather than by a different default
 (ARCHITECTURE 8.45). The `/mnt/c` path translation in `__main__.py` is
 already conditional on `is_wsl()`.
-**Current tag:** v0.8.2, an install that looks after itself, released
+**Current tag:** v0.9.0, nothing fails without saying why, released
+5 September 2026. Every release before it fixed failures one at a time as
+someone tripped over them; this one went looking. An unexpected error is a
+message rather than a traceback, a corrupt or unwritable database is a typed
+error naming the fix, the .apkg write is guarded at the one place in the
+pipeline where failing costs the whole run, and `TangoError` gives the entry
+point a way to tell a failure someone wrote a message for from a genuine
+bug. `tango doctor` reports settings in `.env` that nothing reads, after two
+were found doing nothing in a real one. `src/` now holds only the importable
+package.
+
+v0.8.2 before it was an install that looks after itself, released
 4 September 2026. A missing spaCy model is offered before the run rather
 than reported after the transcript is fetched; `tango uninstall` reports and
 removes the indexes and caches that `pip uninstall` leaves behind (1.2 GB on
@@ -88,7 +99,7 @@ in the learner's language). Every tag has GitHub release notes.
 longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
 5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.12.0,
 where the rest of the size work lives.
-**Working toward:** v0.9.0, nothing fails without saying why. The
+**Working toward:** v0.10.0, runs on any operating system. The
 packaging rung moved forward three places on 27 August 2026, from v0.10.0:
 it had sat behind cross-platform support and install size, which is the
 ordering of a project polishing for users who cannot install it. Goals per
@@ -530,7 +541,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1049 passing, 24 deselected. The count drifts as tests are added,
+Expected: 1059 passing, 24 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
@@ -675,7 +686,7 @@ Before inserting a new section into a Markdown doc, print the existing heading o
 
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
-The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied. `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all eighteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
+The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied. `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all nineteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
 
 ## 16. Commit and tag format
 
