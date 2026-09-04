@@ -17,6 +17,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import os
+
 import pytest
 
 from pipeline import config
@@ -50,11 +52,19 @@ class TestResolvePath:
 
     def test_absolute_env_override_is_left_alone(self, monkeypatch, tmp_path):
         """An absolute override is deliberate and must not be re-anchored."""
-        monkeypatch.setenv("DB_PATH", "/var/lib/tango/pipeline.db")
+        # Built from tmp_path rather than written as "/var/lib/...". A POSIX
+        # absolute path is not absolute on Windows: Path("/var/lib") there is
+        # drive-relative and resolves to C:/var/lib, so the literal made this
+        # test fail on the Windows runner for a reason that had nothing to do
+        # with what it checks.
+        override = tmp_path.parent / "elsewhere" / "pipeline.db"
+        monkeypatch.setenv("DB_PATH", str(override))
 
         result = config._resolve_path("DB_PATH", "pipeline.db", root=tmp_path)
 
-        assert result == Path("/var/lib/tango/pipeline.db")
+        assert result == override
+        # The intent: an absolute override is not re-anchored under root.
+        assert not str(result).startswith(str(tmp_path) + os.sep)
 
     def test_tilde_override_expands_to_home(self, monkeypatch, tmp_path):
         """
