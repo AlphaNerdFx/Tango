@@ -44,6 +44,7 @@ from pipeline.language import localise_pos
 logger = logging.getLogger(__name__)
 
 # -- Constants (moved to config.py at end of project) -------------------------
+from pipeline import TangoError
 from pipeline.config import MODEL_ID, DECK_ID, OUTPUT_DIR
 
 
@@ -587,8 +588,33 @@ def _build_fallback_note(
 
 # -- Output path --------------------------------------------------------------
 
+class PackageWriteError(TangoError):
+    """
+    Raised when the .apkg cannot be created or written.
+
+    v0.9.0. This is the worst place in the pipeline to fail with a
+    traceback, because it is the last: the transcript is fetched, every
+    definition is looked up and paid for, the audio is downloaded, and then
+    a full disk or a read-only output directory threw a bare OSError and
+    took the whole run with it.
+    """
+
+
 def _build_output_path(video_id: str) -> Path:
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    """
+    Build the output path, creating the directory if it is missing.
+
+    Raises:
+        PackageWriteError: The output directory cannot be created.
+    """
+    try:
+        OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise PackageWriteError(
+            f"Cannot create the output directory '{OUTPUT_DIR}': {exc}\n"
+            f"  Check the path is writable, or set OUTPUT_DIR in .env to "
+            f"somewhere it is."
+        ) from exc
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return OUTPUT_DIR / f"{video_id}_{timestamp}.apkg"
 
@@ -819,7 +845,18 @@ def build_package(
     # Anki copies these into the collection's media folder on import, which
     # is what makes [sound:...] play rather than show as literal text.
     package.media_files = [str(p) for p in media_paths]
-    package.write_to_file(str(output_path))
+    try:
+        package.write_to_file(str(output_path))
+    except OSError as exc:
+        # Everything expensive has already been paid for by this point, so
+        # the message says what was lost and what to do about it rather
+        # than only what failed.
+        raise PackageWriteError(
+            f"Cannot write the package to '{output_path}': {exc}\n"
+            f"  {total_cards} cards were built and are not saved. Free some "
+            f"space or set OUTPUT_DIR in .env to a writable path, then "
+            f"re-run with --force."
+        ) from exc
 
     logger.info(
         "Package written: %s | %d cards (%d standard, %d fallback, %d skipped)",
