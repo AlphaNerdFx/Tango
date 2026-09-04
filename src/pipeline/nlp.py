@@ -24,6 +24,8 @@ ARCHITECTURE.md 9.1). Importing this module does not load any model.
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 from collections import Counter
 from typing import Optional
 
@@ -81,7 +83,7 @@ _nlp_models: dict[str, Language] = {}
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 
-class NLPModelNotFoundError(Exception):
+class NLPModelNotFoundError(TangoError):
     """
     Raised when a resolved spaCy model exists in spaCy's catalog but isn't
     installed in this environment.
@@ -90,7 +92,7 @@ class NLPModelNotFoundError(Exception):
     """
 
 
-class EmptyTranscriptError(Exception):
+class EmptyTranscriptError(TangoError):
     """
     Raised when the transcript string is empty or whitespace only.
     Caller should verify get_snippets() produced a non-empty _full_text.
