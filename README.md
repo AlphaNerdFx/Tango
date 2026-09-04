@@ -308,8 +308,10 @@ Windows, macOS and Linux, on low-end and high-end hardware alike.
 | v0.8.0 | packaged and installable | **released, on PyPI** |
 | v0.8.1 | documentation for people who can now install it | released |
 | v0.8.2 | an install that looks after itself | released |
-| v0.9.0 | runs on any operating system | next |
-| v0.10.0 | runs on modest hardware | |
+| v0.9.0 | nothing fails without saying why | next |
+| v0.10.0 | runs on any operating system | |
+| v0.11.0 | images on cards, gated to concrete nouns | |
+| v0.12.0 | runs on modest hardware | |
 | v1.0.0 | a finished CLI | |
 
 Packaging moved forward three rungs on 27 August 2026, from v0.10.0, after
@@ -338,7 +340,7 @@ Known rough edges, all tracked:
   automatically; the index is not, because it is a several-hundred-MB
   download per language and not something to start without being asked.
 - The repository still assumes WSL2 with Anki on the Windows side in a few
-  places. Reaching Anki is handled automatically now; the rest is v0.9.0.
+  places. Reaching Anki is handled automatically now; the rest is v0.10.0.
 - Everything depends on one transcript extraction path. If YouTube changes
   it, there is no fallback yet.
 
