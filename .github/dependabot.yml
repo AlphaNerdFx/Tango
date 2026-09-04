@@ -5,7 +5,7 @@ updates:
   # weekly: this project pins ranges rather than exact versions, so most
   # individual bumps are noise, and the dependency that actually matters
   # here is argostranslate -- it pulls in stanza, torch and the CUDA stack,
-  # 4.5 GB of the 5.9 GB install (ROADMAP.md v0.9.0).
+  # 4.5 GB of the 5.9 GB install (ROADMAP.md v0.12.0).
   - package-ecosystem: pip
     directory: /
     schedule:
