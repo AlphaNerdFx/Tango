@@ -21,6 +21,8 @@ and the language's own endonym where it differs significantly.
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 import logging
 import os
 import re
@@ -179,14 +181,14 @@ LANGUAGE_MAP: dict[str, str] = {
 # Language resolution
 # =============================================================================
 
-class LanguageResolutionError(Exception):
+class LanguageResolutionError(TangoError):
     """
     Raised when the target language cannot be determined.
     Contains a user-friendly message explaining how to fix the issue.
     """
 
 
-class SpacyModelUnavailableError(Exception):
+class SpacyModelUnavailableError(TangoError):
     """
     Raised when spaCy has no trained pipeline for the resolved language.
 
