@@ -477,19 +477,28 @@ nearly every failure investigated in this project has been setup rather than
 logic, and none of it was visible from the failure itself:
 
 ```bash
-make doctor                   # or: tango doctor
+tango doctor                  # or, in a clone: make doctor
 ```
 
 It reports spaCy models, dictionary indexes, translation pairs, the MW key
 and AnkiConnect reachability, and prints the command that fixes anything
 missing.
 
+**The CLI is the primary path and the Makefile is a convenience.** That is a
+v0.10.0 decision, not a preference: GNU make is not a reasonable requirement
+on Windows, and `make check-os` correctly refuses to run there without Git
+Bash, WSL or Cygwin. Every user-facing target has a `tango` equivalent, so a
+Windows user needs make for nothing. What is left in the Makefile is
+contributor tooling: `venv`, `install`, `test`, `check`, `coverage`,
+`format`, `lint`, `typecheck`, `clean`.
+
 ```bash
-make all                      # venv + install + spaCy model + NLTK data
-pip install -r requirements.txt
-python -m spacy download en_core_web_sm
-python -m spacy download fr_core_news_md     # French is pinned to "md", see issue #13
-python -m spacy download es_core_news_sm     # or any other code in language.SPACY_MODELS
+pip install tango-anki         # what a user does
+tango install-model en         # or fr, es, de: any code in language.SPACY_MODELS
+                               # French resolves to "md", see issue #13
+
+make all                       # what a contributor does in a clone:
+                               # venv + install + spaCy model + NLTK data
 pip install -e ".[wordnet]"                   # optional: WordNet synonyms and antonyms
 python -m nltk.downloader wordnet omw-2.0    # needs the line above; not omw-1.4, this NLTK version ignores it
 make dictionary LANGUAGE=fr                  # offline Wiktionary definitions, see below
@@ -516,21 +525,24 @@ tango build-antonyms
 ### Run
 
 ```bash
-make run VIDEO_ID=<id> DECK="<deck name>"
-make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr
-make run VIDEO_ID=<id> DECK="French" LANGUAGE=fr DEF_LANG=en
-make review DECK="<deck name>"          # process review.json decisions
-make backlog DECK="<deck name>"         # process SQLite backlog
-tango languages                 # list supported language codes
-tango --help                    # every command
-tango run --help                # one command's options
+tango run <id> --deck "<deck name>"
+tango run <id> --deck "French" --language fr
+tango run <id> --deck "French" --language fr --def-lang en
+tango review --deck "<deck name>"    # process review.json decisions
+tango backlog --deck "<deck name>"   # process the SQLite backlog
+tango languages                      # supported language codes
+tango --help                         # every command
+tango run --help                     # one command's options
 ```
 
 Non-interactive run (defers all queued words to `review.json`):
 
 ```bash
-echo "s" | make run VIDEO_ID=<id> DECK="<deck>" LANGUAGE=fr
+echo "s" | tango run <id> --deck "<deck>" --language fr
 ```
+
+The Makefile wraps these for a clone (`make run VIDEO_ID=<id> DECK="..."`),
+and `make help` lists every target.
 
 ### Test
 
