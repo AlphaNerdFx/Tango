@@ -398,3 +398,78 @@ PROXY_HTTPS_URL: str | None = os.getenv("PROXY_HTTPS_URL")
 # Listed second deliberately: it is not the suggested starting point.
 WEBSHARE_USERNAME: str | None = os.getenv("WEBSHARE_USERNAME")
 WEBSHARE_PASSWORD: str | None = os.getenv("WEBSHARE_PASSWORD")
+
+# ── Known environment variables ───────────────────────────────────────────────
+#
+# v0.9.0. A setting that does nothing is a failure with no message, which is
+# this rung's whole subject. Two were found in a real .env on 5 September
+# 2026: `SPACY_MODEL=en_core_web_sm`, which looks exactly like it should
+# choose the model and is read by nothing (the model comes from the language
+# code, via language.get_spacy_model), and `API_DELAY`, a leftover. Both had
+# been sitting there being ignored.
+#
+# Declared rather than derived, because deriving it means scanning source at
+# runtime. The list cannot drift silently: a test walks every `os.getenv`
+# call in the package and fails if one is missing from here, or if a name
+# here is read by nothing.
+
+KNOWN_ENV_KEYS: frozenset[str] = frozenset({
+    # Anki
+    "ANKI_HOST", "ANKI_TIMEOUT", "ANKI_IMPORT_TIMEOUT",
+    "ANKI_MODEL_ID", "ANKI_DECK_ID",
+    # Definitions
+    "MW_API_KEY", "MW_RATE_LIMIT", "MW_BURST", "API_TIMEOUT",
+    "CIRCUIT_BREAKER_THRESHOLD", "DEFINITION_FETCH_WORKERS",
+    # Matching
+    "CONFIDENCE_HIGH", "CONFIDENCE_LOW", "SHORT_WORD_THRESHOLD",
+    # Media
+    "MEDIA_RATE_LIMIT", "MEDIA_BURST", "MEDIA_MAX_RETRIES",
+    "MEDIA_MAX_RETRY_WAIT", "MEDIA_TIMEOUT",
+    # Paths
+    "DB_PATH", "DICT_DIR", "MEDIA_DIR", "OUTPUT_DIR", "REVIEW_FILE",
+    # Network
+    "PROXY_HTTP_URL", "PROXY_HTTPS_URL",
+    "WEBSHARE_USERNAME", "WEBSHARE_PASSWORD",
+    # Language and translation
+    "SPACY_MODEL_SIZE_OVERRIDE", "LIBRETRANSLATE_URL", "ARGOS_PACKAGES_DIR",
+    "LIBRETRANSLATE_MIRRORS",
+    #Network politeness: the User-Agent Wikimedia asks callers to send
+    "WIKTIONARY_USER_AGENT",
+    # Debugging
+    "TANGO_DEBUG",
+    # Publishing. Read by twine through the shell, never by this package,
+    # so they are known-but-unread and exempt from the "is it read" half of
+    # the test.
+    "PYPI_USER", "PYPI_API",
+})
+
+# The publishing keys above, kept separate so the test can exempt them.
+UNREAD_BY_DESIGN: frozenset[str] = frozenset({"PYPI_USER", "PYPI_API"})
+
+
+def unknown_env_keys(env_path: Path | None = None) -> list[str]:
+    """
+    Names set in a .env file that nothing in this project reads.
+
+    Args:
+        env_path: The file to inspect. Defaults to `.env` beside the
+                  project root.
+
+    Returns:
+        Sorted names, excluding comments, blanks and anything in
+        KNOWN_ENV_KEYS. An unreadable or absent file gives an empty list:
+        this is a diagnostic, and it must never be the thing that fails.
+    """
+    path = env_path or (PROJECT_ROOT / ".env")
+    found: list[str] = []
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            name = line.split("=", 1)[0].strip()
+            if name and name not in KNOWN_ENV_KEYS:
+                found.append(name)
+    except OSError:
+        return []
+    return sorted(set(found))
