@@ -161,3 +161,60 @@ class TestConfiguredPaths:
                 pytest.skip(f"{name} points outside the project root by explicit override")
 
         assert config.DB_PATH.parent == config.PROJECT_ROOT
+
+
+class TestUnknownEnvKeys:
+    """
+    v0.9.0. `tango doctor` reports settings in .env that nothing reads,
+    because a setting that does nothing is a failure with no message. A real
+    .env held `SPACY_MODEL=en_core_web_sm`, which looks exactly like it
+    chooses the model and is read by nothing.
+
+    The detection itself needs pinning: a mutation that disabled it left
+    every other test in this area passing, because they check the declared
+    list rather than the function that uses it.
+    """
+
+    @staticmethod
+    def _env(tmp_path, text):
+        path = tmp_path / ".env"
+        path.write_text(text, encoding="utf-8")
+        return path
+
+    def test_an_unknown_key_is_reported(self, tmp_path):
+        from pipeline.config import unknown_env_keys
+
+        env = self._env(tmp_path, "SPACY_MODEL=en_core_web_sm\nANKI_TIMEOUT=5\n")
+        assert unknown_env_keys(env) == ["SPACY_MODEL"]
+
+    def test_known_keys_are_not_reported(self, tmp_path):
+        from pipeline.config import unknown_env_keys
+
+        env = self._env(tmp_path, "ANKI_HOST=http://localhost:8765\nMW_API_KEY=x\n")
+        assert unknown_env_keys(env) == []
+
+    def test_comments_and_blank_lines_are_not_keys(self, tmp_path):
+        from pipeline.config import unknown_env_keys
+
+        env = self._env(tmp_path, "# SPACY_MODEL=commented out\n\n  \nANKI_TIMEOUT=5\n")
+        assert unknown_env_keys(env) == []
+
+    def test_the_publishing_keys_are_known(self, tmp_path):
+        # Read by twine through the shell, never by this package. Reporting
+        # them would be wrong: they do something, just not here.
+        from pipeline.config import unknown_env_keys
+
+        env = self._env(tmp_path, "PYPI_USER=__token__\nPYPI_API=pypi-abc\n")
+        assert unknown_env_keys(env) == []
+
+    def test_a_missing_file_is_not_an_error(self, tmp_path):
+        # This is a diagnostic. It must never be the thing that fails.
+        from pipeline.config import unknown_env_keys
+
+        assert unknown_env_keys(tmp_path / "does-not-exist") == []
+
+    def test_several_unknowns_come_back_sorted_and_deduplicated(self, tmp_path):
+        from pipeline.config import unknown_env_keys
+
+        env = self._env(tmp_path, "ZZZ_LATER=1\nAPI_DELAY=2\nAPI_DELAY=3\n")
+        assert unknown_env_keys(env) == ["API_DELAY", "ZZZ_LATER"]
