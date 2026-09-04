@@ -37,6 +37,8 @@ entry point degrades to today's behaviour when it is missing.
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 import gzip
 import logging
 import sqlite3
@@ -53,7 +55,7 @@ logger = logging.getLogger(__name__)
 
 # ── Errors ────────────────────────────────────────────────────────────────────
 
-class AntonymError(Exception):
+class AntonymError(TangoError):
     """Base class for antonym index failures."""
 
 
