@@ -32,12 +32,14 @@ Tango/
 │   ├── Code_Walkthrough.pdf
 │   ├── Initial Python Libraries and APIs.pdf
 │   ├── Prototype Diagram.pdf
-│   ├── ADR-008-per-language-dictionary-sources.md
-│   ├── ADR-009-card-media-enrichment.md
-│   └── ADR-010-conceptnet-antonyms.md
+│   ├── adr/                        the live ADRs, 008 to 011
+│   ├── architecture/               this file
+│   ├── planning/                   ROADMAP.md, TASKS.md
+│   ├── sessions/                   SESSION.md, HANDOVER.md
+│   ├── history/                    OPERATING_RULES.md
+│   └── assets/                     diagrams and icons, referenced by docs
 ├── src/
-│   ├── images/                     UI icon assets, unused by the pipeline
-│   └── pipeline/
+│   └── pipeline/                   the only thing in src/, deliberately
 │       ├── __init__.py
 │       ├── __main__.py
 │       ├── config.py
@@ -95,8 +97,20 @@ the working directory even when it is not installed, so tests pass locally
 against an uninstalled package and fail for real users. `src/` forces an install
 before import.
 
-`src/images/` contains icon assets for a future UI. Nothing in the pipeline
-references them.
+`src/` holds the importable package and nothing else, which is what the
+src-layout convention is for: PyPA describes `src/` as "the code that is
+intended to be importable". Checked against real projects on 4 September
+2026, `psf/requests` has exactly `src/requests/` and `pallets/flask` exactly
+`src/flask/`.
+
+This repository had `src/images/`, nine icons for a UI that does not exist,
+sitting beside the package. They were never importable, never packaged (the
+wheel contains no images), and their presence invited the assumption that
+`src/` is a general source directory. They moved to `docs/assets/` on
+4 September 2026, along with two diagram files that had been loose at the
+repository root. None of six well-known Python projects checked that day
+keeps a loose image at its root; requests uses `ext/`, ruff uses `assets/`,
+pydantic keeps them under `docs/`.
 
 ---
 
