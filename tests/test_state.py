@@ -223,7 +223,10 @@ class TestLogPackage:
     def test_stores_file_path_as_string(self):
         log_package(VIDEO_ID, Path("output/test.apkg"), DECK_NAME, 10)
         packages = get_packages_for_video(VIDEO_ID)
-        assert packages[0]["file_path"] == "output/test.apkg"
+        # str(Path) uses the native separator, so this is "output\\test.apkg"
+        # on Windows. Comparing against a POSIX literal tested the platform,
+        # not the code.
+        assert packages[0]["file_path"] == str(Path("output/test.apkg"))
 
     def test_stores_card_count(self):
         log_package(VIDEO_ID, Path("output/test.apkg"), DECK_NAME, 42)
@@ -244,7 +247,7 @@ class TestGetPackagesForVideo:
         log_package(VIDEO_ID, Path("output/a.apkg"), DECK_NAME, 5)
         log_package(VIDEO_ID, Path("output/b.apkg"), DECK_NAME, 8)
         result = get_packages_for_video(VIDEO_ID)
-        assert result[0]["file_path"] == "output/b.apkg"
+        assert result[0]["file_path"] == str(Path("output/b.apkg"))
 
 class TestGetAllPackages:
     def test_returns_empty_initially(self):
