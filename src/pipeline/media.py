@@ -28,6 +28,8 @@ Dependencies:
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 import hashlib
 import logging
 import re
@@ -64,7 +66,7 @@ _PREFIX = "tango"
 _UNSAFE = re.compile(r"[^\w-]+", re.UNICODE)
 
 
-class AudioUnavailableError(Exception):
+class AudioUnavailableError(TangoError):
     """The audio could not be retrieved. Callers fall back to a link."""
 
 
