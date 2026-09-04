@@ -14,6 +14,63 @@ rather than list every change.
 
 ## [Unreleased]
 
+Working toward v0.9.0, nothing fails without saying why.
+
+### Added
+
+- **`TangoError`, one base for every failure raised on purpose.** The
+  project defines twenty typed exceptions across nine modules and they had
+  nothing in common, so the entry point could not tell a failure someone
+  wrote a message for from a genuine bug. Every module keeps its own types
+  and its own wording; this only adds a shared ancestor, so every existing
+  `except SomeError` behaves exactly as before.
+
+  The rule for raising one: if a message can tell the user what to do, it is
+  a `TangoError`. If the only honest message is "this should not have
+  happened", it is not.
+
+- **An unexpected error is a message, not a traceback.** CLAUDE.md 4.4 has
+  always said the pipeline must not produce a traceback for an expected
+  failure, and it was enforced by noticing rather than by checking. Anything
+  unanticipated printed a Python traceback at the user. It now prints what
+  went wrong, says it is a bug rather than something they did, and links the
+  issue tracker. `TANGO_DEBUG=1` restores the traceback for anyone debugging.
+
+- **A typed error when the run database cannot be opened.** Reproduced
+  rather than imagined: a truncated file gives `sqlite3.DatabaseError: file
+  is not a database`, and an unwritable path gives
+  `sqlite3.OperationalError: unable to open database file`. Both reached the
+  user raw. Each now names the cause and the fix, and neither is reported as
+  a bug in Tango, because neither is one.
+
+- **A test that scans for the mistake rather than listing the cases.** Any
+  exception added later without the base fails the suite. It found dead code
+  while it was being written.
+
+### Changed
+
+- **`src/` holds the importable package and nothing else.** It also held
+  `src/images/`, nine icons for a UI that does not exist, never imported and
+  never packaged. Checked against the PyPA guidance and six well-known
+  projects: `src/` is "the code that is intended to be importable",
+  `psf/requests` has exactly `src/requests/`, and none of the six keeps a
+  loose image at its repository root. The icons and two loose root diagrams
+  are now in `docs/assets/`.
+
+- **`SECURITY.md` no longer names a version.** It said "v0.4.x (latest)"
+  while the project was on v0.8.2. It now points at PyPI and the releases
+  page, which cannot go stale.
+
+### Fixed
+
+- **Two implementations of WSL detection**, both reading `/proc/version`,
+  introduced the same day `deck.py` needed the answer `__main__` already
+  had. Collapsed to one.
+
+- **A dead exception class.** `_TranslationTimeoutError` was defined and
+  documented and never raised or caught anywhere.
+
+
 ## [0.8.2] - 2026-09-04
 
 An install that looks after itself. Three items cut from v0.8.0 so the name
