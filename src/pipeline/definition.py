@@ -38,6 +38,8 @@ patterns section for why a thread pool was chosen over asyncio/aiohttp.
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 import logging
 import os
 import re
@@ -350,11 +352,11 @@ class FallbackExtras:
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 
-class DefinitionNotFoundError(Exception):
+class DefinitionNotFoundError(TangoError):
     """Neither API returned a usable definition for this word."""
 
 
-class MWApiKeyMissingError(Exception):
+class MWApiKeyMissingError(TangoError):
     """MW_API_KEY is not set, MW lookups will be skipped."""
 
 
