@@ -268,7 +268,38 @@ answering on port 8765** produced a raw `JSONDecodeError` rather than a
 message. Found by a reader looking at the code, which is the second time
 this rung a real gap came from reading rather than from a failure.
 
-### v0.9.0: Runs on any operating system
+### v0.9.0: Nothing fails without saying why
+
+Every release so far has fixed failures one at a time, as they were met: the
+seven messages in v0.7.0, the eight stale flag names in v0.8.0, the port
+8765 traceback in v0.8.2. Each was found by someone tripping over it or
+reading the code, never by looking for it.
+
+That is the wrong order. CLAUDE.md 4.4 already says the pipeline must not
+produce a traceback for any expected failure, and it has been enforced by
+noticing rather than by checking. This rung checks.
+
+- **Audit every failure path**, module by module, rather than waiting for
+  reports. For each external call and each `raise`: does it produce a typed
+  exception, a message naming the fix, and a non-zero exit, or does it
+  produce a traceback?
+- **The three kinds that keep recurring**, all seen in v0.8.2: a call that
+  fails, a call that succeeds and returns the wrong shape, and a resource
+  that is present but not what was expected
+- **A test that proves the absence of tracebacks**, not one example of it.
+  The stale-flag scan in `tests/test_main.py` is the pattern: check the
+  class of mistake across the package, not one instance
+- **Structure**, which is a correctness question for anyone reading the
+  repository. Done 4 September 2026: `src/` now holds only the importable
+  package, as PyPA intends and as `psf/requests` and `pallets/flask` do, and
+  the nine unused UI icons plus two loose root diagrams moved to
+  `docs/assets/`
+- **Every document current**, ADRs included
+
+Cross-platform support moved to v0.10.0 to make room. Error handling is the
+larger user-facing win and needs no CI runners this project does not have.
+
+### v0.10.0: Runs on any operating system
 
 The `ANKI_HOST` half of this moved into v0.8.0, since a package that cannot
 reach Anki on the user's own platform is not installable in any useful
@@ -286,7 +317,37 @@ is load-bearing in more places than it looks.
   CLI the primary path and the Makefile a convenience
 - CI on Linux, macOS and Windows, because "should work" is not evidence
 
-### v0.10.0: Runs on modest hardware
+### v0.11.0: Images on cards, gated to concrete nouns
+
+ADR-009 phase 3, designed on 17 August 2026 and deliberately unbuilt since.
+Scheduled here on 4 September 2026 rather than left invisible.
+
+The feature is easy and the gate is the whole problem. Measured on five
+German words, Wikimedia Commons returned two usable images: `Hund` a dog,
+`Haus` a house, and then `Freiheit` a tram in Berlin, `schwierig` a hard
+disk head crash, and `laufen` a 1920 coin from the **town of Laufen**, which
+is the failure mode in one example: the search matched a place name spelled
+the same way.
+
+A wrong image is worse than an empty field. It teaches the wrong
+association, and unlike a wrong definition it is not quiet.
+
+- Attempt an image **only** for concrete nouns. `Class` is already on every
+  card, so `noun` plus a concreteness list is a cheap gate
+- Wikimedia Commons, which needs no key and is already licensed for
+  redistribution, with an attribution field
+- **Acceptance target: the gate measured on a real deck, not five
+  hand-picked words.** Ship disabled by default until then
+- Appended as a new field, so index 12, under the rule in CLAUDE.md 3.2
+
+ADR-009 also warns this should not ship before sense selection improves,
+since a wrong image makes an existing weakness conspicuous. Sense selection
+by part of speech shipped in v0.5.x (ARCHITECTURE 8.29), which lifts part of
+that objection but not all of it: 8.25 and the `Tapa` card record that the
+pipeline still takes the first dictionary entry rather than the sense
+matching the video.
+
+### v0.12.0: Runs on modest hardware
 
 **Measured, 15 August 2026: `.tangovenv` is 5.9 GB and `dictionaries/` is
 820 MB.** Step 1 below shipped on 26 August 2026 and took `.tangovenv` to
@@ -385,7 +446,7 @@ High-end hardware should be able to spend more, not merely avoid crashing:
 worker counts, batch sizes and cache behaviour should scale to what the
 machine has rather than being fixed at defaults chosen on one laptop.
 
-### v0.11.0: Freeze candidate
+### v0.13.0: Freeze candidate
 
 - Write the compatibility document: every item in §3 below, pinned
 - Deprecation policy, what a `0.9 → 1.0` break costs a user
@@ -448,7 +509,7 @@ is what lets 1.0.0 mean "finished" instead of "paused".
 own y/n/s answers so the pipeline stops asking, and a proficiency level so
 common words never become cards. The second half needs no model at all, only
 a frequency-ranked word list, and it belongs on the ladder rather than here:
-it is a filter and a smaller download, which is v0.9.0's goal. The first half
+it is a filter and a smaller download, which is v0.12.0's goal. The first half
 is a classifier trained on user decisions, which is what the third bullet
 above excludes. So the two halves land on opposite sides of this line and
 should not be built as one thing. TASKS.md has the full note, including the
