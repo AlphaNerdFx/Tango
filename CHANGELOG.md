@@ -14,7 +14,16 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working toward v0.9.0, nothing fails without saying why.
+## [0.9.0] - 2026-09-05
+
+Nothing fails without saying why.
+
+Every release before this one fixed failures as they were met: seven
+messages in v0.7.0, eight stale flag names in v0.8.0, a port 8765 traceback
+in v0.8.2. Each was found by someone tripping over it or reading the code.
+CLAUDE.md 4.4 has always required that no expected failure produces a
+traceback, and it was enforced by noticing. This release went looking
+instead, and found seven things.
 
 ### Added
 
@@ -46,6 +55,34 @@ Working toward v0.9.0, nothing fails without saying why.
 - **A test that scans for the mistake rather than listing the cases.** Any
   exception added later without the base fails the suite. It found dead code
   while it was being written.
+
+### Added
+
+- **The .apkg write is guarded.** The last step in the pipeline was the one
+  place a bare `OSError` could reach the user, and the worst: the transcript
+  is fetched, every definition is looked up and paid for, the audio is
+  downloaded, and then a full disk takes the run with it. Both the directory
+  creation and the write are typed now, and the message says how many cards
+  were built and not saved.
+
+- **`tango doctor` names settings in `.env` that nothing reads.** A setting
+  that does nothing is a failure with no message, which is this release's
+  whole subject. Found in a real `.env`: `SPACY_MODEL=en_core_web_sm`, which
+  looks exactly like it chooses the model and is read by nothing, and
+  `API_DELAY`, a leftover. The model comes from the language code; the knob
+  that exists is `SPACY_MODEL_SIZE_OVERRIDE`.
+
+  `config.KNOWN_ENV_KEYS` declares the real names, and a test walks every
+  `os.getenv` in the package and fails if the list drifts either way. It
+  found two keys missing from the list within seconds of being written, and
+  a third that was invisible because it was read through a constant rather
+  than a literal.
+
+- **A `MANIFEST.in`, so the Dockerfile ships in the sdist.** It stands
+  alone: it installs from PyPI and needs no other file from the repository,
+  so someone who downloads the source distribution can build the image from
+  it. v0.8.2 shipped without it because setuptools only ships what it is
+  told about.
 
 ### Changed
 
@@ -743,7 +780,8 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.2...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.7.0...v0.8.0
