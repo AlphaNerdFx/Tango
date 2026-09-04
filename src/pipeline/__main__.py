@@ -43,6 +43,7 @@ from pathlib import Path
 import typer
 
 from pipeline import (
+    TangoError,
     __version__,
     cards,
     deck as deck_module,
@@ -1687,6 +1688,17 @@ def main() -> None:
     """
     try:
         app()
+    except TangoError as exc:
+        # A failure this project raises on purpose, which means someone
+        # wrote a message for it saying what to do. Print that and stop.
+        # Calling it a bug would send the user to open an issue about their
+        # own disk permissions or a closed Anki.
+        #
+        # Most of these are already caught and reported by the command that
+        # raised them; this catches the ones raised below a call site that
+        # did not expect them.
+        _err(str(exc))
+        sys.exit(1)
     # `except Exception`, never `except BaseException`. SystemExit and
     # KeyboardInterrupt are BaseExceptions and must pass straight through:
     # the first carries Typer's own exit codes, including every typed
