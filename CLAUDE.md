@@ -37,7 +37,17 @@ IP someone read as the shipped default lived in an uncommitted `.env`. WSL
 is now detected and handled by retrying rather than by a different default
 (ARCHITECTURE 8.45). The `/mnt/c` path translation in `__main__.py` is
 already conditional on `is_wsl()`.
-**Current tag:** v0.9.0, nothing fails without saying why, released
+**Current tag:** v0.10.0, runs on any operating system, released
+5 September 2026. CI runs the suite on Linux, macOS and Windows, because
+"should work" is not evidence and development happens on WSL2. It found a
+real bug on its first run: an interrupted index build unlinked its
+`.building` file while the SQLite connection was still open, which POSIX
+allows and Windows refuses with `WinError 32`. A WSL user who clones to `~`
+rather than `/mnt/c` now gets an explanation instead of AnkiConnect's
+file-not-found. The CLI is the primary path and the Makefile a convenience,
+since GNU make is not a reasonable requirement on Windows.
+
+v0.9.0 before it was nothing fails without saying why, released
 5 September 2026. Every release before it fixed failures one at a time as
 someone tripped over them; this one went looking. An unexpected error is a
 message rather than a traceback, a corrupt or unwritable database is a typed
@@ -99,7 +109,7 @@ in the learner's language). Every tag has GitHub release notes.
 longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
 5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.12.0,
 where the rest of the size work lives.
-**Working toward:** v0.10.0, runs on any operating system. The
+**Working toward:** v0.11.0, images on cards, gated to concrete nouns. The
 packaging rung moved forward three places on 27 August 2026, from v0.10.0:
 it had sat behind cross-platform support and install size, which is the
 ordering of a project polishing for users who cannot install it. Goals per
@@ -553,7 +563,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1059 passing, 24 deselected. The count drifts as tests are added,
+Expected: 1063 passing, 24 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
@@ -698,7 +708,7 @@ Before inserting a new section into a Markdown doc, print the existing heading o
 
 Do not pick the number by feel. Full ladder to v1.0.0, and the list of what v1.0.0 freezes, in `ROADMAP.md`.
 
-The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied. `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all nineteen have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
+The version lives in **`src/pipeline/__init__.py`** and nowhere else; `pyproject.toml` reads it from there via `[tool.setuptools.dynamic]`. At the moment of tagging, `__version__`, the git tag, and section 1's "Current tag" must agree. They never once did while the version was hand-copied. `pyproject.toml` read `0.1.0` at both v0.4.3 and v0.4.4, `0.4.4` at v0.4.5, and the Wikimedia User-Agent still said `0.4` at v0.5.2. Treat a mismatch as a release bug. Every tag also gets GitHub release notes, and as of 3 September 2026 all twenty have them; v0.4.1 to v0.4.5 were backfilled from their CHANGELOG entries.
 
 ## 16. Commit and tag format
 
