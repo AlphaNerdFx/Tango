@@ -25,6 +25,8 @@ Dependencies:
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 import html
 import json
 import logging
@@ -102,11 +104,11 @@ class DeckCheckResult:
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 
-class AnkiConnectError(Exception):
+class AnkiConnectError(TangoError):
     """AnkiConnect returned an error response."""
 
 
-class AnkiNotRunningError(Exception):
+class AnkiNotRunningError(TangoError):
     """
     AnkiConnect is not reachable.
     Words will be queued to SQLite backlog until Anki is available.
