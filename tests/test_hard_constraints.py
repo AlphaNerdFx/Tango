@@ -559,3 +559,84 @@ class TestEveryDeliberateFailureIsATangoError:
         assert not issubclass(SystemExit, TangoError)
         assert not issubclass(KeyboardInterrupt, TangoError)
         assert issubclass(TangoError, Exception)
+
+
+# -- Every environment variable is declared -----------------------------------
+
+class TestEnvironmentKeysAreDeclared:
+    """
+    v0.9.0. A setting that nothing reads is the quietest failure there is:
+    it looks applied and does nothing. A real .env on 5 September 2026 held
+    `SPACY_MODEL=en_core_web_sm`, which looks exactly like it chooses the
+    model and is read by nothing, and `API_DELAY`, a leftover. `tango
+    doctor` now reports them, which only works while the declared list is
+    accurate.
+
+    So the list is checked against the code both ways: nothing read may be
+    missing from it, and nothing in it may be unread. Either direction going
+    stale turns the report into noise or, worse, into a confident all-clear.
+    """
+
+    @staticmethod
+    def _keys_read_in_source() -> set:
+        root = Path(__file__).resolve().parent.parent / "src" / "pipeline"
+        found = set()
+        for path in root.glob("*.py"):
+            # Comment lines are dropped first. This scan reads code, and a
+            # comment that mentions getenv("NAME") to explain the scan
+            # itself was picked up as a key on the first run.
+            text = "\n".join(
+                line for line in path.read_text(encoding="utf-8").splitlines()
+                if not line.lstrip().startswith("#")
+            )
+            found |= set(re.findall(r'getenv\(\s*["\']([A-Z_][A-Z0-9_]*)["\']', text))
+            found |= set(re.findall(r'environ\[\s*["\']([A-Z_][A-Z0-9_]*)["\']', text))
+            found |= set(re.findall(
+                r'_resolve_path\(\s*["\']([A-Z_][A-Z0-9_]*)["\']', text))
+        return found
+
+    def test_the_scan_finds_something(self):
+        # Guards the scan itself. If the regexes stop matching, the two
+        # tests below would pass by comparing empty sets.
+        assert len(self._keys_read_in_source()) >= 15
+
+    def test_every_key_the_code_reads_is_declared(self):
+        from pipeline.config import KNOWN_ENV_KEYS
+
+        missing = sorted(self._keys_read_in_source() - set(KNOWN_ENV_KEYS))
+        assert not missing, (
+            "These are read by the code but missing from KNOWN_ENV_KEYS, so "
+            "`tango doctor` would report a user's correct setting as one "
+            "that does nothing:\n  " + "\n  ".join(missing)
+        )
+
+    def test_every_declared_key_is_actually_read(self):
+        from pipeline.config import KNOWN_ENV_KEYS, UNREAD_BY_DESIGN
+
+        unread = sorted(set(KNOWN_ENV_KEYS) - UNREAD_BY_DESIGN
+                        - self._keys_read_in_source())
+        assert not unread, (
+            "These are declared known but nothing reads them, so doctor "
+            "would stay silent about a setting that does nothing:\n  "
+            + "\n  ".join(unread)
+        )
+
+    def test_the_example_file_documents_the_real_names(self):
+        # .env.example is what a user copies. A name in it that nothing
+        # reads teaches the wrong setting; this repository shipped
+        # SPACY_MODEL_SIZE_OVERRIDE correctly but had no guard against the
+        # next one being wrong.
+        from pipeline.config import KNOWN_ENV_KEYS
+
+        root = Path(__file__).resolve().parent.parent
+        text = (root / ".env.example").read_text(encoding="utf-8")
+        documented = {
+            line.split("=", 1)[0].strip()
+            for line in text.splitlines()
+            if line.strip() and not line.strip().startswith("#") and "=" in line
+        }
+        undeclared = sorted(documented - set(KNOWN_ENV_KEYS))
+        assert not undeclared, (
+            "Documented in .env.example but not a key this project knows:\n  "
+            + "\n  ".join(undeclared)
+        )
