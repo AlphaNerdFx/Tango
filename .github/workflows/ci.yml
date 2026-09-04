@@ -7,15 +7,30 @@ on:
     branches: [main]
 
 jobs:
+  # v0.10.0: the rung's own words are "CI on Linux, macOS and Windows,
+  # because should work is not evidence". Development happens on WSL2, so
+  # every claim about the other two was an assertion until this job existed.
+  #
+  # Not a full 3x3. Linux covers the Python range because it is the cheap
+  # runner; macOS and Windows run one version each, because what they test
+  # is the operating system rather than the interpreter, and macOS runners
+  # bill at a multiplier. Five jobs, not nine.
   test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} py${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # 3.9 is not supported: spaCy 3.8's thinc dependency has no wheel
         # for it (Requires-Python >=3.10). See pyproject.toml's
         # requires-python and CONTRIBUTING.md.
+        os: [ubuntu-latest]
         python-version: ["3.10", "3.11", "3.12"]
+        include:
+          - os: macos-latest
+            python-version: "3.12"
+          - os: windows-latest
+            python-version: "3.12"
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
