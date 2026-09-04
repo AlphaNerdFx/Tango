@@ -30,7 +30,7 @@ code.
 **Repository:** https://github.com/AlphaNerdFx/Tango
 **Virtual environment:** `.tangovenv`, do NOT create `.venv`, it is the wrong name
 **Python:** 3.10. Developed under WSL2 on Windows 11, but that is the
-current environment, not a target: cross-platform support is a v0.9.0 goal.
+current environment, not a target: cross-platform support is a v0.10.0 goal.
 The `ANKI_HOST` half of that is done, and was not what this file said it
 was: the default has always been `http://localhost:8765`, and the gateway
 IP someone read as the shipped default lived in an uncommitted `.env`. WSL
@@ -86,9 +86,9 @@ the card), v0.5.2 (audio plays inside the card) and v0.5.3 (part of speech
 in the learner's language). Every tag has GitHub release notes.
 **Also on main, and not part of either rung:** the translation install no
 longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
-5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.9.0,
+5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.12.0,
 where the rest of the size work lives.
-**Working toward:** v0.9.0, runs on any operating system. The
+**Working toward:** v0.9.0, nothing fails without saying why. The
 packaging rung moved forward three places on 27 August 2026, from v0.10.0:
 it had sat behind cross-platform support and install size, which is the
 ordering of a project polishing for users who cannot install it. Goals per
@@ -355,7 +355,7 @@ it keeps the dependency undeclared, not uninstalled, once anyone runs
 `pip install torch`, or any resolve of stanza's `torch>=1.3.0` in an
 environment without torch, brings the CUDA wheel and its 3.7 GB straight
 back. And a number in this file that nobody re-measured was wrong by 3x for
-months, so see ROADMAP.md v0.9.0, where shrinking this is a release goal
+months, so see ROADMAP.md v0.12.0, where shrinking this is a release goal
 with acceptance targets.
 
 **The base install, measured 3 September 2026 in a clean venv: 334 MB
@@ -530,7 +530,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1040 passing, 24 deselected. The count drifts as tests are added,
+Expected: 1046 passing, 24 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
@@ -727,3 +727,116 @@ messages, release notes, docs, comments, CLI output.
   missing, roughly once per document. A page of bold has no emphasis in it.
 - Prefer a short sentence to a long one, and a concrete number to an
   adjective.
+## 18. What has worked
+
+Practices that earned their place by catching something real. Each one below
+has a date and a specific find, because a methodology with no evidence is
+just a preference.
+
+### 18.1 Measure it, and write the date next to the number
+
+Every unmeasured number in this project has been wrong, several by a lot.
+`torch` was described as "roughly 1.5GB" for months and was 4.5 GB. The
+uninstall rung said "800 MB of indexes"; measured, it is 1.2 GB. ROADMAP
+asked for a default install with "no translation, no torch" that already had
+neither, and the real figure, 334 MB across 58 packages, had never been
+taken.
+
+So: run the command, read the number, write it down with the date. A figure
+in this repository with no date should be treated as unmeasured.
+
+### 18.2 Hardcode nothing that has a live source
+
+The README's version badge was hardcoded and sat at `v0.5.3` for five
+releases. It now reads from PyPI and the GitHub releases API, so it cannot
+go stale. `--version` reads `pipeline.__version__` rather than installed
+metadata, which under an editable install reports whatever it was at install
+time. `_data_locations()` reads paths from `config`, so a user who
+redirected `DICT_DIR` gets their own.
+
+Before writing a literal, ask what happens when the thing it describes
+changes. If the answer is "nothing, and nobody notices", derive it instead.
+
+### 18.3 Run the feature and watch it work before writing tests for it
+
+Tests written before the code has been seen working encode what the author
+hoped would happen. The WSL AnkiConnect fallback was first exercised only
+through the branch that *declines* it, so the retry had never been observed;
+driving it against a real Anki found a log message telling the user to
+hardcode an address while saying that address goes stale.
+
+Exercise the real path, not an adjacent one. Reaching an early return is not
+the same as reaching the feature.
+
+### 18.4 A mutation that survives means the test is wrong
+
+Break the code deliberately and confirm the intended test fails. When it does
+not, fix the test rather than leaving the claim standing. Twice on
+3 September 2026: an `is_eager` comment claimed a test pinned it and nothing
+did, and `test_dry_run_deletes_nothing` passed with the dry-run guard
+removed, because a *different* guard was catching it.
+
+### 18.5 Pin the intent, never the spelling
+
+Two tests asserted the literal strings `--doctor` and
+`--install-translation de:en`. When v0.7.0 deleted those flags, the messages
+became wrong and both tests kept passing, so the test and the bug went stale
+as a matched pair. Assert what must be true (`"tango doctor" in message`,
+and `"python -m pipeline" not in message`), and add a scan across the
+package where one case implies a class of them.
+
+### 18.6 Handle the whole failure surface, not the expected one
+
+A port answering is not the same as the right service answering. Anything
+can sit on 8765, and `response.json()` was unguarded, so a stray web server
+produced `Expecting value: line 1 column 1 (char 0)`. Three shapes needed
+handling, not one: a non-JSON body, an HTTP error status, and valid JSON
+with the wrong schema.
+
+For any external call, ask what happens when it succeeds and returns
+something unexpected, not only when it fails.
+
+### 18.7 Reproduce before fixing, and keep the reproduction
+
+Stand up the failure first. A `http.server` on a spare port reproduced the
+port bug in seconds and then verified all three messages afterwards. A fix
+for a bug never seen is a guess.
+
+### 18.8 Prefer a fallback over changing a default
+
+When a default is right for most and wrong for some, add a path for the some
+rather than moving the default. `ANKI_HOST` stays `localhost`, correct on
+macOS, native Linux, native Windows and WSL2 mirrored networking, and a
+refused connection retries once against the Windows host. Defaulting to the
+gateway under WSL would have broken the mirrored-networking users who work
+today.
+
+An explicit setting from the user is never second-guessed.
+
+### 18.9 In a mechanical sweep, separate data from writing
+
+Replacing 490 em dashes would have renamed the Anki notetype
+(`YT Anki Pipeline — Recognition`, which every existing collection matches
+against) and changed the attribution line printed on every card. Sample the
+matches first, protect the ones that are data, and re-read the diff for
+places where the mechanical answer reads wrong.
+
+### 18.10 Check a convention against real projects, not memory
+
+Before moving files, `src/images/` was checked against the PyPA guidance and
+six well-known repositories on 4 September 2026: `src/` holds importable
+code, `psf/requests` has exactly `src/requests/`, and none of the six keeps a
+loose image at the repository root. That took two minutes and replaced an
+opinion with evidence.
+
+### 18.11 A published artifact is frozen; verify before you upload
+
+PyPI burns a version number permanently and will not let a description be
+edited afterwards. Before uploading: build from the tagged tree, run
+`twine check`, inspect the sdist for secrets and stray files, and install
+the built wheel into a clean virtualenv and run it. v0.8.1 exists only
+because the README shipped `make` instructions to people who had installed
+with pip, and the published page could not be corrected any other way.
+
+The same applies to anything with an audience. A Dockerfile is built and run
+before it ships, not written and hoped for.
