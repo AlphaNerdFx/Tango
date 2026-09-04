@@ -59,7 +59,7 @@ usually been a number nobody re-measured after the thing it described
 changed.
 
 The dump never has to touch disk: `curl | zcat | grep` filters it in flight,
-which matters given ROADMAP v0.9.0 and a repository whose largest single
+which matters given ROADMAP v0.12.0 and a repository whose largest single
 package is 725 MB. What ships afterwards is 4.3 MB, against 131 to 404 MB
 for one language's Wiktionary index.
 
