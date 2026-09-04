@@ -309,6 +309,30 @@ class TestRunSetupWizard:
 class TestPromptImport:
 
     @pytest.fixture(autouse=True)
+    def _anki_is_local(self):
+        """
+        Pin AnkiConnect to localhost for this class.
+
+        Not cosmetic. `config` calls `load_dotenv()` at import, so the suite
+        reads the developer's own `.env`, and on a WSL machine that points
+        `ANKI_HOST` at the Windows gateway. From v0.10.0 `_prompt_import`
+        refuses to send a POSIX path to a Windows-side Anki, correctly,
+        because Windows cannot open one. These tests use `tmp_apkg`, which
+        lives under /tmp.
+
+        The result was three tests that passed on CI, where there is no
+        `.env`, and failed on the machine the project is developed on. The
+        same shape as ARCHITECTURE 8.39: a check that is honestly reporting
+        on something other than what the reader thinks.
+
+        Pinned here so these tests measure the import wiring they name,
+        rather than whoever's `.env`.
+        """
+        with patch.object(main_module.deck_module, "_active_host",
+                          "http://localhost:8765"):
+            yield
+
+    @pytest.fixture(autouse=True)
     def _aligned_notetype(self):
         """
         Stub the pre-import notetype alignment for this class.
@@ -1626,3 +1650,79 @@ class TestUnexpectedErrorsReachTheUserAsMessages:
             "traceback: %r" % [(r.levelname, r.message) for r in records]
         )
         assert any(r.exc_info for r in records), "the traceback itself must be kept"
+
+
+class TestWslInternalPathIsExplained:
+    """
+    v0.10.0. Under WSL, Anki runs on the Windows side and can only open
+    paths Windows can see. `/mnt/<drive>` paths translate; anything under
+    `/home` does not, because it has no Windows equivalent.
+
+    That is not a corner case: it happens to any WSL user who clones to `~`
+    rather than to `/mnt/c`, which is the more natural place to clone. What
+    they got was AnkiConnect's own file-not-found, which says nothing about
+    why a file that plainly exists cannot be found.
+    """
+
+    @staticmethod
+    def _deck(mock_deck):
+        mock_deck.ensure_model_fields.return_value = []
+        mock_deck.ANKI_IMPORT_TIMEOUT = 300
+        return mock_deck
+
+    def test_a_wsl_internal_path_is_not_sent_to_anki(self):
+        with patch.object(main_module, "_is_wsl", return_value=True), \
+             patch.object(main_module.Path, "resolve",
+                          return_value=PurePosixPath("/home/you/out/v.apkg")), \
+             patch("builtins.input", return_value="y"), \
+             patch.object(main_module, "deck_module") as deck, \
+             patch("requests.post") as post:
+            self._deck(deck)
+            main_module._prompt_import(Path("/home/you/out/v.apkg"))
+        post.assert_not_called()
+
+    def test_it_says_why_and_how_to_fix_it(self, capsys):
+        with patch.object(main_module, "_is_wsl", return_value=True), \
+             patch.object(main_module.Path, "resolve",
+                          return_value=PurePosixPath("/home/you/out/v.apkg")), \
+             patch("builtins.input", return_value="y"), \
+             patch.object(main_module, "deck_module") as deck, \
+             patch("requests.post"):
+            self._deck(deck)
+            main_module._prompt_import(Path("/home/you/out/v.apkg"))
+        out = "".join(capsys.readouterr())
+        # The cause, and the two ways out.
+        assert "Windows" in out
+        assert "OUTPUT_DIR" in out
+        assert "/mnt" in out
+        # It must not read as the package having failed to build.
+        assert "package is fine" in out
+
+    def test_a_mnt_path_is_still_translated_and_sent(self):
+        response = MagicMock()
+        response.json.return_value = {"result": True, "error": None}
+        with patch.object(main_module, "_is_wsl", return_value=True), \
+             patch.object(main_module.Path, "resolve",
+                          return_value=PurePosixPath("/mnt/c/out/v.apkg")), \
+             patch("builtins.input", return_value="y"), \
+             patch.object(main_module, "deck_module") as deck, \
+             patch("requests.post", return_value=response) as post:
+            self._deck(deck)
+            main_module._prompt_import(Path("/mnt/c/out/v.apkg"))
+        assert post.call_args[1]["json"]["params"]["path"] == "C:\\out\\v.apkg"
+
+    def test_off_wsl_a_posix_path_is_sent_untouched(self):
+        # On macOS and native Linux, Anki is on the same machine, so an
+        # absolute POSIX path is exactly what AnkiConnect wants. Blocking it
+        # here would break the platforms that already worked.
+        response = MagicMock()
+        response.json.return_value = {"result": True, "error": None}
+        with patch.object(main_module, "_is_wsl", return_value=False), \
+             patch.object(main_module.Path, "resolve",
+                          return_value=PurePosixPath("/home/you/out/v.apkg")), \
+             patch("builtins.input", return_value="y"), \
+             patch.object(main_module, "deck_module") as deck, \
+             patch("requests.post", return_value=response) as post:
+            self._deck(deck)
+            main_module._prompt_import(Path("/home/you/out/v.apkg"))
+        assert post.call_args[1]["json"]["params"]["path"] == "/home/you/out/v.apkg"
