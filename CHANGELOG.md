@@ -14,7 +14,9 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working toward v0.10.0, runs on any operating system.
+## [0.10.0] - 2026-09-05
+
+Runs on any operating system, and now there is evidence for the claim.
 
 ### Added
 
@@ -829,7 +831,8 @@ Correctness release, 67 commits.
 
 - Initial working pipeline: YouTube transcript to Anki cards, 323 unit tests.
 
-[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/AlphaNerdFx/Tango/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/AlphaNerdFx/Tango/compare/v0.8.0...v0.8.1
