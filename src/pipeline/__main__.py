@@ -53,7 +53,7 @@ from pipeline import (
 )
 from pipeline.translation import reset_warning_state
 
-from pipeline.config import MW_RATE_LIMIT
+from pipeline.config import MW_RATE_LIMIT, unknown_env_keys
 from pipeline.config import is_wsl as config_is_wsl
 from pipeline.definition import reset_circuit_breaker
 from pipeline.language import (
@@ -1428,6 +1428,16 @@ def _run_doctor() -> int:
     print("  Tango environment")
     print(f"    project root   {PROJECT_ROOT}")
     print(f"    database       {DB_PATH}  {'(exists)' if DB_PATH.exists() else '(will be created)'}")
+
+    # A setting nothing reads is the quietest failure there is: it looks
+    # applied and does nothing. Reported here because doctor is where
+    # someone goes when the tool is not behaving as they configured it.
+    stray = unknown_env_keys()
+    if stray:
+        print(f"    .env           {len(stray)} setting(s) that nothing reads: "
+              f"{', '.join(stray)}")
+        print(f"                   these have no effect. See .env.example for "
+              f"the names that do.")
     print()
 
     # ── spaCy models: without one, a language cannot be processed at all ──
@@ -1662,6 +1672,11 @@ def _run_build_antonyms() -> None:
 # The environment variable that turns the safety net off. A developer
 # chasing a bug wants the traceback, and deleting it to get one is a poor
 # trade.
+#
+# Read as a literal at the call site rather than through this constant. A
+# test scans the package for `getenv("NAME")` to keep config.KNOWN_ENV_KEYS
+# honest, and an indirection makes the key invisible to it, which is how
+# this one first went undeclared.
 _DEBUG_ENV = "TANGO_DEBUG"
 
 
@@ -1711,7 +1726,7 @@ def main() -> None:
         # replaced it. Under --verbose it is emitted in full.
         logging.getLogger(__name__).debug(
             "Unhandled %s", type(exc).__name__, exc_info=True)
-        if os.getenv(_DEBUG_ENV):
+        if os.getenv("TANGO_DEBUG"):
             raise
         _err(f"Unexpected {type(exc).__name__}: {exc}")
         _info("This is a bug in Tango, not something you did wrong.")
