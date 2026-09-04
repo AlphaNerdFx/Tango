@@ -19,6 +19,8 @@ Constants (moved to config.py at end of project):
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 import logging
 import os
 import sqlite3
@@ -35,7 +37,7 @@ from pipeline.config import DB_PATH
 
 # -- Custom exceptions --------------------------------------------------------
 
-class VideoAlreadyProcessedError(Exception):
+class VideoAlreadyProcessedError(TangoError):
     """
     Raised when a video ID has already been fully processed.
     The pipeline warns the user and continues without creating new cards.
@@ -54,13 +56,65 @@ class VideoAlreadyProcessedError(Exception):
         )
 
 
+class StateDatabaseError(TangoError):
+    """
+    Raised when the run database cannot be opened or read.
+
+    v0.9.0. Two real cases, both reproduced on 4 September 2026 rather than
+    imagined: a truncated or non-database file gives
+    `sqlite3.DatabaseError: file is not a database`, and a path the process
+    cannot write gives `sqlite3.OperationalError: unable to open database
+    file`. Both used to reach the user as a traceback.
+
+    Neither is a bug in this tool, which matters: the top-level handler in
+    `__main__` would otherwise say "this is a bug in Tango" and send the
+    user to open an issue about their own disk permissions.
+    """
+
+
 # -- DB connection ------------------------------------------------------------
+
+def _describe_db_failure(exc: sqlite3.Error) -> str:
+    """
+    Turn a sqlite3 error about the run database into something actionable.
+
+    The three causes worth separating, because the fix differs: the file is
+    not a database, the process cannot write where the file lives, and
+    something else holds the lock.
+    """
+    text = str(exc).lower()
+    if "not a database" in text or "malformed" in text:
+        cause = (f"  '{DB_PATH}' is not a valid database file. If it was "
+                 f"truncated or overwritten, deleting it loses the definition "
+                 f"cache but nothing else, and the next run rebuilds it.")
+    elif "unable to open" in text or "readonly" in text or "permission" in text:
+        cause = (f"  Nothing can be written at '{DB_PATH}'. Check the "
+                 f"directory exists and is writable, or set DB_PATH in .env "
+                 f"to somewhere it is.")
+    elif "locked" in text or "busy" in text:
+        cause = (f"  '{DB_PATH}' is locked by another process. Close any "
+                 f"other Tango run and retry.")
+    else:
+        cause = f"  Database at '{DB_PATH}'."
+    return f"Cannot open the run database: {exc}\n{cause}"
+
 
 def _get_db() -> sqlite3.Connection:
     """
     Return a SQLite connection with WAL mode and row factory enabled.
     Creates all state.py-owned tables if they do not exist.
+
+    Raises:
+        StateDatabaseError: The database cannot be opened, read or created.
     """
+    try:
+        return _connect_db()
+    except sqlite3.Error as exc:
+        raise StateDatabaseError(_describe_db_failure(exc)) from exc
+
+
+def _connect_db() -> sqlite3.Connection:
+    """Open the connection and ensure this module's tables exist."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
