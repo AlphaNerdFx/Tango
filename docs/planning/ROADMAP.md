@@ -299,6 +299,29 @@ noticing rather than by checking. This rung checks.
 Cross-platform support moved to v0.10.0 to make room. Error handling is the
 larger user-facing win and needs no CI runners this project does not have.
 
+**Released 5 September 2026.** Seven things found by looking rather than by
+tripping over them:
+
+1. An unexpected exception was a raw traceback. Now a message, a statement
+   that it is a bug rather than the user's fault, and the issue tracker.
+   `TANGO_DEBUG=1` restores the traceback.
+2. A corrupt or unwritable run database raised bare `sqlite3` errors. Both
+   reproduced before fixing; each cause now names its own fix.
+3. The .apkg write was unguarded, at the one point in the pipeline where
+   failing costs everything already paid for.
+4. Twenty typed exceptions had no common base, so the entry point could not
+   tell an expected failure from a bug. Without `TangoError`, fix 1 would
+   have made fix 2 worse: a corrupt database would have been reported as a
+   bug in Tango.
+5. Two settings in a real `.env` did nothing and said nothing.
+   `tango doctor` reports them now.
+6. Two implementations of WSL detection, both reading `/proc/version`.
+7. `_TranslationTimeoutError` was dead code, never raised or caught.
+
+Two of these were found by tests while those tests were being written, which
+is the argument for scanning for a class of mistake rather than fixing the
+instance.
+
 ### v0.10.0: Runs on any operating system
 
 The `ANKI_HOST` half of this moved into v0.8.0, since a package that cannot
