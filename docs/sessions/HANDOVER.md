@@ -1,20 +1,25 @@
 # HANDOVER
 
-Written 4 September 2026.
+Written 5 September 2026.
 
 ## Where the tree is
 
 | | |
 |---|---|
 | branch | `main`, in sync with `tango-origin` |
-| last tag | `v0.8.2`, released 4 September 2026 |
-| `__version__` | `0.8.2` |
+| last tag | **`v0.9.0`**, released 5 September 2026 |
+| `__version__` | `0.9.0` |
 | `make check` | exit 0 |
-| tests | **1049 passing, 24 integration deselected** |
+| tests | **1059 passing, 24 integration deselected** |
 | PyPI | `pip install tango-anki` |
 
-v0.9.0 is in progress and unreleased. Nothing is half-applied; everything
-described below is committed.
+v0.9.0 is released and on PyPI. Nineteen tags, nineteen GitHub releases.
+
+**Working autonomously from here**, under two standing decisions taken
+5 September 2026: commit and push freely, but **ask before any tag or PyPI
+upload**, because a version number is burned permanently and a published
+description cannot be edited. And where a crossroad is already settled in a
+document, follow what was designed rather than asking again.
 
 ## What v0.9.0 is
 
@@ -82,27 +87,34 @@ acceptance target.
 
 ## The exact next step
 
-Finish v0.9.0:
+**v0.10.0, runs on any operating system.** The `ANKI_HOST` half shipped in
+v0.8.0. What is left:
 
-1. **Continue the audit.** Done: the entry point, the run database, the
-   exception hierarchy, AnkiConnect. Not yet swept: `transcript.py`,
-   `cards.py` and `media.py` failure paths, and what happens when the
-   output directory is unwritable at the end of a long run.
-2. **Decide on `requirements.txt`.** It and `requirements-dev.txt`
-   duplicate `pyproject.toml` and are a known drift source here:
-   ARCHITECTURE 8.39 records "CI was green on a requirements file it never
-   installed". Either generate them or delete them.
-3. Then bump, tag, release, publish.
+1. `_translate_wsl_path()` and `_is_wsl()` exist because AnkiConnect
+   resolves paths Windows-side. macOS and native Linux need neither; native
+   Windows needs different path handling.
+2. The Makefile is the documented entry point for 23 targets and GNU make is
+   not reasonable on Windows. `make help` already prints the CLI equivalent
+   of every user-facing target, so the work is making the CLI primary.
+3. **CI on Linux, macOS and Windows.** Decided 5 September 2026: add the
+   matrix and let GitHub Actions be the evidence. This machine is Linux
+   only, so any claim about the other two would be an assertion. Read the
+   real run results, and treat failures on those runners as the actual
+   work.
 
-Two follow-ups still open from v0.8.2: a `MANIFEST.in` so the Dockerfile
-ships in the sdist, and a README line saying where the Dockerfile comes
-from, since `docker build .` assumes a clone and that is invisible on PyPI.
+Both v0.8.2 follow-ups are closed: `MANIFEST.in` ships the Dockerfile in the
+sdist, and the README says where the Dockerfile comes from.
+
+`requirements.txt` is **not** an open decision, and an earlier version of
+this file wrongly said it was. ARCHITECTURE 8.39 settled it: keep both
+files, guarded by the `pins` CI job and `scripts/check_pins.py`, which
+resolves them and catches a pin that contradicts pyproject's declared range.
+Verified passing on 5 September 2026.
 
 ## Open decisions
 
 | decision | why it is waiting |
 |---|---|
-| **`requirements.txt` vs `pyproject.toml`** | Two sources for one dependency list. Deleting them is cleaner; some users expect the file |
 | **Publishing the Docker image** | Builds and runs. Pushing to a registry needs an account and a choice of one |
 | **French fixed expressions** | `d'accord` becomes `accord`. 7 of 1079 cards, six legitimate words. Needs a hand-curated per-language list |
 | **Transcript fallback** | The whole pipeline depends on one extraction path. A user-supplied subtitle file is the cheap half |
