@@ -8,6 +8,7 @@ Run: pytest tests/test_main.py -m "not integration"
 """
 
 import json
+import logging
 import time
 from pathlib import Path
 from unittest.mock import DEFAULT, MagicMock, patch, call
@@ -1537,3 +1538,85 @@ class TestUninstall:
         assert "Could not remove" in captured.err
         # The directories it could not remove must still be there.
         assert (tmp_path / "dictionaries").exists()
+
+
+class TestUnexpectedErrorsReachTheUserAsMessages:
+    """
+    v0.9.0. CLAUDE.md 4.4 says the pipeline must not produce a traceback for
+    an expected failure, and until now that was enforced by noticing rather
+    than by checking. Every typed failure is caught by the command that
+    raised it; nothing caught what was left, so a genuine bug printed a
+    Python traceback at the user.
+
+    A traceback is the right thing to record and the wrong thing to show. It
+    is not actionable, and it reads as the tool breaking rather than as a
+    case it does not handle.
+    """
+
+    def test_an_unexpected_exception_becomes_a_message_and_exit_1(self, capsys):
+        with patch.object(main_module, "app", side_effect=RuntimeError("disk on fire")):
+            with pytest.raises(SystemExit) as exc:
+                main_module.main()
+        assert exc.value.code == 1
+        captured = capsys.readouterr()
+        combined = captured.out + captured.err
+        assert "RuntimeError" in combined
+        assert "disk on fire" in combined
+
+    def test_the_message_says_it_is_a_bug_and_where_to_report_it(self, capsys):
+        with patch.object(main_module, "app", side_effect=RuntimeError("boom")):
+            with pytest.raises(SystemExit):
+                main_module.main()
+        combined = "".join(capsys.readouterr())
+        assert "bug in Tango" in combined
+        assert "github.com/AlphaNerdFx/Tango/issues" in combined
+        # Without a way back to the traceback this trades one problem for
+        # another: the user cannot report what they cannot see.
+        assert "TANGO_DEBUG" in combined
+
+    def test_debug_env_re_raises_so_developers_keep_the_traceback(self, monkeypatch):
+        monkeypatch.setenv("TANGO_DEBUG", "1")
+        with patch.object(main_module, "app", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError):
+                main_module.main()
+
+    def test_a_systemexit_passes_straight_through(self):
+        # Typer's own exits, including --help and every typed failure that
+        # already printed its message. Wrapping those would double the
+        # output and change the exit code.
+        #
+        # This guards the choice of `except Exception` over
+        # `except BaseException`. SystemExit is a BaseException, so the
+        # handler never sees one, which is why an explicit
+        # `except SystemExit: raise` was removed as redundant.
+        with patch.object(main_module, "app", side_effect=SystemExit(2)):
+            with pytest.raises(SystemExit) as exc:
+                main_module.main()
+        assert exc.value.code == 2
+
+    def test_a_clean_run_is_left_alone(self):
+        with patch.object(main_module, "app") as app:
+            main_module.main()
+        app.assert_called_once()
+
+    def test_the_traceback_is_recorded_below_the_default_level(self, caplog):
+        # The intent: the traceback is kept for --verbose and never emitted
+        # at a level the default console shows. logging.exception records at
+        # ERROR, which the last-resort handler prints to stderr, putting the
+        # traceback back above the message that replaced it.
+        #
+        # Asserted through caplog, not capsys. pytest installs a root
+        # handler, so the last-resort handler never fires and stdout capture
+        # cannot see logging output at all: an earlier version of this test
+        # checked capsys and could not fail, which a mutation proved.
+        with caplog.at_level(logging.DEBUG, logger="pipeline.__main__"):
+            with patch.object(main_module, "app", side_effect=RuntimeError("boom")):
+                with pytest.raises(SystemExit):
+                    main_module.main()
+        records = [r for r in caplog.records if r.name == "pipeline.__main__"]
+        assert records, "the traceback must still be recorded for --verbose"
+        assert all(r.levelno <= logging.DEBUG for r in records), (
+            "recorded above DEBUG, so the default console would print the "
+            "traceback: %r" % [(r.levelname, r.message) for r in records]
+        )
+        assert any(r.exc_info for r in records), "the traceback itself must be kept"
