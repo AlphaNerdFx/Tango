@@ -24,6 +24,8 @@ Constants (moved to config.py at end of project):
 
 from __future__ import annotations
 
+from pipeline import TangoError
+
 import logging
 import os
 import sys
@@ -69,14 +71,14 @@ _MODEL_SIZE_HINT_MB = 150
 
 # ── Custom exceptions ─────────────────────────────────────────────────────────
 
-class TranslationUnavailableError(Exception):
+class TranslationUnavailableError(TangoError):
     """
     Raised when no translation source is available and the user chose to exit.
     The pipeline catches this and exits cleanly.
     """
 
 
-class ModelNotInstalledError(Exception):
+class ModelNotInstalledError(TangoError):
     """
     Raised when the required argostranslate model is not installed.
     Caller should offer to download it.
@@ -478,10 +480,6 @@ def download_model(from_code: str, to_code: str) -> bool:
         sys.stdout.write("\n")
         logger.error("Model installation failed: %s", exc)
         return False
-
-
-class _TranslationTimeoutError(Exception):
-    """Internal: local translation exceeded LOCAL_TRANSLATION_TIMEOUT."""
 
 
 _warm_lock = threading.Lock()
