@@ -494,3 +494,68 @@ class TestConstraint36NoHeavyBaseDependencies:
         optional = self._project()["optional-dependencies"]
         assert "argostranslate" in self._names(optional["translation"])
         assert "argostranslate" not in self._names(self._project()["dependencies"])
+
+
+# -- Every deliberate failure is a TangoError ---------------------------------
+
+class TestEveryDeliberateFailureIsATangoError:
+    """
+    v0.9.0. `main()` has to tell a failure this project raises on purpose
+    from a genuine bug, because the two need opposite messages: one says
+    what to do about it, the other says "please report this".
+
+    Without a shared base it could only catch `Exception`, so a corrupt
+    database or a closed Anki was reported to the user as a bug in Tango and
+    sent them to open an issue about their own environment.
+
+    This scans for the mistake rather than listing the classes, because the
+    failure mode is a *new* exception added later without the base. That is
+    exactly the kind of thing prose asks a reviewer to notice and a test
+    notices instead.
+    """
+
+    @staticmethod
+    def _exception_classes():
+        import importlib
+        import inspect
+
+        from pipeline import TangoError
+
+        root = Path(__file__).resolve().parent.parent / "src" / "pipeline"
+        found = []
+        for path in sorted(root.glob("*.py")):
+            if path.stem == "__init__":
+                continue
+            module = importlib.import_module("pipeline.%s" % path.stem)
+            for name, obj in vars(module).items():
+                if (inspect.isclass(obj)
+                        and issubclass(obj, BaseException)
+                        and obj.__module__ == module.__name__):
+                    found.append((path.name, name, obj, TangoError))
+        return found
+
+    def test_the_project_defines_exceptions_at_all(self):
+        # Guards the scan itself: if the discovery breaks, the two tests
+        # below would pass by finding nothing.
+        assert len(self._exception_classes()) >= 15
+
+    def test_every_module_exception_inherits_tango_error(self):
+        offenders = [
+            "%s: %s" % (fname, name)
+            for fname, name, obj, base in self._exception_classes()
+            if not issubclass(obj, base)
+        ]
+        assert not offenders, (
+            "These are raised deliberately but do not inherit TangoError, so "
+            "main() will report them to the user as bugs in Tango:\n  "
+            + "\n  ".join(offenders)
+        )
+
+    def test_tango_error_does_not_swallow_control_flow(self):
+        # SystemExit and KeyboardInterrupt must never be TangoErrors: the
+        # first carries Typer's exit codes, the second is Ctrl-C.
+        from pipeline import TangoError
+
+        assert not issubclass(SystemExit, TangoError)
+        assert not issubclass(KeyboardInterrupt, TangoError)
+        assert issubclass(TangoError, Exception)
