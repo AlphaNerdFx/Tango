@@ -11,10 +11,10 @@ pytest==9.1.1
 black==26.5.1
 
 # Linter
-ruff==0.16.2
+ruff==0.16.5
 
 # Static type checker
-mypy==2.3.0
+mypy==2.3.1
 
 # Type stubs
 types-requests==2.33.0.20260712
