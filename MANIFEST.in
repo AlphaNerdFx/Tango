@@ -1,0 +1,14 @@
+# The Dockerfile stands alone: it pip-installs from PyPI and needs no other
+# file from the repository, so someone who downloads the sdist can build the
+# image from it. setuptools ships only what it knows about, and it does not
+# know about this, so v0.8.2 shipped without it.
+include Dockerfile
+
+# The documents a reader of the source would look for first.
+include CHANGELOG.md
+include SECURITY.md
+include CONTRIBUTING.md
+include CODE_OF_CONDUCT.md
+
+# Not the docs tree, the wiki, or the PDFs. They are large, they are not
+# needed to build or run anything, and the repository is one link away.
