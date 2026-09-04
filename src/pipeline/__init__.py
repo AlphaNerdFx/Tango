@@ -15,3 +15,23 @@ which reported 0.1.0 long after the file said otherwise.
 """
 
 __version__ = "0.8.2"
+
+
+class TangoError(Exception):
+    """
+    Base class for every failure this project raises deliberately.
+
+    Added in v0.9.0 so the entry point can tell an expected failure from a
+    bug. Before it, `main()` could only catch `Exception`, so a corrupt
+    database or a missing model reached the user under "This is a bug in
+    Tango, please report it", which is both wrong and a waste of their time.
+
+    Every module keeps its own specific exception types and its own
+    messages. This only adds a shared ancestor, so `except AnkiConnectError`
+    and every other existing handler behave exactly as before.
+
+    The rule for raising one: if a message can tell the user what to do
+    about it, it is a TangoError. If the only honest message is "this
+    should not have happened", it is not, and the top-level handler should
+    treat it as the bug it is.
+    """
