@@ -387,6 +387,7 @@ def build_index(
         )
 
     _say(f"Writing {len(pairs)} words across {len({k[0] for k in pairs})} languages...")
+    conn: Optional[sqlite3.Connection] = None
     try:
         conn = sqlite3.connect(tmp)
         # A failed build is discarded and rebuilt, never repaired, so
@@ -409,7 +410,17 @@ def build_index(
         conn.execute(f"PRAGMA user_version = {_SCHEMA_VERSION}")
         conn.commit()
         conn.close()
+        conn = None
     except sqlite3.Error as exc:
+        # Closed before the unlink, not after. POSIX unlinks an open file
+        # happily and frees the inode when the last handle closes; Windows
+        # refuses with WinError 32, "the process cannot access the file
+        # because it is being used by another process". So an interrupted
+        # build left the partial file behind on Windows, which the next run
+        # would inherit. Found by the macOS and Windows CI added in v0.10.0,
+        # which is the whole reason that job exists.
+        if conn is not None:
+            conn.close()
         tmp.unlink(missing_ok=True)
         raise AntonymBuildError(f"Could not write the antonym index: {exc}") from exc
 
