@@ -217,6 +217,38 @@ def _prompt_import(apkg_path: Path) -> None:
     try:
         import requests as req
         absolute_path = _translate_wsl_path(str(apkg_path.resolve()))
+
+        # v0.10.0. Under WSL, a path that is still POSIX after translation
+        # is one Windows-side Anki cannot open: /mnt/<drive> paths convert,
+        # anything under /home or /tmp does not, because it has no Windows
+        # equivalent. That happens to any WSL user who clones to ~ rather
+        # than /mnt/c, which is the more natural place to clone.
+        #
+        # Gated on which host answered, not on being under WSL alone. A WSL
+        # user can run Anki inside WSL through WSLg, and then localhost is
+        # the right address and POSIX paths are exactly what AnkiConnect
+        # wants. Blocking those would break a setup that works. The host
+        # latched by deck._anki_request is the evidence: localhost means
+        # Anki is on this side of the boundary, anything else means it is
+        # on the Windows side and needs a path Windows can resolve.
+        #
+        # Caught here rather than sent, because AnkiConnect's own answer is
+        # a file-not-found that says nothing about why the file it cannot
+        # find is one that plainly exists.
+        anki_is_on_windows = not any(
+            local in deck_module._active_host for local in ("localhost", "127.0.0.1")
+        )
+        if _is_wsl() and anki_is_on_windows and absolute_path.startswith("/"):
+            _warn("Anki runs on the Windows side and cannot open a path "
+                  "inside WSL's own filesystem.")
+            _info(f"  {absolute_path}")
+            _info("  The package is fine. Windows just cannot see where it "
+                  "is.")
+            _info("  Either import it by hand, or set OUTPUT_DIR in .env to "
+                  "a path under /mnt (for example /mnt/c/Users/you/Anki) so "
+                  "the next run writes somewhere Windows can reach.")
+            return
+
         response = req.post(
             deck_module.ANKI_HOST,
             json={
