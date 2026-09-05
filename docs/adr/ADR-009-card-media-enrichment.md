@@ -440,6 +440,47 @@ failure this ADR guards against is visual, and the last time a coverage
 number was trusted without opening the files it was hiding a newborn on the
 card for `leben`. That review is the remaining gate on the default.
 
+### The icon fallback is rejected, and here is the measurement
+
+Proposed during planning: where no photograph is defensible, fall back to an
+icon, since an icon reads as symbolic where a photograph reads as
+denotative. It was to be measured before being built, as ADR-010 was.
+Measured 6 September 2026, and rejected.
+
+**Not emoji.** The original sketch reached for emoji plus CLDR annotations.
+That was the wrong shape: the request is for icons that represent a concept,
+which means a real icon set. So three were tested, all meeting ADR-008's bar
+of free, no API key, no registration, redistributable:
+
+| set | icons | licence | abstract 0/14 words | concrete 14 words |
+|---|---|---|---|---|
+| Material Symbols | 4277 | Apache 2.0 | **0** | 2 |
+| Bootstrap Icons | 2078 | MIT | **0** | 4 |
+| Font Awesome Free | 1895 | CC BY 4.0 | **0** | 8 |
+
+Against the real population, the German nouns this gate refuses, Material
+Symbols matched **5 of 84, or 6%**: `einkaufskorb`, `einkaufswagen`,
+`kaffee`, `link` and `mann`. ADR-010 shipped on +12.5 points. This is not
+close.
+
+**The cause is structural, not a matching problem.** These are user
+interface icon sets. Material Symbols matched 14 of 14 UI concepts
+(`settings`, `wifi`, `bookmark`, `dashboard`) and 0 of 14 abstract words
+(`freedom`, `justice`, `hope`, `thought`). They are built to label buttons,
+not vocabulary. Where they do have a word, it is usually a concrete noun,
+which is precisely the population that already gets a photograph and does
+not need an icon.
+
+The one icon source that is organised around general vocabulary is the Noun
+Project, and ADR-008 already rejected it for the same two reasons it
+rejected PONS: an API key, and non-free licences on most of its icons.
+
+**So the field stays empty for abstract words.** That is the same answer
+this ADR gives for verbs and adjectives, and for the same reason: an empty
+field costs a learner nothing, and a wrong or arbitrary symbol costs them
+the association. Recorded here so the idea is not re-proposed without the
+numbers.
+
 ## Consequences
 
 **Card fields may only be appended.** CLAUDE.md 3.2 makes field order
