@@ -256,6 +256,61 @@ speech shipped in v0.5.x (ARCHITECTURE 8.29), but 8.25 and the `Tapa` card
 record that the pipeline still takes the first dictionary entry rather than
 the sense matching the video.*
 
+---
+
+## Amendment, 5 September 2026: the gate is not available everywhere
+
+Phase 3's gate was designed as cheap: "`Class` is already recorded per card,
+so `noun` plus an entry in a concreteness list is a cheap gate". That
+assumed a concreteness list exists for each language. Measured against 835
+real nouns from this project's own definition cache, across the three
+languages it has real decks in, it does not.
+
+The signal tried was WordNet's lexicographer files, which are already in the
+stack through nltk and are exactly a concreteness distinction:
+`noun.artifact`, `noun.animal`, `noun.food`, `noun.substance` against
+`noun.cognition`, `noun.feeling`, `noun.state`, `noun.communication`.
+
+| language | nouns | no WordNet entry | strict gate admits | approx. cards with an image |
+|---|---|---|---|---|
+| French | 491 | 12.2% | 18.5% | ~9% |
+| English | 72 | 4.2% | 8.3% | ~4% |
+| German | 272 | **100%** | **0%** | 0% |
+
+**German has no WordNet in OMW at all.** Not a loading failure: `wn.langs()`
+returns 32 languages and `deu` is not among them, and
+`wn.synsets("Hund", lang="deu")` raises "Language deu is not supported".
+German is 39.5% of this project's cached definitions.
+
+Two other things the measurement showed.
+
+**The reach is small even where it works.** French is the best case, and it
+is roughly one card in eleven. That buys a new card field, image downloads,
+storage and an attribution obligation.
+
+**The sense-selection warning above is visible in the data, not theoretical.**
+`planète` returns `noun.cognition` as its first sense and `enfant` returns a
+*verb*. A gate reading the first sense would put an image of the wrong thing
+on a card, which is the loud error this ADR warns about. The gate must
+therefore require **every** noun sense to be concrete, not the first and not
+the majority.
+
+### Decision
+
+Ship images for the languages where a concreteness list exists, and leave
+the field empty elsewhere. This follows ADR-011's precedent: that ADR
+reversed 8.19's exclusion of an English index once the measurement justified
+it, rather than holding the whole feature back for uniformity.
+
+`tango doctor` reports which languages support images, so a German user is
+told the field is unavailable rather than left wondering why it is empty.
+
+The alternatives were considered and are recorded rather than dismissed: a
+multilingual gate built from ConceptNet's `IsA` edges, which is plausible
+because ADR-010 already streams that dump for 22 languages but is unmeasured;
+and translating the lemma to English to gate on the best-covered WordNet,
+which inherits every translation error as a possibly wrong image.
+
 **Phase 4: dropped as originally posed.** Downloading YouTube audio is
 contrary to YouTube's terms, and that is settled rather than weighed. What the
 request actually wanted, the word heard in real speech, is delivered by
