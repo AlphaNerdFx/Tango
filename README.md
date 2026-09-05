@@ -191,7 +191,16 @@ clone; it is not installed by the package.
 
 Tango resolves the target language from the deck name (a deck named "French" fetches French subtitles) or from an explicit `--language` option. The explicit option always wins.
 
-40 languages are supported including French, Spanish, German, Japanese, Arabic, Russian, Chinese, Korean, and more.
+Tango recognises 45 language codes in a deck name. 25 of them can produce
+cards: Catalan, Chinese, Croatian, Danish, Dutch, English, Finnish, French,
+German, Greek, Italian, Japanese, Korean, Lithuanian, Macedonian, Norwegian,
+Polish, Portuguese, Romanian, Russian, Slovenian, Spanish, Swedish and
+Ukrainian.
+
+The other 20, Arabic and Hindi and Turkish among them, are recognised in a
+deck name but have no spaCy model, so a run stops with a message saying so
+rather than producing an empty deck. Run `tango languages` for the full
+table of what each language has.
 
 Example sentences, synonyms, and antonyms are always returned in the original transcript language. Definitions and grammatical class are returned in the `--def-lang` language if set, otherwise in the transcript language.
 
