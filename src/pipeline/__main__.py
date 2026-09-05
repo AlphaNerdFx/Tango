@@ -1547,6 +1547,28 @@ def _run_doctor() -> int:
         print("             real French deck. This takes it to 34.8%.")
     print()
 
+    # ── Card images: off by default, and the gate is the interesting part ──
+    print("  Card images (optional, ADR-009 phase 3)")
+    from pipeline.config import IMAGES_ENABLED, IMAGE_DIR
+
+    if IMAGES_ENABLED:
+        cached = len(list(IMAGE_DIR.glob("*"))) if IMAGE_DIR.exists() else 0
+        size = sum(f.stat().st_size for f in IMAGE_DIR.glob("*")) / 1e6 if cached else 0
+        print(f"    enabled  {cached} cached ({size:.1f} MB) in {IMAGE_DIR}")
+    else:
+        # Not counted as missing. Off is the intended state until the
+        # measurement in ADR-009 justifies changing it.
+        print("    disabled -> set IMAGES_ENABLED=true in .env")
+
+    # Which languages: every one, and that is the point worth printing.
+    # The concreteness gate in definition.py needs WordNet, which OMW has
+    # for 19 languages and not for German at all, so a WordNet-only gate
+    # reached 0% of German cards. The Wikidata gate judges the concept
+    # rather than the word, and Hund and chien both resolve to Q144, so one
+    # judgement serves every language a Wikipedia exists in.
+    print("    gate     Wikidata P31, so every language, not only the 19 in OMW")
+    print()
+
     # ── Translation: only needed for --def-lang ──
     print("  Translation models (only needed for --def-lang)")
     try:
