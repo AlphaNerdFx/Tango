@@ -19,7 +19,7 @@ spacy==3.8.16
 # spaCy core transitive dependencies, pinned for stability
 thinc==8.3.13
 pydantic==2.13.5
-numpy>=1.24,<2.3
+numpy>=2.2.6,<2.3
 cymem==2.0.13
 preshed==3.0.13
 murmurhash==1.0.15
