@@ -309,30 +309,6 @@ class TestRunSetupWizard:
 class TestPromptImport:
 
     @pytest.fixture(autouse=True)
-    def _anki_is_local(self):
-        """
-        Pin AnkiConnect to localhost for this class.
-
-        Not cosmetic. `config` calls `load_dotenv()` at import, so the suite
-        reads the developer's own `.env`, and on a WSL machine that points
-        `ANKI_HOST` at the Windows gateway. From v0.10.0 `_prompt_import`
-        refuses to send a POSIX path to a Windows-side Anki, correctly,
-        because Windows cannot open one. These tests use `tmp_apkg`, which
-        lives under /tmp.
-
-        The result was three tests that passed on CI, where there is no
-        `.env`, and failed on the machine the project is developed on. The
-        same shape as ARCHITECTURE 8.39: a check that is honestly reporting
-        on something other than what the reader thinks.
-
-        Pinned here so these tests measure the import wiring they name,
-        rather than whoever's `.env`.
-        """
-        with patch.object(main_module.deck_module, "_active_host",
-                          "http://localhost:8765"):
-            yield
-
-    @pytest.fixture(autouse=True)
     def _aligned_notetype(self):
         """
         Stub the pre-import notetype alignment for this class.
