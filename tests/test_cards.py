@@ -768,16 +768,21 @@ class TestDownloadImages:
     """
     The prefetch. Modelled on _download_audio, and like it nothing here may
     fail the run: the package is the expensive artefact.
+
+    Every test patches `find_images`, the batched resolver that
+    _download_images actually calls. Patching the single-lemma `find_image`
+    leaves the real one reachable, and a unit test that quietly makes a
+    Wikimedia request breaks CLAUDE.md 3.5 while still passing.
     """
 
     def test_no_candidates_costs_nothing(self):
-        with patch.object(cards_module.images, "find_image") as find:
+        with patch.object(cards_module.images, "find_images") as find:
             assert _download_images([], "de") == ({}, {}, [])
         find.assert_not_called()
 
     def test_a_refused_lemma_contributes_nothing(self):
         # The gate refusing is the normal case, not an error.
-        with patch.object(cards_module.images, "find_image", return_value=None), \
+        with patch.object(cards_module.images, "find_images", return_value={}), \
              patch.object(cards_module.images, "fetch_image") as fetch:
             assert _download_images(["freiheit"], "de") == ({}, {}, [])
         fetch.assert_not_called()
@@ -785,7 +790,8 @@ class TestDownloadImages:
     def test_a_found_image_returns_its_name_credit_and_path(self, tmp_path):
         path = tmp_path / "Q144.jpg"
         path.write_bytes(b"x")
-        with patch.object(cards_module.images, "find_image", return_value=_an_image()), \
+        with patch.object(cards_module.images, "find_images",
+                          return_value={"hund": _an_image()}), \
              patch.object(cards_module.images, "fetch_image", return_value=path):
             names, credits, paths = _download_images(["hund"], "de")
         assert names == {"hund": "Q144.jpg"}
@@ -793,16 +799,33 @@ class TestDownloadImages:
         assert paths == [path]
 
     def test_a_failed_download_is_not_a_card_with_a_broken_image(self):
-        # find_image succeeded, fetch_image did not. The name must not be
+        # Resolution succeeded, the download did not. The name must not be
         # recorded, or the card would reference a file the package lacks.
-        with patch.object(cards_module.images, "find_image", return_value=_an_image()), \
+        with patch.object(cards_module.images, "find_images",
+                          return_value={"hund": _an_image()}), \
              patch.object(cards_module.images, "fetch_image", return_value=None):
             assert _download_images(["hund"], "de") == ({}, {}, [])
 
-    def test_a_raising_lookup_does_not_fail_the_run(self):
-        with patch.object(cards_module.images, "find_image",
+    def test_a_raising_resolver_does_not_fail_the_run(self):
+        with patch.object(cards_module.images, "find_images",
                           side_effect=RuntimeError("wikidata is down")):
             assert _download_images(["hund"], "de") == ({}, {}, [])
+
+    def test_a_raising_download_does_not_fail_the_run(self):
+        with patch.object(cards_module.images, "find_images",
+                          return_value={"hund": _an_image()}), \
+             patch.object(cards_module.images, "fetch_image",
+                          side_effect=OSError("disk full")):
+            assert _download_images(["hund"], "de") == ({}, {}, [])
+
+    def test_resolution_is_one_call_for_many_lemmas(self):
+        # The reason this is batched at all: resolution is paced by
+        # Wikimedia, so 400 nouns must not become 400 round trips.
+        with patch.object(cards_module.images, "find_images",
+                          return_value={}) as find:
+            _download_images(["a", "b", "c", "d"], "de")
+        assert find.call_count == 1
+        assert find.call_args[0][0] == ["a", "b", "c", "d"]
 
 
 def _fields_of(apkg_path, tmp_path):
@@ -833,7 +856,7 @@ class TestImagesAreOffByDefault:
 
     def test_no_network_when_disabled(self, sample_result):
         with patch("pipeline.config.IMAGES_ENABLED", False), \
-             patch.object(cards_module.images, "find_image") as find:
+             patch.object(cards_module.images, "find_images") as find:
             build_package("vidimg0001", "German", [sample_result], [], language="de")
         find.assert_not_called()
 
@@ -849,7 +872,8 @@ class TestImagesAreOffByDefault:
         img = tmp_path / "Q144.jpg"
         img.write_bytes(b"x")
         with patch("pipeline.config.IMAGES_ENABLED", True), \
-             patch.object(cards_module.images, "find_image", return_value=_an_image()), \
+             patch.object(cards_module.images, "find_images",
+                          return_value={"contaminate": _an_image()}), \
              patch.object(cards_module.images, "fetch_image", return_value=img):
             result = build_package("vidimg0003", "German", [sample_result], [],
                                    language="de")
@@ -864,7 +888,8 @@ class TestImagesAreOffByDefault:
         img = tmp_path / "Q144.jpg"
         img.write_bytes(b"x")
         with patch("pipeline.config.IMAGES_ENABLED", True), \
-             patch.object(cards_module.images, "find_image", return_value=_an_image()), \
+             patch.object(cards_module.images, "find_images",
+                          return_value={"contaminate": _an_image()}), \
              patch.object(cards_module.images, "fetch_image", return_value=img):
             result = build_package("vidimg0004", "German", [sample_result], [],
                                    language="de")
