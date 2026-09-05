@@ -415,12 +415,30 @@ ADR's own audio estimate, which costed embedded audio at "tens of megabytes"
 when real files are 16 to 30 KB, caught earlier this time only because the
 download was run rather than reasoned about.
 
-**`IMAGES_ENABLED` stays false for now**, and this is the one thing the
-measurement does not settle. The gate costs roughly four Wikimedia requests
-per noun, paced at one per second because Wikimedia asks callers to pace, so
-a 400-noun deck adds about 27 minutes to a run. That is a real cost to
-impose on every user by default, and it is a separate question from whether
-the pictures are good. Recorded here rather than decided.
+**The runtime cost was real and is now mostly gone.** The per-lemma path
+cost four Wikimedia requests per noun, paced at one a second because
+Wikimedia asks callers to pace, so a 400-noun deck added about 27 minutes to
+a run. That was a fair reason not to enable images by default, and it was
+also an artefact of asking one word at a time.
+
+All three APIs accept 50 items per request, and one Wikidata call returns
+P31 and P18 together, so the same deck costs about **24 requests instead of
+1600**. Measured 6 September 2026 on 16 German words: 3.78s batched against
+53.34s one at a time, a 14x speedup on a small sample and larger on a real
+deck, with **16 of 16 results identical**. A 10-card package with images on
+now builds in 4.9s.
+
+`find_images()` is the batched entry point and `find_image()` remains for a
+single lookup. Resolution is batched rather than threaded because it is
+limited by Wikimedia's pacing, not by latency; the file downloads are still
+threaded, because those are independent and per-file.
+
+**`IMAGES_ENABLED` stays false pending one thing the measurement cannot
+supply: a person looking at a deck of these cards in Anki.** The numbers now
+justify the feature and the speed no longer argues against it, but the
+failure this ADR guards against is visual, and the last time a coverage
+number was trusted without opening the files it was hiding a newborn on the
+card for `leben`. That review is the remaining gate on the default.
 
 ## Consequences
 
