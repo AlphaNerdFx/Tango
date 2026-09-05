@@ -387,7 +387,24 @@ association, and unlike a wrong definition it is not quiet.
 - Wikimedia Commons, which needs no key and is already licensed for
   redistribution, with an attribution field
 - **Acceptance target: the gate measured on a real deck, not five
-  hand-picked words.** Ship disabled by default until then
+  hand-picked words.** Done 5 September 2026, on 835 real nouns from this
+  project's own cache, and it changed the plan:
+
+  | language | nouns | no WordNet entry | gate admits | approx. cards |
+  |---|---|---|---|---|
+  | French | 491 | 12.2% | 18.5% | ~9% |
+  | English | 72 | 4.2% | 8.3% | ~4% |
+  | German | 272 | **100%** | **0%** | 0% |
+
+  **German has no WordNet in OMW at all**, and is 39.5% of the cached
+  definitions. So images ship for the languages where a concreteness list
+  exists and the field stays empty elsewhere, following ADR-011's precedent
+  rather than holding the feature back for uniformity. `tango doctor`
+  reports which languages support it.
+
+  The gate requires **every** noun sense to be concrete. Reading the first
+  is unreliable: OMW returns `noun.cognition` first for `planète` and a verb
+  first for `enfant`. See the ADR-009 amendment.
 - Appended as a new field, so index 12, under the rule in CLAUDE.md 3.2
 
 ADR-009 also warns this should not ship before sense selection improves,
