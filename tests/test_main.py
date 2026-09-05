@@ -13,6 +13,7 @@ import time
 from pathlib import Path, PurePosixPath
 from unittest.mock import DEFAULT, MagicMock, patch, call
 
+import re
 import pytest
 from typer.testing import CliRunner
 
@@ -889,6 +890,70 @@ class TestSetupCommands:
                 with pytest.raises(SystemExit):
                     main()
         assert "make antonyms" in capsys.readouterr().out
+
+    def test_doctor_reports_images_as_disabled_without_counting_them_missing(
+            self, capsys):
+        """
+        Off is the intended state, not a broken install. ADR-009 requires the
+        relevance measurement before images become a default, so reporting
+        them as missing would make doctor exit non-zero on a correct one.
+        """
+        with patch("pipeline.config.IMAGES_ENABLED", False):
+            with patch("sys.argv", ["tango", "doctor"]):
+                with pytest.raises(SystemExit):
+                    main()
+        out = capsys.readouterr().out
+        assert "IMAGES_ENABLED=true" in out
+
+    def test_turning_images_on_does_not_change_the_missing_count(self, capsys):
+        """
+        The pair to the test above, and the one that actually pins it.
+
+        Asserting only that the hint is printed leaves the claim in the name
+        unchecked: a `missing += 1` beside that print keeps the text and
+        still miscounts. The exit code cannot catch it either, because
+        _run_doctor returns `1 if missing else 0`, so on any install already
+        missing something the count moves and the code does not. So compare
+        the reported count, which is the thing that actually changes.
+
+        Mutation-verified 5 September 2026: that mutation survived two
+        earlier versions of this test before this one killed it.
+        """
+        counts = []
+        for enabled in (False, True):
+            with patch("pipeline.config.IMAGES_ENABLED", enabled):
+                with patch("sys.argv", ["tango", "doctor"]):
+                    with pytest.raises(SystemExit):
+                        main()
+            out = capsys.readouterr().out
+            found = re.search(r"(\d+) item\(s\) missing", out)
+            counts.append(int(found.group(1)) if found else 0)
+        assert counts[0] == counts[1], (
+            f"images off reported {counts[0]} missing, on reported {counts[1]}; "
+            "images are optional and must count as neither"
+        )
+
+    def test_doctor_reports_the_cache_when_images_are_on(self, capsys, tmp_path):
+        (tmp_path / "Q144.jpg").write_bytes(b"x" * 1000)
+        with patch("pipeline.config.IMAGES_ENABLED", True), \
+             patch("pipeline.config.IMAGE_DIR", tmp_path):
+            with patch("sys.argv", ["tango", "doctor"]):
+                with pytest.raises(SystemExit):
+                    main()
+        out = capsys.readouterr().out
+        assert "enabled" in out
+        assert "1 cached" in out
+
+    def test_doctor_says_the_image_gate_covers_every_language(self, capsys):
+        """
+        The point worth printing. A WordNet-only gate reached 0% of German
+        cards because OMW has no German at all; the Wikidata gate judges the
+        concept, so one judgement serves every language.
+        """
+        with patch("sys.argv", ["tango", "doctor"]):
+            with pytest.raises(SystemExit):
+                main()
+        assert "every language" in capsys.readouterr().out
 
     @patch("pipeline.__main__.subprocess.run")
     def test_install_model_resolves_the_language_code(self, mock_run):
