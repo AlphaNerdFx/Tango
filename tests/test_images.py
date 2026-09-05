@@ -64,6 +64,63 @@ class TestPhotographable:
             assert images.is_photographable("Q1") is False
 
 
+class TestTheGateRefusesWhatLooksConcrete:
+    """
+    Added 6 September 2026, after opening the files rather than reading the
+    rates. The first measurement admitted 36.9% of nouns, which looked like
+    success until the pictures were examined: `leben` got a photograph of a
+    newborn, `cowardice` the Cowardly Lion, `government` a group portrait of
+    Dutch ministers, `loi` the Palais-Bourbon, and `couple` a Bolero
+    choreography. Each is the wrong-association failure ADR-009 exists to
+    prevent, and a coverage number cannot see any of them.
+
+    One test per class that let one through, so a future edit to the
+    denylist cannot quietly reopen one of these doors.
+    """
+
+    @pytest.mark.parametrize("qid,word", [
+        ("Q96253971", "type of property, reached by leben"),
+        ("Q1322005", "natural phenomenon, reached by leben"),
+        ("Q2996394", "biological process, reached by leben"),
+        ("Q33742", "natural language, reached by englisch"),
+        ("Q1288568", "modern language"),
+        ("Q34770", "language"),
+        ("Q2393196", "personality trait, reached by cowardice"),
+        ("Q17197366", "type of organization, reached by government"),
+        ("Q33104303", "concept in physics, reached by force"),
+        ("Q15617994", "administrative territorial entity type, by country"),
+        ("Q2135465", "legal term or concept, reached by loi"),
+        ("Q10541491", "legal form, reached by corporation"),
+    ])
+    def test_an_abstract_class_is_refused(self, qid, word):
+        with patch.object(images, "_claims", return_value=[qid]):
+            assert images.is_photographable("Q1") is False, word
+
+    def test_a_disambiguation_page_is_refused(self):
+        # Not a concept at all: its image belongs to whichever sense
+        # Wikipedia happened to list first.
+        with patch.object(images, "_claims", return_value=["Q4167410"]):
+            assert images.is_photographable("Q15643227") is False
+
+    def test_a_disambiguation_page_is_refused_even_beside_a_concrete_class(self):
+        # The pair to the test above. Q4167410 must veto, not merely fail to
+        # admit, or a disambiguation page carrying any concrete class passes.
+        with patch.object(images, "_claims", return_value=["Q811102", "Q4167410"]):
+            assert images.is_photographable("Q1") is False
+
+    @pytest.mark.parametrize("qid,word", [
+        ("Q55983715", "organisms known by a common name, reached by Hund"),
+        ("Q811102", "type of building, reached by Haus"),
+        ("Q2424752", "product, reached by Flugzeug and huile"),
+        ("Q317088", "commodity"),
+    ])
+    def test_the_tightening_did_not_close_the_concrete_classes(self, qid, word):
+        # The other half of the matched pair: a denylist wide enough to
+        # refuse `government` must still admit a dog and a house.
+        with patch.object(images, "_claims", return_value=[qid]):
+            assert images.is_photographable("Q1") is True, word
+
+
 class TestFindImage:
 
     def test_a_missing_article_yields_nothing(self):
