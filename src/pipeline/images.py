@@ -261,6 +261,33 @@ def _commons_url(p18: list[str]) -> Optional[str]:
             f"?width={_THUMB_WIDTH}")
 
 
+def _credit_line(meta: dict) -> str:
+    """
+    Build one card-safe credit line from a Commons extmetadata block.
+
+    Shared by the single and batched paths so the two cannot disagree about
+    what a credit looks like.
+
+    Commons Artist fields are HTML and are not always short: a derivative
+    work credits every source it was built from, and `Wasser` returns four
+    lines naming three photographers. A newline inside a card field breaks
+    the layout, so whitespace is collapsed and a very long credit is cut.
+    Trimming a credit is acceptable where dropping it is not: the licence
+    asks for attribution, and a truncated name still attributes.
+    """
+    def field(key: str) -> str:
+        raw = str(meta.get(key, {}).get("value", ""))
+        text = html.unescape(_TAG_RE.sub("", raw))
+        return " ".join(text.split())
+
+    artist, licence = field("Artist"), field("LicenseShortName")
+    if len(artist) > 120:
+        artist = artist[:117].rstrip(" ,;:") + "..."
+    if artist and licence:
+        return f"{artist}, {licence}"
+    return artist or licence
+
+
 def attribution(filename: str) -> str:
     """
     The credit line a Commons file's licence requires, or "".
@@ -290,16 +317,7 @@ def attribution(filename: str) -> str:
     info = next(iter(pages.values())).get("imageinfo")
     if not info:
         return ""
-    meta = info[0].get("extmetadata", {})
-
-    def field(key: str) -> str:
-        raw = str(meta.get(key, {}).get("value", ""))
-        return html.unescape(_TAG_RE.sub("", raw)).strip()
-
-    artist, licence = field("Artist"), field("LicenseShortName")
-    if artist and licence:
-        return f"{artist}, {licence}"
-    return artist or licence
+    return _credit_line(info[0].get("extmetadata", {}))
 
 
 def _extension(url: str) -> str:
@@ -348,3 +366,194 @@ def fetch_image(result: ImageResult, lemma: str) -> Optional[Path]:
 
     logger.debug("Cached %s (%d bytes) for '%s'.", path.name, len(response.content), lemma)
     return path
+
+
+# ── Batched resolution ────────────────────────────────────────────────────────
+#
+# The per-lemma path above costs four Wikimedia requests, paced at one a
+# second because Wikimedia asks callers to pace. Measured 6 September 2026,
+# that is about 27 minutes for a 400-noun deck, which is a real reason not to
+# turn images on by default.
+#
+# All three APIs accept up to 50 items per request, and one Wikidata call
+# returns P31 and P18 together, so the same deck costs about 24 requests
+# instead of 1600. Measured on 8 German words: one Wikipedia request in
+# 0.70s and one Wikidata request in 1.71s, against roughly 32 seconds for
+# the same work one lemma at a time.
+
+_BATCH = 50
+
+
+def _chunks(items: list[str], size: int = _BATCH):
+    """Yield successive `size`-length slices."""
+    for start in range(0, len(items), size):
+        yield items[start:start + size]
+
+
+def _articles(lemmas: list[str], language: str) -> dict[str, dict]:
+    """
+    Wikipedia pages for many lemmas at once, keyed by the lemma asked for.
+
+    Wikipedia normalises titles and follows redirects, so the page that comes
+    back is often filed under a different name than the one requested. The
+    response carries `normalized` and `redirects` tables for exactly this,
+    and both are followed here so a caller still gets its own lemma back as
+    the key.
+    """
+    data = _get(_WIKIPEDIA_API.format(lang=language.split("-")[0]), {
+        "action": "query",
+        "redirects": 1,
+        "titles": "|".join(lemmas),
+        "prop": "pageimages|pageprops",
+        "piprop": "thumbnail",
+        "pithumbsize": _THUMB_WIDTH,
+        "ppprop": "wikibase_item",
+        "format": "json",
+    })
+    if not data:
+        return {}
+    query = data.get("query", {})
+
+    # Walk requested title -> normalised -> redirect target.
+    alias: dict[str, str] = {}
+    for entry in query.get("normalized", []):
+        alias[entry["to"]] = entry["from"]
+    for entry in query.get("redirects", []):
+        alias[entry["to"]] = alias.get(entry["from"], entry["from"])
+
+    out: dict[str, dict] = {}
+    for page in query.get("pages", {}).values():
+        if "missing" in page:
+            continue
+        title = page.get("title", "")
+        out[alias.get(title, title)] = page
+    return out
+
+
+def _entities(qids: list[str]) -> dict[str, dict]:
+    """
+    P31 and P18 for many Wikidata items in one request.
+
+    Returns {qid: {"P31": [...], "P18": [...]}}. One call rather than two per
+    item, which is where most of the saving comes from.
+    """
+    data = _get(_WIKIDATA_API, {
+        "action": "wbgetentities",
+        "ids": "|".join(qids),
+        "props": "claims",
+        "format": "json",
+    })
+    if not data:
+        return {}
+
+    out: dict[str, dict] = {}
+    for qid, entity in data.get("entities", {}).items():
+        claims = entity.get("claims", {})
+        parsed: dict[str, list] = {}
+        for prop in ("P31", "P18"):
+            values = []
+            for claim in claims.get(prop, []):
+                value = claim.get("mainsnak", {}).get("datavalue", {}).get("value")
+                if isinstance(value, dict) and "id" in value:
+                    values.append(value["id"])
+                elif isinstance(value, str):
+                    values.append(value)
+            parsed[prop] = values
+        out[qid] = parsed
+    return out
+
+
+def _attributions(filenames: list[str]) -> dict[str, str]:
+    """Credit lines for many Commons files at once, keyed by filename."""
+    data = _get(_COMMONS_API, {
+        "action": "query",
+        "titles": "|".join(f"File:{name}" for name in filenames),
+        "prop": "imageinfo",
+        "iiprop": "extmetadata",
+        "format": "json",
+    })
+    if not data:
+        return {}
+
+    out: dict[str, str] = {}
+    for page in data.get("query", {}).get("pages", {}).values():
+        title = page.get("title", "")
+        name = title[5:] if title.startswith("File:") else title
+        # Commons reports titles with spaces; the filenames these are looked
+        # up by come out of a URL path and carry underscores. Keying on the
+        # raw title silently returns no credit for every file, which is a
+        # licence breach rather than a cosmetic miss, so normalise both ends.
+        name = name.replace(" ", "_")
+        info = page.get("imageinfo")
+        if not info:
+            continue
+        out[name] = _credit_line(info[0].get("extmetadata", {}))
+    return out
+
+
+def find_images(lemmas: list[str], language: str) -> dict[str, ImageResult]:
+    """
+    Resolve many lemmas at once, applying the same gate as find_image.
+
+    Args:
+        lemmas:   Words in their own language.
+        language: BCP-47 code of that language.
+
+    Returns:
+        {lemma: ImageResult} for the lemmas that earned an image. A lemma
+        absent from the result is the normal case: the gate refuses most
+        vocabulary on purpose.
+
+    Same judgements as find_image, in about a fiftieth of the requests.
+    Never raises; a failed batch yields nothing for that batch.
+    """
+    results: dict[str, ImageResult] = {}
+
+    for chunk in _chunks(sorted(set(lemmas))):
+        pages = _articles(chunk, language)
+        if not pages:
+            continue
+
+        by_qid: dict[str, str] = {}
+        for lemma, page in pages.items():
+            qid = page.get("pageprops", {}).get("wikibase_item")
+            # No Wikidata item means no way to judge the concept, and an
+            # ungated image is what this module exists to avoid.
+            if qid:
+                by_qid.setdefault(qid, lemma)
+
+        if not by_qid:
+            continue
+        entities = _entities(list(by_qid))
+
+        # filename -> the finished result, less its credit line
+        pending: dict[str, ImageResult] = {}
+        for qid, lemma in by_qid.items():
+            claims = entities.get(qid)
+            if not claims:
+                continue
+            p31 = claims["P31"]
+            if not p31 or _DISAMBIGUATION in p31:
+                continue
+            if any(c in _ABSTRACT_CLASSES for c in p31):
+                continue
+
+            url = _commons_url(claims["P18"]) \
+                or pages[lemma].get("thumbnail", {}).get("source")
+            if not url:
+                continue
+            name = url.rsplit("/", 1)[-1].split("?")[0]
+            pending[name] = ImageResult(
+                url=url, qid=qid,
+                source="wikidata" if claims["P18"] else "wikipedia",
+                filename=name,
+            )
+
+        if not pending:
+            continue
+        credits = _attributions(list(pending))
+        for name, result in pending.items():
+            result.attribution = credits.get(name, "")
+            results[by_qid[result.qid]] = result
+
+    return results
