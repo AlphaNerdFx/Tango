@@ -324,6 +324,104 @@ slicing work exists. It is not scheduled.
 
 ---
 
+## Amendment, 6 September 2026: the source was wrong, not the gate
+
+The amendment above concluded that images should ship only where a
+concreteness list exists, leaving German out entirely. That conclusion was
+correct about the *gate it tested* and wrong about the feature, because both
+it and the original decision assumed the source had to be Wikimedia Commons
+**text search**. A text search matches a spelling, not a meaning, which is
+why `laufen` returned a coin from the town of Laufen.
+
+Resolving the lemma to a **concept** behaves completely differently:
+
+```
+lemma -> Wikipedia article (language specific)
+      -> Wikidata item      (language independent)
+      -> P31 gate, then P18 image or the article lead image
+```
+
+The middle step is what fixes German. `Hund` and `chien` both resolve to
+Q144, so one judgement about whether dogs can be photographed serves every
+language, and no German WordNet is needed. Verbs and adjectives fall out for
+free: `laufen` has no lead image and `schwierig` has no article at all.
+
+### What a coverage number could not see
+
+Measured against 374 real nouns from the definition cache, the first version
+of this gate admitted **36.9%**, which read as a success. Then the files
+were opened:
+
+| word | image returned | what the card would teach |
+|---|---|---|
+| `leben` | HumanNewborn.JPG | Leben means baby |
+| `englisch` | Webster_Orthography_1828 | a page of an 1828 spelling book |
+| `cowardice` | Cowardly_lion2.jpg | the Wizard of Oz lion |
+| `government` | a group portrait of Dutch ministers | these specific men |
+| `loi` | the Palais-Bourbon | law is a building |
+| `couple` | a Bolero choreography | (a disambiguation page) |
+
+Every one is the wrong-association failure this ADR was written to prevent,
+and the admit rate was blind to all of them. This is the specific reason the
+verification step for images says to look at the cards.
+
+Each was reached through an identifiable Wikidata class, so each is now
+refused by name: type of property, natural phenomenon, biological process,
+natural language, personality trait, type of organization, concept in
+physics, administrative territorial entity type, legal term, legal form, and
+Wikimedia disambiguation page. `tests/test_images.py` carries one case per
+class, plus the matched pair asserting that a denylist wide enough to refuse
+`government` still admits a dog, a house, an aeroplane and oil.
+
+### The measurement
+
+Tightening cost 3.7 points of coverage and removed the failures above:
+
+| language | nouns | WordNet gate (5 Sept) | this gate | change |
+|---|---|---|---|---|
+| French | 150 | ~9% | **33.3%** | +24 |
+| German | 150 | **0%** | **38.0%** | +38 |
+| English | 74 | ~4% | **23.0%** | +19 |
+| overall | 374 | | **33.2%** | |
+
+ADR-010 shipped the ConceptNet antonym index on +12.5 points for French.
+Every language here clears that bar, and German clears it from zero.
+
+### Decision
+
+**Images ship, for every language, gated on Wikidata rather than WordNet.**
+This reverses the amendment above, which restricted them to languages with a
+concreteness list. That restriction was a consequence of the source, and the
+source changed.
+
+**The WordNet gate is not used as a second opinion**, which the plan for
+this work had proposed. Measured: `is_concrete_noun` refuses `door` and
+`blood`, because it requires every noun sense to be concrete and was
+designed to be the only gate. Requiring both to agree would lose good cards
+and gain nothing, since the Wikidata gate already refuses everything WordNet
+refuses in this sample. It remains useful as a cross-check, and agreed with
+86% to 100% of refusals where OMW covers the language.
+
+**Two card fields, not one.** `Image` is field 12 and `Attribution` field 13.
+The second is not decoration: Commons reports `AttributionRequired: true` on
+the images this actually returns, and the dog photograph is CC BY-SA 2.0 by
+Markus Trienke, so shipping a deck without the credit would breach the
+licence.
+
+**Thumbnails, not originals.** The first real download was 9.2 MB for one
+photograph, for a card that displays it at 240px. Both routes now request
+480px, and the same photograph is 46 KB. That is the same error as this
+ADR's own audio estimate, which costed embedded audio at "tens of megabytes"
+when real files are 16 to 30 KB, caught earlier this time only because the
+download was run rather than reasoned about.
+
+**`IMAGES_ENABLED` stays false for now**, and this is the one thing the
+measurement does not settle. The gate costs roughly four Wikimedia requests
+per noun, paced at one per second because Wikimedia asks callers to pace, so
+a 400-noun deck adds about 27 minutes to a run. That is a real cost to
+impose on every user by default, and it is a separate question from whether
+the pictures are good. Recorded here rather than decided.
+
 ## Consequences
 
 **Card fields may only be appended.** CLAUDE.md 3.2 makes field order
