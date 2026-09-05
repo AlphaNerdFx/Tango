@@ -107,7 +107,31 @@ _ABSTRACT_CLASSES: frozenset[str] = frozenset({
     "Q1914636",    # activity
     "Q17008256",   # occurrence
     "Q26907166",   # temporal entity
+    # Added 6 September 2026 after looking at the pictures rather than the
+    # rates. The first measurement admitted 36.9% of nouns, which read as a
+    # success until the files were opened: `leben` got a photograph of a
+    # newborn, `cowardice` the Cowardly Lion, `loi` the Palais-Bourbon, and
+    # `government` a group portrait of Dutch ministers. Every one of those
+    # is the wrong-association failure this module exists to prevent, and
+    # each was reached through one of the classes below.
+    "Q96253971",   # type of property        (leben -> a newborn)
+    "Q1322005",    # natural phenomenon      (leben)
+    "Q2996394",    # biological process      (leben)
+    "Q33742",      # natural language        (englisch -> an 1828 spelling book)
+    "Q1288568",    # modern language
+    "Q34770",      # language
+    "Q2393196",    # personality trait       (cowardice -> the Cowardly Lion)
+    "Q17197366",   # type of organization    (government -> Dutch ministers)
+    "Q33104303",   # concept in physics      (force -> a vector diagram)
+    "Q15617994",   # administrative territorial entity type  (country -> a world map)
+    "Q2135465",    # legal term or concept   (loi -> a building)
+    "Q10541491",   # legal form              (corporation -> a painting)
 })
+
+# A disambiguation page is not a concept at all, and its "image" belongs to
+# whichever sense Wikipedia listed first. `couple` reached a photograph of a
+# Bolero choreography this way.
+_DISAMBIGUATION = "Q4167410"
 
 
 def _get(url: str, params: dict) -> Optional[dict]:
@@ -184,6 +208,8 @@ def is_photographable(qid: str) -> bool:
     """
     classes = _claims(qid, "P31")
     if not classes:
+        return False
+    if _DISAMBIGUATION in classes:
         return False
     return not any(c in _ABSTRACT_CLASSES for c in classes)
 
