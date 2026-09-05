@@ -286,6 +286,8 @@ FIELDS: tuple[str, ...] = (
     "Source",
     "IPA",             # ADR-009 phase 1
     "Pronunciation",   # ADR-009 phase 1
+    "Image",           # ADR-009 phase 3
+    "Attribution",     # ADR-009 phase 3, the licence obligation for Image
 )
 
 # Anki treats a note's FIRST field as its identity: it is what deduplication
