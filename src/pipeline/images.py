@@ -30,20 +30,28 @@ a key, the same reason ADR-008 rejected PONS.
 
 from __future__ import annotations
 
+import html
 import logging
+import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import requests
 
 from pipeline import TangoError
-from pipeline.config import IMAGE_TIMEOUT, WIKTIONARY_USER_AGENT
+from pipeline.config import IMAGE_DIR, IMAGE_TIMEOUT, WIKTIONARY_USER_AGENT
 from pipeline.media import RateLimiter
 
 logger = logging.getLogger(__name__)
 
 _WIKIPEDIA_API = "https://{lang}.wikipedia.org/w/api.php"
 _WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+_COMMONS_API = "https://commons.wikimedia.org/w/api.php"
+
+# extmetadata returns Artist as an HTML fragment, usually a link to the
+# uploader's user page. The card wants the name, not the markup.
+_TAG_RE = re.compile(r"<[^>]+>")
 
 # Wikimedia rejects the default python-requests User-Agent with 403, per
 # their User-Agent policy. Measured here during planning: the same request
@@ -56,6 +64,16 @@ _HEADERS = {"User-Agent": WIKTIONARY_USER_AGENT}
 # in media.py rather than left to run flat out. Shared limiter class, not a
 # second implementation.
 _LIMITER = RateLimiter(1.0, 4)
+
+# Commons serves originals, and they are enormous: the first real download
+# during development was 9.2 MB for one photograph of a dog. The card caps
+# display at 240px, so a full-resolution file is bandwidth and disk spent on
+# pixels nobody sees, and a 100-image deck would have been near a gigabyte.
+# 480 covers a high-DPI screen at that size with room to spare.
+#
+# The same mistake as ADR-009's audio estimate in 8.35, caught earlier this
+# time because the download was run rather than reasoned about.
+_THUMB_WIDTH = 480
 
 
 class ImageUnavailableError(TangoError):
@@ -70,6 +88,7 @@ class ImageResult:
     qid: str
     source: str          # "wikidata" or "wikipedia"
     filename: str
+    attribution: str = ""   # rendered credit line, "" when Commons has none
 
 
 # Wikidata P31 (instance of) classes that mark a concept as unphotographable.
@@ -120,7 +139,8 @@ def _article(lemma: str, language: str) -> Optional[dict]:
         "redirects": 1,
         "titles": lemma,
         "prop": "pageimages|pageprops",
-        "piprop": "original",
+        "piprop": "thumbnail",
+        "pithumbsize": _THUMB_WIDTH,
         "ppprop": "wikibase_item",
         "format": "json",
     })
@@ -197,10 +217,11 @@ def find_image(lemma: str, language: str) -> Optional[ImageResult]:
     # Wikidata's own image is the curated one; the article's lead image is
     # the fallback. Both live on Commons, so both are already licensed.
     for source, url in (("wikidata", _commons_url(_claims(qid, "P18"))),
-                        ("wikipedia", page.get("original", {}).get("source"))):
+                        ("wikipedia", page.get("thumbnail", {}).get("source"))):
         if url:
-            return ImageResult(url=url, qid=qid, source=source,
-                               filename=url.rsplit("/", 1)[-1].split("?")[0])
+            name = url.rsplit("/", 1)[-1].split("?")[0]
+            return ImageResult(url=url, qid=qid, source=source, filename=name,
+                               attribution=attribution(name))
     return None
 
 
@@ -209,4 +230,95 @@ def _commons_url(p18: list[str]) -> Optional[str]:
     if not p18:
         return None
     name = p18[0].replace(" ", "_")
-    return f"https://commons.wikimedia.org/wiki/Special:FilePath/{name}"
+    # ?width= asks Commons for a thumbnail rather than the original.
+    return (f"https://commons.wikimedia.org/wiki/Special:FilePath/{name}"
+            f"?width={_THUMB_WIDTH}")
+
+
+def attribution(filename: str) -> str:
+    """
+    The credit line a Commons file's licence requires, or "".
+
+    Not decoration. Commons reports `AttributionRequired: true` on the images
+    this module actually returns: the dog photograph for Q144 is CC BY-SA 2.0
+    by Markus Trienke, and shipping it in a deck without naming them would
+    breach the licence. ADR-008's bar asks for redistributable sources, and
+    redistributable does not mean unconditional.
+
+    Degrades to "" rather than raising, like everything else here, but note
+    the caller must then decide: an image whose attribution could not be
+    fetched is one whose licence terms are unknown.
+    """
+    data = _get(_COMMONS_API, {
+        "action": "query",
+        "titles": f"File:{filename}",
+        "prop": "imageinfo",
+        "iiprop": "extmetadata",
+        "format": "json",
+    })
+    if not data:
+        return ""
+    pages = data.get("query", {}).get("pages", {})
+    if not pages:
+        return ""
+    info = next(iter(pages.values())).get("imageinfo")
+    if not info:
+        return ""
+    meta = info[0].get("extmetadata", {})
+
+    def field(key: str) -> str:
+        raw = str(meta.get(key, {}).get("value", ""))
+        return html.unescape(_TAG_RE.sub("", raw)).strip()
+
+    artist, licence = field("Artist"), field("LicenseShortName")
+    if artist and licence:
+        return f"{artist}, {licence}"
+    return artist or licence
+
+
+def _extension(url: str) -> str:
+    """The file extension Anki needs to render the image, defaulting to .jpg."""
+    tail = url.rsplit("/", 1)[-1].split("?")[0].lower()
+    for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"):
+        if tail.endswith(ext):
+            return ext
+    return ".jpg"
+
+
+def fetch_image(result: ImageResult, lemma: str) -> Optional[Path]:
+    """
+    Download an image into the cache, returning its path or None.
+
+    Cached by Wikidata id rather than by lemma, because the concept is what
+    the image belongs to: `Hund` and `chien` resolve to Q144 and share one
+    file rather than downloading it twice.
+
+    Never raises. An image is an enhancement, and a run that has already paid
+    for a transcript and a thousand definitions must not fail for want of a
+    picture. Same posture as media.fetch_audio.
+    """
+    IMAGE_DIR.mkdir(parents=True, exist_ok=True)
+    path = IMAGE_DIR / f"{result.qid}{_extension(result.url)}"
+    if path.exists():
+        return path
+
+    _LIMITER.acquire()
+    try:
+        response = requests.get(result.url, headers=_HEADERS,
+                                timeout=IMAGE_TIMEOUT)
+        response.raise_for_status()
+    except requests.RequestException as exc:
+        logger.debug("Image download failed for '%s' (%s): %s", lemma, result.url, exc)
+        return None
+
+    if not response.content:
+        return None
+
+    try:
+        path.write_bytes(response.content)
+    except OSError as exc:
+        logger.debug("Could not cache image for '%s': %s", lemma, exc)
+        return None
+
+    logger.debug("Cached %s (%d bytes) for '%s'.", path.name, len(response.content), lemma)
+    return path
