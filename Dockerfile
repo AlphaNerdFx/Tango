@@ -36,10 +36,11 @@ RUN pip install --no-cache-dir "tango-anki==${TANGO_VERSION}" \
 # All state lives here, and here alone.
 ENV DB_PATH=/data/pipeline.db \
     DICT_DIR=/data/dictionaries \
+    IMAGE_DIR=/data/images \
     MEDIA_DIR=/data/media \
     OUTPUT_DIR=/data/output \
     REVIEW_FILE=/data/review.json
-RUN mkdir -p /data/dictionaries /data/media /data/output
+RUN mkdir -p /data/dictionaries /data/images /data/media /data/output
 VOLUME ["/data"]
 
 # AnkiConnect runs on the host, not in here. On Docker Desktop the host is
