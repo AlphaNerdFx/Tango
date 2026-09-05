@@ -1173,12 +1173,42 @@ def backlog(
 
 @app.command()
 def languages() -> None:
-    """List the supported languages and their BCP-47 codes."""
+    """List the supported languages and what each one can actually do."""
+    from pipeline.language import capability_report, language_caveat
+
+    rows = capability_report()
+    usable = [r for r in rows if r[2]["cards"]]
+    name_only = [r for r in rows if not r[2]["cards"]]
+
     print()
-    print("  Supported languages:")
+    print(f"  {len(usable)} languages can produce cards.")
+    print("  A tick means the resource exists; a blank means the field it "
+          "fills stays empty.")
     print()
-    for name, code in list_supported_languages():
-        print(f"    {code:<10} {name}")
+    print(f"    {'code':<8} {'language':<22} {'words':<6} {'synonyms':<9} "
+          f"{'pos':<5} {'fillers':<7}")
+    print(f"    {'-' * 8} {'-' * 22} {'-' * 6} {'-' * 9} {'-' * 5} {'-' * 7}")
+
+    def mark(on: bool) -> str:
+        return "yes" if on else ""
+
+    for name, code, cap in usable:
+        print(f"    {code:<8} {name:<22} {mark(cap['cards']):<6} "
+              f"{mark(cap['wordnet']):<9} {mark(cap['pos_labels']):<5} "
+              f"{mark(cap['filler_sounds']):<7}")
+        caveat = language_caveat(code)
+        if caveat:
+            print(f"             {caveat}")
+
+    if name_only:
+        print()
+        print(f"  {len(name_only)} more are recognised by name but have no "
+              f"spaCy model, so they")
+        print("  cannot produce cards. Naming one in a deck fails at run time:")
+        print()
+        wrapped = ", ".join(f"{code}" for _n, code, _c in name_only)
+        for line in _wrap_words(wrapped.split(", "), width=64):
+            print(f"    {line}")
     print()
 
 
