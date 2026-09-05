@@ -25,13 +25,23 @@ from youtube_transcript_api._errors import (
     VideoUnplayable,
     YouTubeDataUnparsable,
     YouTubeRequestFailed,
-    WebshareProxyConfig,
-    GenericProxyConfig,
 )
+
+# The proxy classes come from their own module, not from _errors. _errors
+# does re-export them, which is how this import used to be written, but only
+# because it imports them for its own use: they are not part of that
+# module's interface and a patch release could stop re-exporting them
+# without warning. `youtube_transcript_api.proxies` is where they live. The
+# package root exports neither, so this is the public path.
+from youtube_transcript_api.proxies import (
+    GenericProxyConfig,
+    WebshareProxyConfig,
+)
+
+from pipeline import TangoError
 from youtube_transcript_api._transcripts import FetchedTranscript, Transcript
 
 import logging
-import os
 from typing import Optional
 
 logger = logging.getLogger(__name__)
@@ -53,28 +63,99 @@ def _clean(text: str) -> str:
 
 def _build_proxy() -> Optional[object]:
     """
-    Returns a proxy config if environment variables are set, else None.
+    Return a proxy config from the environment, or None for no proxy.
 
     Priority:
-        1. Webshare  (WEBSHARE_USERNAME + WEBSHARE_PASSWORD)
-        2. Generic   (PROXY_HTTP_URL and/or PROXY_HTTPS_URL)
+        1. Generic   (PROXY_HTTP_URL and/or PROXY_HTTPS_URL)
+        2. Webshare  (WEBSHARE_USERNAME + WEBSHARE_PASSWORD)
         3. No proxy
+
+    Generic first, deliberately. This order used to be the other way round,
+    which contradicted the project's own documented position: issue #8
+    established that Webshare's free tier makes things measurably worse
+    (transcript extraction failed with repeated 429s through it and
+    succeeded without it), and every document was changed to put the generic
+    variables first and recommend no provider. The code kept preferring
+    Webshare, so on a machine with both set it silently chose the one the
+    docs warn against.
     """
     from pipeline.config import (
-        WEBSHARE_USERNAME as ws_user,
+        PROXY_HTTP_URL,
+        PROXY_HTTPS_URL,
         WEBSHARE_PASSWORD as ws_pass,
-        PROXY_HTTP_URL, PROXY_HTTPS_URL,
+        WEBSHARE_USERNAME as ws_user,
     )
-    
+
+    if PROXY_HTTP_URL or PROXY_HTTPS_URL:
+        return GenericProxyConfig(http_url=PROXY_HTTP_URL, https_url=PROXY_HTTPS_URL)
+
     if ws_user and ws_pass:
         return WebshareProxyConfig(proxy_username=ws_user, proxy_password=ws_pass)
 
-    http  = PROXY_HTTP_URL
-    https = PROXY_HTTPS_URL
-    if http or https:
-        return GenericProxyConfig(http_url=http, https_url=https)
-
     return None
+
+
+class _ProxyAwareIpBlocked(IpBlocked, TangoError):
+    """
+    An IP block that knows whether a proxy was in use.
+
+    Two problems with the plain library exception, and they pull in
+    opposite directions.
+
+    Re-raising it as `IpBlocked(video_id)` resets the proxy config to None,
+    so a user who *has* configured a proxy is told they have not. That is
+    the bug this fixes.
+
+    Letting the library's own exception through instead is not the answer:
+    all three of its messages carry a Webshare affiliate referral link, and
+    the Webshare one asks the reader to buy through it to support the
+    project. This project recommends no provider and documents that
+    Webshare's free tier is harmful, so shipping that text would contradict
+    its own position, on someone else's behalf.
+
+    So the type stays `IpBlocked`, which is what callers and tests expect,
+    and only the wording is ours.
+
+    It is also a `TangoError`, because it is a failure this project raises
+    deliberately with a message saying what to do about it. Without that,
+    the entry point would class an IP block as a bug and send the user to
+    open an issue about YouTube's rate limiting. The scan in
+    test_hard_constraints.py caught this the moment the class was added.
+    """
+
+    def __init__(self, video_id: str, proxy_config: Optional[object]) -> None:
+        super().__init__(video_id)
+        self._tango_proxy = proxy_config
+
+    @property
+    def cause(self) -> str:
+        if self._tango_proxy is None:
+            return (
+                "YouTube is blocking requests from this IP address.\n"
+                "  No proxy is configured. Waiting is usually enough: these "
+                "blocks are temporary and per-IP.\n"
+                "  If it persists, PROXY_HTTP_URL and PROXY_HTTPS_URL in "
+                ".env accept a proxy you already trust. This project "
+                "recommends no provider, and a free datacentre proxy "
+                "measurably made this worse when tested."
+            )
+        if isinstance(self._tango_proxy, WebshareProxyConfig):
+            return (
+                "YouTube is blocking requests even through the Webshare "
+                "proxy.\n"
+                "  Webshare's free tier is confirmed to make this worse "
+                "rather than better, because its datacentre IPs are blocked "
+                "more aggressively than residential ones.\n"
+                "  Try without the proxy, or use a residential proxy you "
+                "already trust."
+            )
+        return (
+            "YouTube is blocking requests even through the configured "
+            "proxy.\n"
+            "  A proxy only substitutes one IP for another, and that IP can "
+            "be blocked too.\n"
+            "  Try without it to see whether your own address still works."
+        )
 
 
 # ── 1. get_transcript ─────────────────────────────────────────────────────────
@@ -94,7 +175,8 @@ def get_transcript(video_id: str, languages: list[str] = ["en"]) -> Transcript:
         All exceptions are re-raised with a clear message. Callers should
         catch the specific types they want to handle; let the rest propagate.
     """
-    api = YouTubeTranscriptApi(proxy_config=_build_proxy())
+    proxy = _build_proxy()
+    api = YouTubeTranscriptApi(proxy_config=proxy)
 
     try:
         transcript_list = api.list(video_id)
@@ -106,8 +188,8 @@ def get_transcript(video_id: str, languages: list[str] = ["en"]) -> Transcript:
         raise VideoUnplayable(video_id, exc.reason) from exc
     except TranscriptsDisabled:
         raise TranscriptsDisabled(video_id)
-    except (IpBlocked, RequestBlocked):
-        raise IpBlocked(video_id)
+    except (IpBlocked, RequestBlocked) as exc:
+        raise _ProxyAwareIpBlocked(video_id, proxy) from exc
     except PoTokenRequired:
         raise PoTokenRequired(video_id)
     except YouTubeDataUnparsable:
