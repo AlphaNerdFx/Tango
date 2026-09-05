@@ -2502,3 +2502,74 @@ class TestFetchReportsProgress:
     def test_no_callback_is_the_default_and_does_not_raise(self, mock_fetch):
         mock_fetch.return_value = (None, def_module.FallbackExtras())
         assert def_module.fetch_definitions(["a"], use_cache=False) is not None
+
+
+class TestConcretenessGate:
+    """
+    ADR-009 phase 3. An image is attempted only for a concrete noun, because
+    a wrong image teaches the wrong association and, unlike a wrong
+    definition, is not quiet. Commons returned a tram for "Freiheit" and a
+    coin from the town of Laufen for "laufen".
+
+    Measured 5 September 2026 on 835 real nouns from this project's own
+    cache. Two findings shaped the code below: reading the first sense is
+    unreliable, because OMW returns `noun.cognition` first for `planète` and
+    a verb first for `enfant`; and German has no WordNet in OMW at all,
+    while being 39.5% of the cached definitions.
+
+    These use the real WordNet rather than mocks. The gate's whole value is
+    what the corpus actually says, and a mocked lexname would test the
+    assertion rather than the data.
+    """
+
+    @pytest.mark.parametrize("word", ["soda", "enfant"])
+    def test_a_photographable_french_noun_passes(self, word):
+        assert definition_module.is_concrete_noun(word, "fr") is True
+
+    @pytest.mark.parametrize("word", ["parole", "liberté", "effet"])
+    def test_an_abstract_french_noun_is_refused(self, word):
+        assert definition_module.is_concrete_noun(word, "fr") is False
+
+    def test_english_works_too(self):
+        assert definition_module.is_concrete_noun("dog", "en") is True
+        assert definition_module.is_concrete_noun("freedom", "en") is False
+
+    @pytest.mark.parametrize("word", ["nuance", "langue", "théâtre"])
+    def test_every_sense_must_be_concrete_not_just_the_first(self, word):
+        # These are the discriminating cases, and they had to be found in
+        # the real data rather than guessed. Each one's FIRST sense is
+        # `noun.artifact`, so a first-sense gate admits it; a later sense is
+        # abstract, so requiring all of them refuses it.
+        #
+        # `nuance` is the clearest: artifact, then `noun.attribute` and
+        # `noun.communication`. Nobody can photograph a nuance, and a
+        # first-sense gate would have put a picture on that card.
+        #
+        # An earlier version of this test used `planète`, which does not
+        # discriminate at all: its first sense is already abstract, so both
+        # rules refuse it and the test passed with the gate mutated to read
+        # only the first sense. 106 words in this project's own cache
+        # discriminate; these are three of them.
+        assert definition_module.is_concrete_noun(word, "fr") is False
+
+    def test_an_abstract_first_sense_is_also_refused(self):
+        # The other direction, and the reason `planète` is still worth a
+        # line: OMW returns `noun.cognition` first for it.
+        assert definition_module.is_concrete_noun("planète", "fr") is False
+
+    def test_a_language_without_wordnet_is_refused_not_guessed(self):
+        # German is not one of OMW's 32 languages. The gate cannot judge it,
+        # so it must say no rather than assume.
+        assert definition_module.is_concrete_noun("Hund", "de") is False
+        assert definition_module.images_supported("de") is False
+
+    def test_supported_languages_are_reported(self):
+        assert definition_module.images_supported("fr") is True
+        assert definition_module.images_supported("en") is True
+
+    def test_an_unmapped_language_is_refused(self):
+        assert definition_module.images_supported("zz") is False
+        assert definition_module.is_concrete_noun("anything", "zz") is False
+
+    def test_a_word_with_no_entry_is_refused(self):
+        assert definition_module.is_concrete_noun("qzxwvnotaword", "fr") is False
