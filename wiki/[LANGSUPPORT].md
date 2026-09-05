@@ -46,4 +46,19 @@ Run `make translate-setup` to install the local model for your language pair. Mo
 
 dictionaryapi.dev's non-English coverage is effectively broken, not just "varies by language." Verified with direct API checks: French lookups for extremely common words (`eau`, `chat`, `maison`) return 404, and a real French-video run produced 0 definitions found out of 108 native-language lookups attempted. English coverage is reliable; expect non-English videos to produce mostly fallback cards (word, no dictionary definition, no synonyms or antonyms) until this is fixed.
 
-Since v0.4.5, those fallback cards get a real dictionary example sentence where possible: a Wiktionary lookup supplements the example when dictionaryapi.dev has nothing. In a real French video test this brought the fallback-card example rate from 0 percent to over half, and cut the number of words dropped entirely (no definition, no dictionary example, no transcript match) by roughly two-thirds. Definitions, part of speech, synonyms, and antonyms are unaffected by this and remain missing for non-English languages. Tracked as [issue #1](https://github.com/AlphaNerdFx/Tango/issues/1).
+Since v0.4.5, those fallback cards get a real dictionary example sentence where possible: a Wiktionary lookup supplements the example when dictionaryapi.dev has nothing. In a real French video test this brought the fallback-card example rate from 0 percent to over half, and cut the number of words dropped entirely (no definition, no dictionary example, no transcript match) by roughly two-thirds.
+
+**This was fixed in v0.5 and the paragraph above describes only the gap
+before it.** The offline Wiktionary index (ADR-008) supplies real
+definitions, part of speech, synonyms and antonyms in the transcript
+language, from a local file rather than an online API, so none of it
+depends on dictionaryapi.dev. It is a large one-time download per language:
+
+```bash
+make dictionary LANGUAGE=fr        # or: tango build-dictionary fr
+```
+
+Without that index a non-English card still shows "No definition found",
+which is what [issue #1](https://github.com/AlphaNerdFx/Tango/issues/1)
+records. Building it is the fix. `tango doctor` reports which languages you
+have an index for.
