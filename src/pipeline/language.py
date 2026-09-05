@@ -87,6 +87,13 @@ LANGUAGE_MAP: dict[str, str] = {
     "tchèque": "cs", "tcheque": "cs", "tschechisch": "cs",
 
     "slovak": "sk", "slovenčina": "sk", "slovencina": "sk",
+    # These three have a spaCy model and had no name, so only
+    # --language reached them and no deck name ever could. A model
+    # with no way to ask for it is a model nobody uses.
+    "lithuanian": "lt", "lietuvių": "lt", "lietuviu": "lt",
+    "macedonian": "mk", "македонски": "mk", "makedonski": "mk",
+    "slovenian": "sl", "slovene": "sl", "slovenščina": "sl",
+    "slovenscina": "sl",
     "slovaque": "sk", "slowakisch": "sk",
 
     "romanian": "ro", "română": "ro", "romana": "ro",
@@ -386,6 +393,88 @@ def list_supported_languages() -> list[tuple[str, str]]:
         result.append((name.capitalize(), code))
 
     return result
+
+
+# Quirks worth telling a user before they spend an hour on a build, keyed by
+# the code they would type. Kept separate from language_capabilities(), which
+# answers yes-or-no questions; these are the answers that need a sentence.
+LANGUAGE_CAVEATS: dict[str, str] = {
+    "zh-TW": (
+        "uses the Simplified Chinese model, the only one spaCy ships. "
+        "Traditional text is tokenized by a Simplified pipeline"
+    ),
+    "fr": (
+        "pinned to the medium model: the small one mistags conjugated verbs "
+        "and produces duplicate cards (issue #13)"
+    ),
+}
+
+
+def language_caveat(code: str) -> Optional[str]:
+    """Return the caveat for this code, or None. See LANGUAGE_CAVEATS."""
+    return LANGUAGE_CAVEATS.get(code) or LANGUAGE_CAVEATS.get(code.split("-")[0].lower())
+
+
+def language_capabilities(code: str) -> dict[str, bool]:
+    """
+    What this project can actually do for one language.
+
+    Every per-language resource lives in a different module and covers a
+    different set, and until now nothing told a user which they had before
+    they spent an hour on a build. The counts are not close: 24 languages
+    have a spaCy model, 19 have WordNet, 22 have antonym rows, 7 have
+    part-of-speech labels, and 4 have a filler stoplist.
+
+    Derived from the real mappings rather than restated, so it cannot drift
+    from them. A test in test_hard_constraints.py fails if it does.
+
+    Args:
+        code: BCP-47 language code.
+
+    Returns:
+        A dict of capability name to whether this language has it. `cards`
+        is the one that matters: without a spaCy model there is no
+        tokenizer, so there is no path to a card at all and every other
+        capability is moot.
+    """
+    from pipeline.definition import _OMW_LANGUAGE_CODES
+
+    base = code.split("-")[0].lower()
+    resolved = _SPACY_CODE_ALIASES.get(base, base)
+
+    return {
+        "cards": resolved in SPACY_MODELS,
+        "wordnet": code == "en" or base == "en" or base in _OMW_LANGUAGE_CODES,
+        "pos_labels": base in POS_LABELS,
+        "filler_sounds": base in _FILLER_SOUNDS_AUTHORED,
+        "named": code in LANGUAGE_MAP.values() or base in LANGUAGE_MAP.values(),
+    }
+
+
+def capability_report() -> list[tuple[str, str, dict[str, bool]]]:
+    """
+    Every language this project knows a name for, and what it can do.
+
+    Sorted so the ones that can make cards come first: a list that mixes
+    them with the 20 codes that only have a name is the thing this replaces.
+    `tango languages` prints it.
+    """
+    rows = []
+    seen = set()
+    for name, code in list_supported_languages():
+        rows.append((name, code, language_capabilities(code)))
+        seen.add(_SPACY_CODE_ALIASES.get(code.split("-")[0], code.split("-")[0]))
+
+    # A model with no name in LANGUAGE_MAP is reachable only by --language,
+    # never by a deck name, so a name-based listing hid it completely. That
+    # was true of lt, mk and sl. They are listed by code here rather than
+    # left out, because "not listed" reads as "not supported".
+    for code in sorted(SPACY_MODELS):
+        if code not in seen:
+            rows.append((code.upper(), code, language_capabilities(code)))
+
+    rows.sort(key=lambda r: (not r[2]["cards"], r[0]))
+    return rows
 
 
 # =============================================================================
