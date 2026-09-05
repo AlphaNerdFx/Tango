@@ -475,7 +475,7 @@ def _download_images(
     max_workers: int = 4,
 ) -> tuple[dict[str, str], dict[str, str], list[Path]]:
     """
-    Resolve and download an image per lemma, concurrently.
+    Resolve and download an image per lemma.
 
     Args:
         wanted:   Lemmas to try. A list, not a {lemma: url} map like
@@ -487,6 +487,12 @@ def _download_images(
     Returns:
         ({lemma: filename}, {lemma: credit line}, [paths for the package])
 
+    Resolution is batched and downloads are threaded, which are two different
+    problems. Resolution is rate-limited by Wikimedia's pacing rather than by
+    latency, so threads buy nothing and 50-item requests buy everything: a
+    400-noun deck costs about 24 requests instead of 1600. Downloads are
+    per-file and independent, so they thread like the audio ones.
+
     A lemma absent from the result is the normal case, not an error. The gate
     in images.py refuses most words on purpose, and refusing is the feature.
 
@@ -496,28 +502,31 @@ def _download_images(
     if not wanted:
         return {}, {}, []
 
+    try:
+        found = images.find_images(wanted, language)
+    except Exception:
+        logger.debug("Image resolution raised for %s.", language, exc_info=True)
+        return {}, {}, []
+
+    if progress:
+        progress(f"  images {len(found)}/{len(wanted)} words have one, fetching")
+
     names: dict[str, str] = {}
     credits: dict[str, str] = {}
     paths: list[Path] = []
-    done = 0
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(images.find_image, lemma, language): lemma
-                   for lemma in wanted}
+        futures = {pool.submit(images.fetch_image, result, lemma): lemma
+                   for lemma, result in found.items()}
         for future in as_completed(futures):
             lemma = futures[future]
             try:
-                found = future.result()
-                path = images.fetch_image(found, lemma) if found else None
+                path = future.result()
             except Exception:
-                logger.debug("Image lookup raised for '%s'.", lemma, exc_info=True)
+                logger.debug("Image download raised for '%s'.", lemma, exc_info=True)
                 continue
-            finally:
-                done += 1
-                if progress and done % PROGRESS_EVERY == 0:
-                    progress(f"  images {done}/{len(wanted)} ({len(names)} found)")
-            if path and found:
+            if path:
                 names[lemma] = path.name
-                credits[lemma] = found.attribution
+                credits[lemma] = found[lemma].attribution
                 paths.append(path)
 
     logger.info("Images: %d of %d candidate words got one.", len(names), len(wanted))
