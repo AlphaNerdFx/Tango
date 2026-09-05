@@ -112,6 +112,81 @@ def _ensure_omw_loaded(omw_lang: str = "eng") -> bool:
     return True
 
 
+# ── Concreteness ──────────────────────────────────────────────────────────────
+#
+# ADR-009 phase 3. An image is only ever attempted for a concrete noun,
+# because a wrong image is worse than an empty field: it teaches the wrong
+# association, and unlike a wrong definition it is not quiet. Measured on
+# five German words when the ADR was written, Wikimedia Commons returned a
+# tram for "Freiheit", a hard disk crash for "schwierig", and a coin from the
+# town of Laufen for "laufen".
+#
+# WordNet's lexicographer files are the signal, and they are already in the
+# stack. Every noun synset carries one, and the split between a thing you can
+# photograph and a thing you cannot is close to exactly what they encode.
+
+_CONCRETE_LEXNAMES: frozenset[str] = frozenset({
+    "noun.animal", "noun.artifact", "noun.body", "noun.food",
+    "noun.object", "noun.plant", "noun.substance", "noun.person",
+})
+
+
+def is_concrete_noun(word: str, language: str = "en") -> bool:
+    """
+    Whether `word` names something that could be photographed.
+
+    Requires **every** noun sense to be concrete, not the first and not the
+    majority. Measured 5 September 2026 on 835 real nouns: reading the first
+    sense is unreliable, because OMW returns `noun.cognition` first for
+    `planète` and a *verb* first for `enfant`. A gate that trusted it would
+    put an image of the wrong thing on a card.
+
+    Args:
+        word:     The lemma, in its own language.
+        language: BCP-47 code of that language.
+
+    Returns:
+        False whenever the answer is not a confident yes: no WordNet for
+        this language, no entry for the word, no noun sense, or any sense
+        that is not concrete. An empty image field costs a learner nothing;
+        a wrong one costs them the association.
+    """
+    omw_lang = "eng" if language == "en" else _OMW_LANGUAGE_CODES.get(language)
+    if not omw_lang:
+        return False
+    if not _ensure_omw_loaded(omw_lang):
+        return False
+    try:
+        from nltk.corpus import wordnet as wn
+
+        with _wordnet_lock:
+            lang_arg = {} if language == "en" else {"lang": omw_lang}
+            senses = [s for s in wn.synsets(word, **lang_arg) if s.pos() == "n"]
+            if not senses:
+                return False
+            return all(s.lexname() in _CONCRETE_LEXNAMES for s in senses)
+    except Exception:
+        # Same posture as every other WordNet read here: degrade to no
+        # answer rather than take the run down. See _wordnet_synonyms_antonyms.
+        return False
+
+
+def images_supported(language: str) -> bool:
+    """
+    Whether the concreteness gate can judge this language at all.
+
+    Reported by `tango doctor`, so a German user is told images are
+    unavailable rather than left wondering why the field is always empty.
+    German is not one of OMW's 32 languages: `wn.synsets("Hund", lang="deu")`
+    raises "Language deu is not supported". It is 39.5% of this project's
+    own cached definitions, so this is the common case, not an edge.
+    """
+    omw_lang = "eng" if language == "en" else _OMW_LANGUAGE_CODES.get(language)
+    if not omw_lang:
+        return False
+    return _ensure_omw_loaded(omw_lang)
+
+
 def _wordnet_synonyms_antonyms(word: str, language: str = "en") -> tuple:
     """
     Return (synonyms, antonyms) from WordNet for a word in `language`.
