@@ -640,3 +640,89 @@ class TestEnvironmentKeysAreDeclared:
             "Documented in .env.example but not a key this project knows:\n  "
             + "\n  ".join(undeclared)
         )
+
+
+# -- The capability table matches the real mappings ---------------------------
+
+class TestLanguageCapabilitiesAreDerived:
+    """
+    v0.11.0. Every per-language resource lives in a different module and
+    covers a different set: 24 spaCy models, 19 WordNet, 22 antonym
+    languages, 7 part-of-speech label tables, 4 filler stoplists. Nothing
+    told a user which they had until a run failed.
+
+    `language_capabilities()` answers that, and the only way it stays true
+    is by being derived. This checks it against the real mappings, in both
+    directions, the same shape as the environment-key scan above.
+    """
+
+    def test_cards_means_a_spacy_model_exists(self):
+        from pipeline.language import SPACY_MODELS, language_capabilities
+
+        for code in SPACY_MODELS:
+            assert language_capabilities(code)["cards"] is True, code
+
+    def test_a_language_with_no_model_cannot_make_cards(self):
+        from pipeline.language import LANGUAGE_MAP, SPACY_MODELS, language_capabilities
+
+        modelled = set(SPACY_MODELS)
+        for code in set(LANGUAGE_MAP.values()):
+            base = code.split("-")[0]
+            if base not in modelled and code not in modelled and base != "no":
+                assert language_capabilities(code)["cards"] is False, code
+
+    def test_wordnet_matches_the_omw_table(self):
+        from pipeline.definition import _OMW_LANGUAGE_CODES
+        from pipeline.language import language_capabilities
+
+        for code in _OMW_LANGUAGE_CODES:
+            assert language_capabilities(code)["wordnet"] is True, code
+        # German is the case that motivated all of this.
+        assert language_capabilities("de")["wordnet"] is False
+
+    def test_pos_labels_match_their_table(self):
+        from pipeline.language import POS_LABELS, language_capabilities
+
+        for code in POS_LABELS:
+            assert language_capabilities(code)["pos_labels"] is True, code
+
+    def test_every_model_appears_in_the_report(self):
+        # A model with no name in LANGUAGE_MAP was invisible in a name-based
+        # listing, which is how lt, mk and sl went unreachable by deck name.
+        from pipeline.language import SPACY_MODELS, capability_report
+
+        listed = set()
+        for _name, code, _cap in capability_report():
+            listed.add(code)
+            listed.add(code.split("-")[0])
+        missing = sorted(set(SPACY_MODELS) - listed - {"nb"})
+        assert not missing, "models absent from the report: %s" % missing
+
+    def test_a_model_with_no_name_is_still_listed(self):
+        # Defence for the next one. Every model has a name today, so the
+        # fallback branch is not exercised by any real language and a
+        # mutation removing it went unnoticed. This simulates the situation
+        # it exists for: a model added without a LANGUAGE_MAP entry, which
+        # is exactly how lt, mk and sl became unreachable by deck name.
+        from unittest.mock import patch
+
+        import pipeline.language as lang
+
+        with patch.dict(lang.SPACY_MODELS, {"xx": "xx_core_news_sm"}):
+            codes = {code for _n, code, _c in lang.capability_report()}
+        assert "xx" in codes, "an unnamed model vanished from the report"
+
+    def test_the_three_formerly_unreachable_languages_have_names(self):
+        from pipeline.language import resolve_language_code
+
+        for deck, expected in [("Lithuanian", "lt"), ("Macedonian", "mk"),
+                               ("Slovenian", "sl")]:
+            assert resolve_language_code(None, deck) == expected
+
+    def test_traditional_chinese_says_it_uses_the_simplified_model(self):
+        # It resolves to zh_core_web_sm, the only Chinese pipeline spaCy
+        # ships. Silently is the problem, not the resolution.
+        from pipeline.language import get_spacy_model, language_caveat
+
+        assert get_spacy_model("zh-TW") == "zh_core_web_sm"
+        assert "Simplified" in (language_caveat("zh-TW") or "")
