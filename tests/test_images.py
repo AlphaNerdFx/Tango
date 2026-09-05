@@ -24,7 +24,11 @@ def _page(qid=None, lead=None, missing=False):
     if qid:
         page["pageprops"] = {"wikibase_item": qid}
     if lead:
-        page["original"] = {"source": lead}
+        # "thumbnail", not "original": the module asks for a 480px thumbnail
+        # rather than the full-resolution file. Measured 5 September 2026, an
+        # original was 9.2 MB against 46 KB for the thumbnail of the same
+        # photograph, for a card that displays it at 240px.
+        page["thumbnail"] = {"source": lead}
     return {"query": {"pages": {"1": page}}}
 
 
@@ -114,6 +118,106 @@ class TestFindImage:
             get.return_value.raise_for_status.return_value = None
             images.find_image("Hund", "de")
         assert get.call_args.kwargs["headers"]["User-Agent"] == WIKTIONARY_USER_AGENT
+
+
+
+class TestThumbnails:
+    """
+    Commons serves originals and they are enormous. The first real download
+    during development was 9.2 MB for one photograph of a dog, for a card
+    that displays it at 240px. Both routes to an image must ask for a
+    thumbnail, and there are two of them.
+    """
+
+    def test_the_wikipedia_request_asks_for_a_thumbnail(self):
+        with patch.object(images, "_get", return_value=None) as get:
+            images._article("Hund", "de")
+        params = get.call_args[0][1]
+        assert params["piprop"] == "thumbnail"
+        assert params["pithumbsize"] == images._THUMB_WIDTH
+
+    def test_the_commons_url_asks_for_a_width(self):
+        url = images._commons_url(["A dog.jpg"])
+        assert url.endswith(f"?width={images._THUMB_WIDTH}")
+
+    def test_spaces_become_underscores_in_a_commons_filename(self):
+        # Commons 404s on a raw space in the path.
+        assert "A_dog.jpg" in images._commons_url(["A dog.jpg"])
+
+    def test_no_p18_is_no_url(self):
+        assert images._commons_url([]) is None
+
+
+class TestExtension:
+    """
+    Anki picks a renderer from the file extension, so the cached filename
+    has to carry the right one. The URL it comes from may have a query
+    string, because that is how the thumbnail width is requested.
+    """
+
+    def test_a_plain_url(self):
+        assert images._extension("https://x/y/A_dog.png") == ".png"
+
+    def test_a_width_query_does_not_become_part_of_the_extension(self):
+        assert images._extension("https://x/A_dog.jpg?width=480") == ".jpg"
+
+    def test_an_unknown_extension_falls_back_to_jpg(self):
+        # Special:FilePath does not always end in a filename.
+        assert images._extension("https://x/Special:FilePath/Dog") == ".jpg"
+
+
+class TestAttribution:
+    """
+    Not decoration. Commons reports AttributionRequired: true on the images
+    this module actually returns, so shipping one in a deck without naming
+    the photographer and the licence would breach it.
+    """
+
+    def _meta(self, **kw):
+        return {"query": {"pages": {"1": {"imageinfo": [
+            {"extmetadata": {k: {"value": v} for k, v in kw.items()}}
+        ]}}}}
+
+    def test_artist_and_licence_are_joined(self):
+        with patch.object(images, "_get", return_value=self._meta(
+                Artist="Markus Trienke", LicenseShortName="CC BY-SA 2.0")):
+            assert images.attribution("d.jpg") == "Markus Trienke, CC BY-SA 2.0"
+
+    def test_the_artist_html_is_stripped(self):
+        # extmetadata returns Artist as a link to the uploader's user page.
+        with patch.object(images, "_get", return_value=self._meta(
+                Artist='<a href="//commons.wikimedia.org/wiki/User:X">Jane</a>',
+                LicenseShortName="CC BY 4.0")):
+            assert images.attribution("d.jpg") == "Jane, CC BY 4.0"
+
+    def test_html_entities_are_unescaped(self):
+        with patch.object(images, "_get", return_value=self._meta(
+                Artist="Bob &amp; Alice", LicenseShortName="CC0")):
+            assert images.attribution("d.jpg") == "Bob & Alice, CC0"
+
+    def test_a_licence_with_no_artist_still_credits_the_licence(self):
+        with patch.object(images, "_get", return_value=self._meta(
+                LicenseShortName="Public domain")):
+            assert images.attribution("d.jpg") == "Public domain"
+
+    def test_a_file_with_no_imageinfo_gives_no_credit(self):
+        with patch.object(images, "_get", return_value={"query": {"pages": {"1": {}}}}):
+            assert images.attribution("d.jpg") == ""
+
+    def test_a_network_failure_gives_no_credit_rather_than_raising(self):
+        with patch.object(images, "_get", return_value=None):
+            assert images.attribution("d.jpg") == ""
+
+    def test_find_image_carries_the_credit_with_the_result(self):
+        # The credit has to travel with the image, not be fetched again by
+        # the caller: the two would be able to disagree about which file.
+        with patch.object(images, "_article", return_value={
+                    "pageprops": {"wikibase_item": "Q144"},
+                    "thumbnail": {"source": "https://x/dog.jpg"}}), \
+             patch.object(images, "is_photographable", return_value=True), \
+             patch.object(images, "_claims", return_value=[]), \
+             patch.object(images, "attribution", return_value="Jane, CC0"):
+            assert images.find_image("Hund", "de").attribution == "Jane, CC0"
 
 
 @pytest.mark.integration
