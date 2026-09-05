@@ -399,6 +399,20 @@ PROXY_HTTPS_URL: str | None = os.getenv("PROXY_HTTPS_URL")
 WEBSHARE_USERNAME: str | None = os.getenv("WEBSHARE_USERNAME")
 WEBSHARE_PASSWORD: str | None = os.getenv("WEBSHARE_PASSWORD")
 
+# Images (ADR-009 phase 3)
+#
+# Off by default. The ADR requires the relevance gate to be measured on real
+# vocabulary before this ships enabled, and that measurement is a v0.11.0
+# acceptance target rather than something already done.
+IMAGES_ENABLED: bool = os.getenv("IMAGES_ENABLED", "").lower() in {"1", "true", "yes"}
+
+# Seconds for one Wikipedia or Wikidata lookup. Two calls per candidate
+# lemma, so a slow answer costs the run twice over.
+IMAGE_TIMEOUT: int = int(os.getenv("IMAGE_TIMEOUT", "10"))
+
+IMAGE_DIR: Path = _resolve_path("IMAGE_DIR", "images")
+
+
 # ── Known environment variables ───────────────────────────────────────────────
 #
 # v0.9.0. A setting that does nothing is a failure with no message, which is
@@ -435,6 +449,8 @@ KNOWN_ENV_KEYS: frozenset[str] = frozenset({
     "LIBRETRANSLATE_MIRRORS",
     #Network politeness: the User-Agent Wikimedia asks callers to send
     "WIKTIONARY_USER_AGENT",
+    # Images
+    "IMAGES_ENABLED", "IMAGE_TIMEOUT", "IMAGE_DIR",
     # Debugging
     "TANGO_DEBUG",
     # Publishing. Read by twine through the shell, never by this package,
