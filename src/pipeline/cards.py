@@ -27,7 +27,6 @@ Constants (moved to config.py at end of project):
 from __future__ import annotations
 
 import logging
-import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -37,7 +36,7 @@ from typing import Callable, Optional
 
 import genanki
 
-from pipeline import media
+from pipeline import images, media
 from pipeline.definition import DefinitionResult
 from pipeline.language import localise_pos
 
@@ -123,6 +122,28 @@ hr {
     margin-bottom: 3px;
     padding-left: 14px;
     border-left: 3px solid var(--new-count, #00b4d8);
+}
+
+/* Image (ADR-009 phase 3). Conditional on the field, so a card without one
+   looks exactly as it did before: most vocabulary is not photographable and
+   the field is meant to stay empty. Capped rather than sized, because a
+   Commons original can be several thousand pixels wide and the card has to
+   read on a phone.
+
+   The attribution is small and quiet, but present: Commons images are CC or
+   public domain, and the CC ones require credit. A licence obligation is not
+   satisfied by a field nobody renders. */
+.card-image img {
+    max-width: 100%;
+    max-height: 240px;
+    border-radius: 6px;
+    margin-top: 12px;
+}
+
+.attribution {
+    font-size: 11px;
+    opacity: 0.6;
+    margin-top: 4px;
 }
 
 .example-source {
@@ -246,6 +267,14 @@ BACK_TEMPLATE = """
 {{#Pronunciation}}
 <div class="pronunciation">{{Pronunciation}}</div>
 {{/Pronunciation}}
+
+{{#Image}}
+<div class="card-image">{{Image}}</div>
+{{/Image}}
+
+{{#Attribution}}
+<div class="attribution">{{Attribution}}</div>
+{{/Attribution}}
 
 """
 
@@ -416,6 +445,85 @@ def _audio_field(audio_url: Optional[str], media_name: Optional[str] = None) -> 
     return f'<a class="audio-link" href="{audio_url}">&#9654; Listen</a>'
 
 
+def _image_field(image_name: Optional[str]) -> str:
+    """
+    Render the Image field.
+
+    Args:
+        image_name: Filename of an image already downloaded into the
+                    package's media, or None.
+
+    Returns:
+        An `<img>` tag, or "".
+
+    No link fallback, deliberately, and this is the one place images differ
+    from audio. A missing recording still leaves a word worth reviewing, so
+    _audio_field degrades to a link. A picture that has to be clicked is not
+    a picture on a card: it interrupts the review it was meant to help. An
+    empty field is the better failure, and the gate in images.py means most
+    cards get one anyway.
+    """
+    if not image_name:
+        return ""
+    return f'<img src="{image_name}">'
+
+
+def _download_images(
+    wanted: list[str],
+    language: str,
+    progress: Optional[Callable[[str], None]] = None,
+    max_workers: int = 4,
+) -> tuple[dict[str, str], dict[str, str], list[Path]]:
+    """
+    Resolve and download an image per lemma, concurrently.
+
+    Args:
+        wanted:   Lemmas to try. A list, not a {lemma: url} map like
+                  _download_audio takes, because there is no URL yet:
+                  resolving the lemma to a concept is most of the work.
+        language: BCP-47 code, used to pick which Wikipedia to ask.
+        progress: Optional callback for status lines.
+
+    Returns:
+        ({lemma: filename}, {lemma: credit line}, [paths for the package])
+
+    A lemma absent from the result is the normal case, not an error. The gate
+    in images.py refuses most words on purpose, and refusing is the feature.
+
+    Nothing here can fail the run, matching _download_audio: the package is
+    the expensive artefact and it is built either way.
+    """
+    if not wanted:
+        return {}, {}, []
+
+    names: dict[str, str] = {}
+    credits: dict[str, str] = {}
+    paths: list[Path] = []
+    done = 0
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = {pool.submit(images.find_image, lemma, language): lemma
+                   for lemma in wanted}
+        for future in as_completed(futures):
+            lemma = futures[future]
+            try:
+                found = future.result()
+                path = images.fetch_image(found, lemma) if found else None
+            except Exception:
+                logger.debug("Image lookup raised for '%s'.", lemma, exc_info=True)
+                continue
+            finally:
+                done += 1
+                if progress and done % PROGRESS_EVERY == 0:
+                    progress(f"  images {done}/{len(wanted)} ({len(names)} found)")
+            if path and found:
+                names[lemma] = path.name
+                credits[lemma] = found.attribution
+                paths.append(path)
+
+    logger.info("Images: %d of %d candidate words got one.", len(names), len(wanted))
+    return names, credits, paths
+
+
 def _download_audio(
     wanted: dict[str, str],
     language: str,
@@ -497,6 +605,8 @@ def _build_note(
     audio_url: Optional[str] = None,
     media_name: Optional[str] = None,
     pos_language: Optional[str] = None,
+    image_name: Optional[str] = None,
+    attribution: Optional[str] = None,
 ) -> genanki.Note:
     """
     Build a recognition card. Fields match renamed Anki model fields.
@@ -526,6 +636,8 @@ def _build_note(
             "Source":                     result.source,
             "IPA":                        ipa or "",
             "Pronunciation":              _audio_field(audio_url, media_name),
+            "Image":                      _image_field(image_name),
+            "Attribution":                attribution or "",
         }),
         # language is part of the GUID (issue #14) so the same video
         # reprocessed in a second language doesn't collide on a cognate
@@ -549,6 +661,8 @@ def _build_fallback_note(
     ipa: Optional[str] = None,
     audio_url: Optional[str] = None,
     media_name: Optional[str] = None,
+    image_name: Optional[str] = None,
+    attribution: Optional[str] = None,
 ) -> genanki.Note:
     """
     Build a fallback card for a lemma with no definition from any source.
@@ -583,6 +697,8 @@ def _build_fallback_note(
             "Source":                     "not_found",
             "IPA":                        ipa or "",
             "Pronunciation":              _audio_field(audio_url, media_name),
+            "Image":                      _image_field(image_name),
+            "Attribution":                attribution or "",
         }),
         guid=genanki.guid_for(lemma, video_id, language),
         tags=["yt-anki", video_id, "no-definition"],
@@ -779,6 +895,25 @@ def build_package(
         audio_wanted.setdefault(lem.lower(), url)
     media_names, media_paths = _download_audio(audio_wanted, language, progress=progress)
 
+    # Images are off unless IMAGES_ENABLED says otherwise. ADR-009 requires
+    # the measurement in Part C before this becomes a default, and the gate
+    # in images.py costs two network calls per word to say "no" to most of
+    # them, which is not a cost to impose on every run unasked.
+    image_names: dict[str, str] = {}
+    image_credits: dict[str, str] = {}
+    # Imported here rather than at module scope so a test (and a user's
+    # .env) can change it without reimporting this module. Same pattern and
+    # same reason as transcript._build_proxy().
+    from pipeline.config import IMAGES_ENABLED
+
+    if IMAGES_ENABLED:
+        candidates = [r.lemma.lower() for r in found]
+        candidates += [lem.lower() for lem in (not_found_audio or {})]
+        image_names, image_credits, image_paths = _download_images(
+            sorted(set(candidates)), language, progress=progress
+        )
+        media_paths = media_paths + image_paths
+
     # Tracks every lemma that has already produced a note in this package,
     # independent of definition.fetch_definitions()'s own input-list dedup.
     # Defense in depth (see ARCHITECTURE.md 8.6): a duplicate that slips past
@@ -803,6 +938,8 @@ def build_package(
             ipa=result.ipa, audio_url=result.audio_url,
             media_name=media_names.get(key),
             pos_language=pos_language,
+            image_name=image_names.get(key),
+            attribution=image_credits.get(key),
         ))
         standard_count += 1
         logger.debug("Card built: '%s' (%s)", result.lemma, result.source)
@@ -836,6 +973,8 @@ def build_package(
                 ipa=(not_found_ipa or {}).get(lemma),
                 audio_url=(not_found_audio or {}).get(lemma),
                 media_name=media_names.get(key),
+                image_name=image_names.get(key),
+                attribution=image_credits.get(key),
             )
         )
         fallback_count += 1
