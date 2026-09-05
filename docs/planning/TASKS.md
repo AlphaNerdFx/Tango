@@ -121,22 +121,28 @@ current state.
 
 ## High
 
-- [ ] **The test suite reads the developer's `.env`.** Found 5 September
-      2026 while adding the WSL path guard. `config.py` calls
-      `load_dotenv()` at import, so every test inherits whatever is in the
-      local `.env`. CI has none, so CI and a developer's machine can
-      disagree about the same commit: three tests in `TestPromptImport`
-      passed on all six CI jobs and failed locally, because this machine's
-      `ANKI_HOST` points at the Windows gateway while CI's does not exist.
+- [x] **The test suite read the developer's `.env`.** Found and fixed
+      5 September 2026. `config.py` calls `load_dotenv()` at import, so
+      every test inherited whatever was in the local `.env`. CI has none,
+      so CI and a developer's machine could disagree about the same commit:
+      three tests in `TestPromptImport` passed on all six CI jobs and
+      failed locally, because this machine's `ANKI_HOST` points at the
+      Windows gateway while CI's does not exist.
 
-      Patched at the class level for those three, which is not the fix. The
-      fix is an autouse fixture in `tests/conftest.py` that isolates the
-      whole suite from `.env`, so a test that depends on configuration has
-      to say so. Deferred because it may change other outcomes and deserves
-      its own pass rather than riding along with a platform change.
+      `tests/conftest.py` now carries an autouse `isolated_environment`
+      fixture. Two halves, because one is not enough: the variables are
+      deleted so anything reading `getenv` at call time sees a default, and
+      the module-level constants already computed from them at import are
+      reset, since deleting a variable afterwards cannot reach a value read
+      once at startup.
 
-      This is ARCHITECTURE 8.39's shape a third time: a signal that is
-      honestly reporting on something other than what the reader assumes.
+      Verified by removing the fixture: exactly those three tests fail on
+      this machine and would still pass on CI. That divergence was the bug.
+      It also made a 24-line class-level workaround redundant, deleted in
+      the same pass.
+
+      This was ARCHITECTURE 8.39's shape a third time: a signal honestly
+      reporting on something other than what the reader assumes.
 
 - [x] **Multi-language testing pass.** Real pipeline runs, real videos, across 9
       never-before-tested languages (German, Spanish, Portuguese, Japanese,
