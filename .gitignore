@@ -1,4 +1,4 @@
-# .gitignore — yt-anki-pipeline
+# .gitignore for Tango
 
 # Environment & secrets
 .env
@@ -37,7 +37,7 @@ pipeline.db-shm
 pipeline.db-wal
 review.json
 
-# Offline Wiktionary indexes — hundreds of MB each, rebuildable at any time
+# Offline Wiktionary indexes: hundreds of MB each, rebuildable at any time
 # with `make dictionary LANGUAGE=<code>`. Never commit these.
 dictionaries/
 
@@ -67,10 +67,15 @@ coverage.xml
 Thumbs.db
 
 # spaCy model cache
-# Models are downloaded via 'make spacy-model' — not committed
+# Models are downloaded via 'make spacy-model', not committed
 *.tar.gz
 
 # Claude Settings
 .claude/settings.local.json
 # Pronunciation audio cache (ADR-009). Rebuildable, and large in aggregate.
 media/
+
+# Card image cache (ADR-009 phase 3). Same reasoning as media/: rebuildable,
+# and it grows with every deck. Note this is the cache at the repo root, not
+# docs/assets/, which holds committed diagrams.
+images/
