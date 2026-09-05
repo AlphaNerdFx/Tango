@@ -65,18 +65,18 @@ except ValueError as exc:
 echo "  video id: $VID"
 
 echo
-echo "Languages — an offline index means real native definitions:"
+echo "Languages, an offline index means real native definitions:"
 for code in $(ls dictionaries/ 2>/dev/null | sed -n 's/wiktionary_\(.*\)\.sqlite/\1/p'); do
   echo "   $code   index built"
 done
 echo "   en   no index needed, Merriam-Webster covers English"
 echo "   (any other supported code works, but definitions will be sparse"
-echo "    without an index — build one with: make dictionary LANGUAGE=<code>)"
+echo "    without an index, build one with: make dictionary LANGUAGE=<code>)"
 read -rp "Transcript language code: " LC
 [ -z "$LC" ] && { echo "A language is required."; exit 1; }
 
 echo
-echo "Definition language — leave blank for native definitions in $LC."
+echo "Definition language: leave blank for native definitions in $LC."
 echo "  Set it (e.g. en) to check cross-language mode, which needs a translation"
 echo "  model: make translate-model LANGUAGE=$LC DEF_LANG=en"
 read -rp "Definition language [native]: " DL
@@ -121,9 +121,9 @@ if [ "$PRIOR" -gt 0 ]; then
   echo "  Re-run with a video you have not processed for a clean end-to-end check."
 fi
 ank createDeck "$(jq -nc --arg d "$DECK" '{deck:$d}')" >/dev/null
-echo "  target deck notes before the run: $(count)   (0 is expected — the deck is new)"
+echo "  target deck notes before the run: $(count)   (0 is expected, the deck is new)"
 
-echo; echo "=== 1. first run into the empty deck — expect all NEW ==="
+echo; echo "=== 1. first run into the empty deck, expect all NEW ==="
 # FORCE=1 here too: the video-level "already processed" guard is a separate
 # thing from the deck-level duplicate check this script is testing, and it
 # would otherwise exit before doing any work on any video you have run before.
@@ -145,14 +145,14 @@ print('  importPackage ->', deck._anki_request('importPackage', path=_translate_
 "
 echo "  notes now: $(count)"
 
-echo; echo "=== 3. SAME video again with FORCE — expect all SKIP, 0 new ==="
+echo; echo "=== 3. SAME video again with FORCE, expect all SKIP, 0 new ==="
 printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" $DEF_ARGS FORCE=1 2>&1 \
   | grep -E "Deck check"
 
 echo; echo "=== 4. per-field card quality, read back out of Anki ==="
 echo "  (a fallback card carries the literal text 'No definition found'; that"
 echo "   counts as missing here, not as a filled field)"
-if [ "$(count)" -eq 0 ]; then echo "  no cards in deck — steps 1/2 failed, skipping"; else
+if [ "$(count)" -eq 0 ]; then echo "  no cards in deck, steps 1/2 failed, skipping"; else
 IDS=$(find_in_deck | jq -c .result)
 ank notesInfo "$(jq -nc --argjson n "$IDS" '{notes:$n}')" | jq -r '
   .result as $n | ($n|length) as $t |
@@ -166,7 +166,7 @@ fi
 echo; echo "=== 5. review-mode language (both lines below are EXPECTED) ==="
 echo "  a deck whose language resolves:"
 printf 'n\n' | make review DECK="$DECK" LANGUAGE="$LC" 2>&1 | grep -E "Target language" | sed 's/^/    /'
-echo "  a deck whose name carries no language — falling back to en is the"
+echo "  a deck whose name carries no language, falling back to en is the"
 echo "  designed behaviour here, not a failure:"
 printf 'n\n' | make review DECK="My Words" 2>&1 | grep -E "Could not infer" | sed 's/^/    /' 
 
