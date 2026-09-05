@@ -6,6 +6,7 @@ All file I/O uses tmp_path fixtures, no files written to the real filesystem.
 Run unit tests:  pytest tests/test_cards.py -m "not integration"
 """
 
+import json
 import sqlite3
 import zipfile
 import time
@@ -18,6 +19,8 @@ import pytest
 import pipeline.cards as cards_module
 from pipeline.cards import (
     _build_fallback_note,
+    _download_images,
+    _image_field,
     _build_model,
     _build_note,
     _build_output_path,
@@ -734,6 +737,140 @@ class TestBuildPackage:
         assert result.standard_count == 1
         assert result.fallback_count == 0
         assert result.total_cards == 1
+
+
+class TestImageField:
+    """
+    ADR-009 phase 3. The one place images deliberately differ from audio:
+    _audio_field degrades to a link, _image_field degrades to nothing.
+    """
+
+    def test_a_downloaded_image_becomes_an_img_tag(self):
+        assert _image_field("Q144.jpg") == '<img src="Q144.jpg">'
+
+    def test_no_image_is_an_empty_field(self):
+        assert _image_field(None) == ""
+
+    def test_there_is_no_link_fallback(self):
+        # A picture that has to be clicked is not a picture on a card: it
+        # interrupts the review it was meant to help. Empty is the better
+        # failure, and unlike audio there is no useful middle state.
+        assert "href" not in _image_field("Q144.jpg")
+
+
+def _an_image(qid="Q144", credit="Jane, CC0"):
+    return cards_module.images.ImageResult(
+        url="https://x/d.jpg", qid=qid, source="wikidata",
+        filename="d.jpg", attribution=credit)
+
+
+class TestDownloadImages:
+    """
+    The prefetch. Modelled on _download_audio, and like it nothing here may
+    fail the run: the package is the expensive artefact.
+    """
+
+    def test_no_candidates_costs_nothing(self):
+        with patch.object(cards_module.images, "find_image") as find:
+            assert _download_images([], "de") == ({}, {}, [])
+        find.assert_not_called()
+
+    def test_a_refused_lemma_contributes_nothing(self):
+        # The gate refusing is the normal case, not an error.
+        with patch.object(cards_module.images, "find_image", return_value=None), \
+             patch.object(cards_module.images, "fetch_image") as fetch:
+            assert _download_images(["freiheit"], "de") == ({}, {}, [])
+        fetch.assert_not_called()
+
+    def test_a_found_image_returns_its_name_credit_and_path(self, tmp_path):
+        path = tmp_path / "Q144.jpg"
+        path.write_bytes(b"x")
+        with patch.object(cards_module.images, "find_image", return_value=_an_image()), \
+             patch.object(cards_module.images, "fetch_image", return_value=path):
+            names, credits, paths = _download_images(["hund"], "de")
+        assert names == {"hund": "Q144.jpg"}
+        assert credits == {"hund": "Jane, CC0"}
+        assert paths == [path]
+
+    def test_a_failed_download_is_not_a_card_with_a_broken_image(self):
+        # find_image succeeded, fetch_image did not. The name must not be
+        # recorded, or the card would reference a file the package lacks.
+        with patch.object(cards_module.images, "find_image", return_value=_an_image()), \
+             patch.object(cards_module.images, "fetch_image", return_value=None):
+            assert _download_images(["hund"], "de") == ({}, {}, [])
+
+    def test_a_raising_lookup_does_not_fail_the_run(self):
+        with patch.object(cards_module.images, "find_image",
+                          side_effect=RuntimeError("wikidata is down")):
+            assert _download_images(["hund"], "de") == ({}, {}, [])
+
+
+def _fields_of(apkg_path, tmp_path):
+    """The first note's fields, read out of a built package."""
+    extract_dir = tmp_path / "extracted_img"
+    with zipfile.ZipFile(apkg_path) as z:
+        z.extractall(extract_dir)
+    conn = sqlite3.connect(extract_dir / "collection.anki2")
+    try:
+        return conn.execute("SELECT flds FROM notes").fetchone()[0].split("\x1f")
+    finally:
+        conn.close()
+
+
+class TestImagesAreOffByDefault:
+    """
+    The safety property. ADR-009 requires the Part C measurement before
+    images become a default, and the gate costs two network calls per word
+    to say "no" to most of them. A run nobody asked for must pay neither.
+
+    IMAGES_ENABLED is patched on pipeline.config rather than on cards,
+    because build_package imports it at call time for exactly this reason.
+    """
+
+    def test_it_is_off_unless_asked_for(self):
+        import pipeline.config
+        assert pipeline.config.IMAGES_ENABLED is False
+
+    def test_no_network_when_disabled(self, sample_result):
+        with patch("pipeline.config.IMAGES_ENABLED", False), \
+             patch.object(cards_module.images, "find_image") as find:
+            build_package("vidimg0001", "German", [sample_result], [], language="de")
+        find.assert_not_called()
+
+    def test_the_fields_are_empty_when_disabled(self, sample_result, tmp_path):
+        with patch("pipeline.config.IMAGES_ENABLED", False):
+            result = build_package("vidimg0002", "German", [sample_result], [],
+                                   language="de")
+        fields = _fields_of(result.path, tmp_path)
+        assert fields[12] == ""
+        assert fields[13] == ""
+
+    def test_enabling_it_populates_both_fields(self, sample_result, tmp_path):
+        img = tmp_path / "Q144.jpg"
+        img.write_bytes(b"x")
+        with patch("pipeline.config.IMAGES_ENABLED", True), \
+             patch.object(cards_module.images, "find_image", return_value=_an_image()), \
+             patch.object(cards_module.images, "fetch_image", return_value=img):
+            result = build_package("vidimg0003", "German", [sample_result], [],
+                                   language="de")
+        fields = _fields_of(result.path, tmp_path)
+        assert fields[12] == '<img src="Q144.jpg">'
+        assert fields[13] == "Jane, CC0"
+
+    def test_the_image_is_packaged_so_the_card_can_render_it(
+            self, sample_result, tmp_path):
+        # A note referencing Q144.jpg with no Q144.jpg in the package is a
+        # broken image on every card that has one.
+        img = tmp_path / "Q144.jpg"
+        img.write_bytes(b"x")
+        with patch("pipeline.config.IMAGES_ENABLED", True), \
+             patch.object(cards_module.images, "find_image", return_value=_an_image()), \
+             patch.object(cards_module.images, "fetch_image", return_value=img):
+            result = build_package("vidimg0004", "German", [sample_result], [],
+                                   language="de")
+        with zipfile.ZipFile(result.path) as z:
+            media = json.loads(z.read("media"))
+        assert "Q144.jpg" in media.values()
 
 
 # -- Integration --------------------------------------------------------------
