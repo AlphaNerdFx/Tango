@@ -644,6 +644,83 @@ class TestEnvironmentKeysAreDeclared:
 
 # -- The capability table matches the real mappings ---------------------------
 
+class TestDocumentedLanguageCountsAreTrue:
+    """
+    The counts in the docs must match the real mapping.
+
+    CLAUDE.md records that this file has carried a stale coverage number
+    four separate times, and the language count was stale in four places at
+    once: README.md, two docstrings and a comment in language.py, and the
+    FAQ all said "40 languages" while the map held 45 codes. The README went
+    further and advertised Arabic as supported, which spaCy has no model
+    for, so a user with an Arabic deck followed the README into a run that
+    could not start.
+
+    Prose asked a reader to notice. This notices.
+    """
+
+    def _counts(self):
+        from pipeline.language import LANGUAGE_MAP, get_spacy_model
+
+        codes = set(LANGUAGE_MAP.values())
+        usable = set()
+        for code in codes:
+            try:
+                get_spacy_model(code)
+            except Exception:
+                continue
+            usable.add(code)
+        return len(codes), len(usable)
+
+    def test_the_readme_states_the_real_counts(self):
+        root = Path(__file__).resolve().parent.parent
+        text = (root / "README.md").read_text(encoding="utf-8")
+        recognised, usable = self._counts()
+        flat = " ".join(text.split())
+        assert f"recognises {recognised} language codes" in flat
+        assert f"{usable} of them can produce cards" in flat
+
+    def test_the_readme_does_not_advertise_a_language_that_cannot_work(self):
+        # The specific failure this class was written for. Every language
+        # named in the "can produce cards" sentence must actually resolve.
+        from pipeline.language import LANGUAGE_MAP, get_spacy_model
+
+        root = Path(__file__).resolve().parent.parent
+        text = (root / "README.md").read_text(encoding="utf-8")
+        flat = " ".join(text.split())      # the sentence wraps in the file
+        start = flat.index("can produce cards:")
+        listed = flat[start:flat.index(".", start)]
+        for name in re.findall(r"[A-Z][a-z]+", listed):
+            code = LANGUAGE_MAP.get(name.lower())
+            if code is None:
+                continue
+            get_spacy_model(code)   # raises if the README is lying
+
+    def test_every_count_written_in_language_py_is_the_real_one(self):
+        """
+        Every occurrence, not just the first.
+
+        An `in` check passes while a second site stays wrong, and that is
+        the exact shape of the bug: the count was stale in four places at
+        once, and language.py alone states it twice.
+        """
+        from pipeline import language
+
+        recognised, _ = self._counts()
+        flat = " ".join(Path(language.__file__).read_text(encoding="utf-8").split())
+        written = re.findall(r"recognises (\d+) (?:language )?codes", flat)
+        assert written, "language.py no longer states the count at all"
+        assert all(int(n) == recognised for n in written), written
+
+    def test_every_count_written_in_the_readme_is_the_real_one(self):
+        root = Path(__file__).resolve().parent.parent
+        flat = " ".join((root / "README.md").read_text(encoding="utf-8").split())
+        recognised, _ = self._counts()
+        written = re.findall(r"recognises (\d+) (?:language )?codes", flat)
+        assert written, "the README no longer states the count at all"
+        assert all(int(n) == recognised for n in written), written
+
+
 class TestLanguageCapabilitiesAreDerived:
     """
     v0.11.0. Every per-language resource lives in a different module and
