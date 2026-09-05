@@ -19,7 +19,49 @@ from __future__ import annotations
 import pytest
 
 import pipeline.antonyms as antonyms
+import pipeline.config as config
+import pipeline.deck as deck
 import pipeline.wiktdata as wiktdata
+
+
+@pytest.fixture(autouse=True)
+def isolated_environment(monkeypatch):
+    """
+    Keep the developer's `.env` out of every test.
+
+    `config` calls `load_dotenv()` at import, so the whole suite inherits
+    whatever happens to be in the local `.env`. CI has none. That means the
+    same commit can pass on all six CI jobs and fail on the machine the
+    project is developed on, which is the worst kind of test result: one
+    that is honestly reporting on something other than what the reader
+    thinks it is.
+
+    Found 5 September 2026. Three tests in `TestPromptImport` did exactly
+    that. This machine's `ANKI_HOST` points at the Windows gateway, so
+    `_prompt_import` correctly refused to send a `/tmp` path to a
+    Windows-side Anki, and three tests about import *ordering* failed for a
+    reason that had nothing to do with ordering.
+
+    Two halves. The environment variables go, so anything reading `getenv`
+    at call time sees a default. And the module-level constants already
+    computed from them at import are reset, because deleting the variable
+    afterwards cannot reach a value that was read once at startup.
+
+    A test that wants a particular setting patches it itself, which
+    overrides this.
+    """
+    for key in config.KNOWN_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+
+    # Constants read at import, so the delenv above cannot reach them.
+    monkeypatch.setattr(config, "ANKI_HOST", "http://localhost:8765", raising=False)
+    monkeypatch.setattr(config, "ANKI_HOST_EXPLICIT", False, raising=False)
+    monkeypatch.setattr(deck, "ANKI_HOST", "http://localhost:8765", raising=False)
+    monkeypatch.setattr(deck, "ANKI_HOST_EXPLICIT", False, raising=False)
+    monkeypatch.setattr(deck, "_active_host", "http://localhost:8765", raising=False)
+    # The WSL fallback latches per run; a test must not inherit the last
+    # test's decision about it.
+    monkeypatch.setattr(deck, "_wsl_fallback_tried", False, raising=False)
 
 
 @pytest.fixture(autouse=True)
