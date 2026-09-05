@@ -18,7 +18,7 @@ Antonyms remain the thinnest field even so: about two French words in three and 
 
 ## Why is my deck not recognised by name?
 
-The deck name matcher checks each word in the deck name against a list of 40 languages in multiple languages. If your deck is named something that does not contain a recognisable language name, it will not be matched. Use the explicit `LANGUAGE=` flag instead, or rename your deck to include the language name. Run `tango languages` to see all recognised names.
+The deck name matcher checks each word in the deck name against a list of 45 language codes, named in several languages. If your deck is named something that does not contain a recognisable language name, it will not be matched. Use the explicit `LANGUAGE=` flag instead, or rename your deck to include the language name. Run `tango languages` to see all recognised names.
 
 ## Can I use Tango without an internet connection?
 
