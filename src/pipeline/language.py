@@ -15,7 +15,8 @@ Manual transcripts are preferred over auto-generated ones.
 Partial BCP-47 matching is handled here since youtube-transcript-api
 uses exact key lookup internally.
 
-Coverage: 40 languages with names in English, French, Spanish, German,
+Coverage: 45 language codes with names in English, French, Spanish,
+German,
 and the language's own endonym where it differs significantly.
 """
 
@@ -199,7 +200,7 @@ class SpacyModelUnavailableError(TangoError):
     """
     Raised when spaCy has no trained pipeline for the resolved language.
 
-    LANGUAGE_MAP supports 40 languages for transcript fetching, but spaCy
+    LANGUAGE_MAP recognises 45 codes for transcript fetching, but spaCy
     only ships trained pipelines for a subset of those -- this is a
     separate, narrower coverage question. Previously nlp.py silently used
     the English model for every language regardless (see ARCHITECTURE.md
@@ -480,8 +481,10 @@ def capability_report() -> list[tuple[str, str, dict[str, bool]]]:
 # =============================================================================
 # BCP-47 code -> spaCy model name
 # =============================================================================
-# spaCy only ships trained pipelines for these 24 languages. LANGUAGE_MAP
-# above supports 40 languages for transcript fetching -- that is a
+# spaCy only ships trained pipelines for these 24 languages, which 25 of
+# LANGUAGE_MAP's codes reach: `no` and both Chinese codes alias onto one
+# model each. LANGUAGE_MAP above recognises 45 codes, so 20 of them resolve
+# a deck name and then have no model -- that is a
 # different, wider coverage question. A language resolving successfully
 # via LANGUAGE_MAP does NOT guarantee a spaCy model exists for it.
 #
