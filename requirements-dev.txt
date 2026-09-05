@@ -1,4 +1,4 @@
-# requirements-dev.txt — pinned development dependencies
+# requirements-dev.txt: pinned development dependencies
 # Install alongside requirements.txt:
 #   pip install -r requirements.txt -r requirements-dev.txt
 # Or use the editable install (recommended for development):
