@@ -10,6 +10,7 @@ Run all including live: pytest tests/test_transcript.py
 from unittest.mock import MagicMock, patch, PropertyMock
 import pytest
 
+import pipeline.transcript as transcript
 from pipeline.transcript import get_transcript, get_properties, get_snippets
 
 
@@ -218,3 +219,136 @@ class TestIntegration:
         t = get_transcript("LV_NoD2M54w")
         snippets = get_snippets(t)
         assert len(snippets["_full_text"]) > 100
+
+class TestProxyConfiguration:
+    """
+    v0.11.0. `_build_proxy` had no test at all: every test in this file
+    patches `YouTubeTranscriptApi` wholesale, so only the `return None`
+    branch ever ran. ARCHITECTURE 2771 names "proxy and fetch-failure paths"
+    as the uncovered region of this module.
+
+    The priority order is the part worth pinning. Issue #8 established the
+    generic proxy as the recommendation and Webshare's free tier as
+    measurably harmful, and every document says so, but the code preferred
+    Webshare, so a machine with both set silently used the one the docs warn
+    against.
+    """
+
+    @staticmethod
+    def _with(http=None, https=None, user=None, password=None):
+        import pipeline.config as cfg
+        return (patch.object(cfg, "PROXY_HTTP_URL", http),
+                patch.object(cfg, "PROXY_HTTPS_URL", https),
+                patch.object(cfg, "WEBSHARE_USERNAME", user),
+                patch.object(cfg, "WEBSHARE_PASSWORD", password))
+
+    def _build(self, **kw):
+        from contextlib import ExitStack
+        with ExitStack() as stack:
+            for ctx in self._with(**kw):
+                stack.enter_context(ctx)
+            return transcript._build_proxy()
+
+    def test_no_settings_means_no_proxy(self):
+        assert self._build() is None
+
+    def test_generic_urls_build_a_generic_config(self):
+        from youtube_transcript_api.proxies import GenericProxyConfig
+        assert type(self._build(http="http://host:1")) is GenericProxyConfig
+
+    def test_webshare_credentials_build_a_webshare_config(self):
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+        assert type(self._build(user="u", password="p")) is WebshareProxyConfig
+
+    def test_generic_wins_when_both_are_set(self):
+        # The whole point. Reversing this puts the provider the project
+        # documents as harmful ahead of the one it recommends.
+        #
+        # `type(...) is`, not isinstance. WebshareProxyConfig SUBCLASSES
+        # GenericProxyConfig, so isinstance is true for both and this test
+        # passed with the priority reversed. A mutation caught that; the
+        # idiomatic assertion was the wrong one here.
+        from youtube_transcript_api.proxies import GenericProxyConfig
+        got = self._build(http="http://host:1", user="u", password="p")
+        assert type(got) is GenericProxyConfig
+
+    def test_half_a_webshare_credential_is_not_enough(self):
+        assert self._build(user="u") is None
+        assert self._build(password="p") is None
+
+    def test_the_proxy_classes_come_from_their_public_module(self):
+        # They used to be imported from `_errors`, which re-exports them
+        # only incidentally for its own use. A patch release could stop
+        # doing that. The package root exports neither, so `proxies` is the
+        # public path.
+        from youtube_transcript_api.proxies import (  # noqa: F401
+            GenericProxyConfig,
+            WebshareProxyConfig,
+        )
+        import youtube_transcript_api as api
+
+        assert not hasattr(api, "WebshareProxyConfig")
+
+
+class TestBlockedMessageKnowsAboutTheProxy:
+    """
+    v0.11.0. A blocked user was always told "no proxy is configured", even
+    with one configured, because the handler rebuilt the exception and the
+    library resets its proxy reference in `__init__`.
+
+    Letting the library's own exception through is not the fix. All three of
+    its messages carry a Webshare affiliate referral link, and the Webshare
+    one asks the reader to buy through it. This project recommends no
+    provider and documents that Webshare's free tier is harmful.
+    """
+
+    @staticmethod
+    def _raised(proxy):
+        return transcript._ProxyAwareIpBlocked("abc12345678", proxy)
+
+    def test_without_a_proxy_it_says_so(self):
+        assert "No proxy is configured" in self._raised(None).cause
+
+    def test_with_a_generic_proxy_it_does_not_claim_there_is_none(self):
+        from youtube_transcript_api.proxies import GenericProxyConfig
+        cause = self._raised(GenericProxyConfig(http_url="http://h:1")).cause
+        assert "No proxy is configured" not in cause
+        assert "even through the configured proxy" in cause
+
+    def test_webshare_gets_the_warning_the_project_actually_measured(self):
+        from youtube_transcript_api.proxies import WebshareProxyConfig
+        cause = self._raised(WebshareProxyConfig(proxy_username="u", proxy_password="p")).cause
+        assert "free tier" in cause
+
+    @pytest.mark.parametrize("proxy_kind", ["none", "generic", "webshare"])
+    def test_no_affiliate_link_reaches_the_user(self, proxy_kind):
+        from youtube_transcript_api.proxies import GenericProxyConfig, WebshareProxyConfig
+        proxy = {"none": None,
+                 "generic": GenericProxyConfig(http_url="http://h:1"),
+                 "webshare": WebshareProxyConfig(proxy_username="u", proxy_password="p")}[proxy_kind]
+        text = str(self._raised(proxy)) + self._raised(proxy).cause
+        assert "referral_code" not in text
+        assert "affiliate" not in text.lower()
+
+    def test_it_is_still_an_IpBlocked(self):
+        # Callers and the existing test in this file catch IpBlocked. Only
+        # the wording changed, not the type.
+        from youtube_transcript_api._errors import IpBlocked
+        assert isinstance(self._raised(None), IpBlocked)
+
+    def test_the_call_site_actually_passes_the_proxy_through(self):
+        # The tests above build the exception directly, so none of them
+        # reaches the `raise` in get_transcript(). A mutation that passed
+        # None there left every one of them green while reintroducing the
+        # exact bug: a proxied user told they have no proxy.
+        from youtube_transcript_api._errors import IpBlocked
+        from youtube_transcript_api.proxies import GenericProxyConfig
+
+        proxy = GenericProxyConfig(http_url="http://host:1")
+        with patch.object(transcript, "_build_proxy", return_value=proxy), \
+             patch.object(transcript, "YouTubeTranscriptApi") as api:
+            api.return_value.list.side_effect = IpBlocked("abc12345678")
+            with pytest.raises(IpBlocked) as exc:
+                transcript.get_transcript("abc12345678")
+        assert "No proxy is configured" not in exc.value.cause
+        assert "even through the configured proxy" in exc.value.cause
