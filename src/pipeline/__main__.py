@@ -1263,6 +1263,26 @@ def build_antonyms() -> None:
     _run_build_antonyms()
 
 
+@app.command("repair-images")
+def repair_images() -> None:
+    """Rename cached images whose extension disagrees with their content."""
+    from pipeline import images as image_source
+
+    wrong = image_source.mislabelled_cached_files()
+    if not wrong:
+        _info("Every cached image is named correctly. Nothing to do.")
+        raise typer.Exit(0)
+
+    for path, extension in wrong:
+        print(f"  {path.name} holds {extension[1:].upper()} data")
+    moved = image_source.repair_cached_names()
+    _ok(f"Renamed {moved} of {len(wrong)} file(s).")
+    if moved:
+        print("  Re-import any deck that used them; Anki keeps the old "
+              "filename in the note until it does.")
+    raise typer.Exit(0 if moved == len(wrong) else 1)
+
+
 # ── Mode: uninstall ───────────────────────────────────────────────────────────
 #
 # v0.8.2. `pip uninstall tango-anki` removes about 130 KB of Python and
@@ -1555,6 +1575,19 @@ def _run_doctor() -> int:
         cached = len(list(IMAGE_DIR.glob("*"))) if IMAGE_DIR.exists() else 0
         size = sum(f.stat().st_size for f in IMAGE_DIR.glob("*")) / 1e6 if cached else 0
         print(f"    enabled  {cached} cached ({size:.1f} MB) in {IMAGE_DIR}")
+
+        # A file whose extension disagrees with its bytes is a broken-image
+        # icon on every card that uses it. Commons rasterises SVG when a
+        # width is requested, so files cached before that was handled are
+        # named .svg and hold PNG.
+        from pipeline import images as image_source
+
+        wrong = image_source.mislabelled_cached_files()
+        if wrong:
+            missing += 1
+            print(f"    WARNING  {len(wrong)} cached image(s) named wrongly, "
+                  "so they show as a broken icon")
+            print("    -> tango repair-images")
     else:
         # Not counted as missing. Off is the intended state until the
         # measurement in ADR-009 justifies changing it.
