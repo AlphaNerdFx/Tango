@@ -223,6 +223,95 @@ class TestExtension:
         assert images._extension("https://x/Special:FilePath/Dog") == ".jpg"
 
 
+class TestNamingADownloadedFile:
+    """
+    A cached file is named after its content, not after its URL.
+
+    The URL lies, and this is measured rather than cautious. Commons
+    rasterises an SVG when a width is requested, so
+    `Special:FilePath/Procent-teken.svg?width=480` answers
+    `Content-Type: image/png` with PNG bytes. Naming that `.svg` is why the
+    `pourcent` card showed a broken-image icon: Anki reads the extension,
+    picks an SVG renderer, and is handed PNG.
+    """
+
+    def test_png_bytes_from_an_svg_url_are_named_png(self):
+        # The exact `pourcent` failure.
+        got = images._extension_for(
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 8,
+            "image/png",
+            "https://commons.wikimedia.org/wiki/Special:FilePath/Procent-teken.svg?width=480",
+        )
+        assert got == ".png"
+
+    def test_the_bytes_beat_a_wrong_content_type(self):
+        # Magic bytes cannot be wrong; a header can.
+        got = images._extension_for(b"\x89PNG\r\n\x1a\n", "image/svg+xml", "x.svg")
+        assert got == ".png"
+
+    def test_content_type_is_used_when_the_bytes_are_unrecognised(self):
+        got = images._extension_for(b"RIFF\x00\x00\x00\x00WEBP", "image/webp", "x.bin")
+        assert got == ".webp"
+
+    def test_the_url_is_the_last_resort(self):
+        got = images._extension_for(b"\x00\x01\x02\x03", "", "https://x/y/thing.gif")
+        assert got == ".gif"
+
+    def test_real_svg_bytes_are_still_named_svg(self):
+        assert images._extension_for(b"<svg xmlns=", "", "x") == ".svg"
+
+    def test_jpeg_bytes_are_named_jpg(self):
+        assert images._extension_for(b"\xff\xd8\xff\xe0", "", "x") == ".jpg"
+
+
+class TestRepairingTheCache:
+    """
+    Files cached before the naming fix keep their wrong name. The bytes are
+    fine, so renaming is the repair; re-downloading would spend requests to
+    obtain what is already on disk.
+    """
+
+    def test_a_png_named_svg_is_reported(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        (tmp_path / "Q1.svg").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+        assert [(p.name, e) for p, e in images.mislabelled_cached_files()] == [
+            ("Q1.svg", ".png")]
+
+    def test_a_correctly_named_file_is_not_reported(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        (tmp_path / "Q1.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8)
+        assert images.mislabelled_cached_files() == []
+
+    def test_jpeg_and_jpg_are_not_a_fault(self, tmp_path, monkeypatch):
+        # Same renderer, so renaming would be churn.
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        (tmp_path / "Q1.jpeg").write_bytes(b"\xff\xd8\xff\xe0")
+        assert images.mislabelled_cached_files() == []
+
+    def test_a_file_of_unknown_type_is_left_alone(self, tmp_path, monkeypatch):
+        # Refusing to guess is better than renaming someone's file wrongly.
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        (tmp_path / "Q1.png").write_bytes(b"\x00\x01\x02\x03")
+        assert images.mislabelled_cached_files() == []
+
+    def test_repair_renames_and_keeps_the_bytes(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        payload = b"\x89PNG\r\n\x1a\n" + b"payload"
+        (tmp_path / "Q1.svg").write_bytes(payload)
+        assert images.repair_cached_names() == 1
+        assert (tmp_path / "Q1.png").read_bytes() == payload
+        assert not (tmp_path / "Q1.svg").exists()
+
+    def test_repair_is_a_no_op_on_a_sound_cache(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        (tmp_path / "Q1.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+        assert images.repair_cached_names() == 0
+
+    def test_a_missing_cache_directory_is_not_an_error(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path / "nope")
+        assert images.mislabelled_cached_files() == []
+
+
 class TestAttribution:
     """
     Not decoration. Commons reports AttributionRequired: true on the images
