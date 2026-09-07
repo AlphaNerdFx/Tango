@@ -109,7 +109,27 @@ in the learner's language). Every tag has GitHub release notes.
 longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
 5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.12.0,
 where the rest of the size work lives.
-**Working toward:** v0.11.0, images on cards, gated to concrete nouns. The
+**In progress:** v0.11.0, images on cards, gated to concrete nouns. The
+feature is built and off by default (`IMAGES_ENABLED`). ADR-009's phase 3
+was redesigned on 6 September 2026: it had specified Wikimedia Commons text
+search, which matches a spelling rather than a meaning, and that is why
+`laufen` returned a coin from the town of Laufen. Resolving the lemma to a
+Wikidata concept instead fixed German, which the WordNet gate could not
+judge at all, from 0% to 38%. Coverage is 33.2% of nouns across French,
+German and English, against a WordNet gate that reached 9%, 0% and 4%.
+
+Two things were found only by running it. Commons serves originals, and the
+first real download was 9.2 MB for one photograph shown at 240px, so both
+routes now ask for a 480px thumbnail at 46 KB. And Commons reports
+`AttributionRequired: true` on these files, so `Attribution` is field 13
+because the licence requires it, not because it is nice to have. Resolution
+is batched at 50 items per request: about 24 requests for a deck rather than
+1600. The icon fallback for abstract words was measured and rejected; three
+FOSS icon sets cover 0 of 14 abstract words between them, because they are
+built to label buttons. The remaining gate on turning images on by default
+is a person looking at a deck of the cards in Anki.
+
+The
 packaging rung moved forward three places on 27 August 2026, from v0.10.0:
 it had sat behind cross-platform support and install size, which is the
 ordering of a project polishing for users who cannot install it. Goals per
@@ -563,7 +583,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1063 passing, 24 deselected. The count drifts as tests are added,
+Expected: 1165 passing, 33 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
