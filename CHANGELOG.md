@@ -74,6 +74,12 @@ by default** pending a look at real cards in Anki.
   titles with spaces while the filenames come from a URL with underscores.
   An image shipped without its credit breaches the licence rather than
   merely looking untidy.
+- **A lead image shipped with no credit at all.** The Wikipedia route hands
+  back a thumbnail URL, so the credit lookup asked Commons about
+  `500px-Scout_Girl.jpg` rather than `Scout_Girl.jpg`, found no page, and
+  returned nothing, which is indistinguishable from a file that genuinely
+  has no credit. Found by counting credits in a real deck: 4 of 15 pictures
+  had none and all four came from that route, two of them CC BY.
 - A multi-line Commons credit no longer breaks the card layout.
 
 
