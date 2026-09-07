@@ -28,8 +28,13 @@ by default** pending a look at real cards in Anki.
   and gates on its `instance of` claims. The judgement attaches to the
   concept rather than the word, so `Hund` and `chien` both reach Q144 and one
   answer serves every language.
-- **`IMAGES_ENABLED`**, default false. A run with images off makes no
-  network calls for them.
+- **`--images` and `--no-images` on `run`, `review` and `backlog`.** Off by
+  default, so trying pictures is one flag rather than an edit to `.env`.
+  Three states on purpose: `--images` and `--no-images` each override the
+  environment for one run, and neither flag leaves `IMAGES_ENABLED` to
+  decide, so an install that turns them on can still build one deck without.
+- **`IMAGES_ENABLED`**, default false, now the per-install default that the
+  flags override. A run with images off makes no network calls for them.
 - **`tango doctor` reports card images**, including that the gate covers
   every language rather than only the 19 in OMW.
 - **`scripts/measure_image_sources.py`**, which measures coverage against
