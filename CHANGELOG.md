@@ -14,6 +14,52 @@ rather than list every change.
 
 ## [Unreleased]
 
+Images on cards, gated to concrete nouns. ADR-009 phase 3, built but **off
+by default** pending a look at real cards in Anki.
+
+### Added
+
+- **`Image` and `Attribution` card fields**, appended at indices 12 and 13
+  under the rule in CLAUDE.md 3.2. Verified against a live 4,773-note
+  collection before shipping: no notetype fork, and 0 existing field values
+  changed. Anki will ask for a full sync, which is expected for a schema
+  change.
+- **`src/pipeline/images.py`**, which resolves a lemma to a Wikidata concept
+  and gates on its `instance of` claims. The judgement attaches to the
+  concept rather than the word, so `Hund` and `chien` both reach Q144 and one
+  answer serves every language.
+- **`IMAGES_ENABLED`**, default false. A run with images off makes no
+  network calls for them.
+- **`tango doctor` reports card images**, including that the gate covers
+  every language rather than only the 19 in OMW.
+- **`scripts/measure_image_sources.py`**, which measures coverage against
+  the definition cache rather than a hand-picked word list.
+
+### Changed
+
+- **Images are requested as 480px thumbnails, not originals.** The first real
+  download was 9.2 MB for one photograph shown on the card at 240px; the same
+  file is 46 KB as a thumbnail.
+- **Resolution is batched at 50 items per request**, about 24 requests for a
+  deck instead of 1600, verified as 16 of 16 identical results against the
+  one-at-a-time path.
+- **The README no longer advertises languages that cannot produce a card.**
+  It said "40 languages ... including Arabic"; there are 45 codes, 25 of them
+  usable, and spaCy has no Arabic model, so an Arabic deck failed at run time.
+
+### Fixed
+
+- **Abstract concepts that reached a photograph.** `leben` returned a
+  newborn, `cowardice` the Cowardly Lion, `government` a group portrait of
+  Dutch ministers and `loi` the Palais-Bourbon. Twelve Wikidata classes and
+  disambiguation pages are now refused by name.
+- **Credit lines were empty on the batched path**, because Commons reports
+  titles with spaces while the filenames come from a URL with underscores.
+  An image shipped without its credit breaches the licence rather than
+  merely looking untidy.
+- A multi-line Commons credit no longer breaks the card layout.
+
+
 ## [0.10.0] - 2026-09-05
 
 Runs on any operating system, and now there is evidence for the claim.
