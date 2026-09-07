@@ -7,6 +7,7 @@ Run unit tests:  pytest tests/test_cards.py -m "not integration"
 """
 
 import json
+import re
 import sqlite3
 import zipfile
 import time
@@ -737,6 +738,72 @@ class TestBuildPackage:
         assert result.standard_count == 1
         assert result.fallback_count == 0
         assert result.total_cards == 1
+
+
+class TestCardLayout:
+    """
+    The card's own layout, which no other test covers because it is CSS and
+    a template rather than a value in a field.
+
+    Written after a review of a real deck: the image was sized to the file,
+    so every card came out a different height and a deck reviewed in
+    sequence jumped around. Commons files arrive in every shape there is,
+    which is exactly why the box has to be the constant.
+    """
+
+    @staticmethod
+    def _rules(selector: str) -> str:
+        """
+        The declarations inside one CSS rule, comments excluded.
+
+        Asserting against the whole stylesheet is not enough, and this is
+        not hypothetical: the comment above `.card-image img` explains the
+        choice using the words "object-fit: contain", so a test searching
+        the whole sheet passed with the declaration changed to `cover`.
+        Mutation found it. The prose is not the rule.
+        """
+        css = re.sub(r"/\*.*?\*/", "", _build_model().css, flags=re.S)
+        return css.split(selector + " {", 1)[1].split("}", 1)[0]
+
+    def test_the_image_box_is_a_fixed_size(self):
+        block = self._rules(".card-image img")
+        assert "width: 240px" in block
+        assert "height: 240px" in block
+
+    def test_the_image_is_not_sized_to_the_file(self):
+        # The pair to the test above. max-height alone let a wide image and
+        # a tall image produce two different card heights.
+        block = self._rules(".card-image img")
+        assert "max-height" not in block
+        assert "max-width" not in block
+
+    def test_the_aspect_ratio_is_preserved_inside_the_box(self):
+        # contain letterboxes, cover crops. Cropping a photograph chosen to
+        # show one thing can cut that thing out of frame.
+        assert "object-fit: contain" in self._rules(".card-image img")
+
+    def test_the_image_and_its_credit_are_centred(self):
+        assert "text-align: center" in self._rules(".card-image")
+
+    def test_the_image_is_the_last_thing_on_the_card(self):
+        # Below the definition, examples, synonyms, antonyms and audio, so
+        # the image supports the word rather than leading with it.
+        template = _build_model().templates[0]["afmt"]
+        for earlier in ("{{#Synonyms}}", "{{#Antonyms}}", "{{#Pronunciation}}"):
+            assert template.index(earlier) < template.index("{{#Image}}"), earlier
+
+    def test_the_credit_sits_directly_under_its_image(self):
+        template = _build_model().templates[0]["afmt"]
+        assert template.index("{{#Image}}") < template.index("{{#Attribution}}")
+
+    def test_the_sections_a_card_had_before_images_are_all_still_there(self):
+        # A real regression report: a review deck showed no synonyms,
+        # antonyms or audio. The cause was an empty test harness rather than
+        # a lost template, but nothing pinned the template either way.
+        template = _build_model().templates[0]["afmt"]
+        for section in ("{{#Synonyms}}", "{{#Antonyms}}", "{{#IPA}}",
+                        "{{#Pronunciation}}", "{{#Example from Youtube Video}}"):
+            assert section in template, section
 
 
 class TestImageField:
