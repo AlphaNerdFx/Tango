@@ -45,7 +45,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from pipeline import images  # noqa: E402
+from pipeline import images, wiktdata  # noqa: E402
 from pipeline.definition import is_concrete_noun  # noqa: E402
 
 # The languages the definition cache actually holds, measured 5 September
@@ -164,6 +164,57 @@ def wordnet_agreement(language: str, refused: list[str]) -> tuple[int, int]:
     return judged, agreed
 
 
+def sense_agreement(language: str, limit: int) -> dict:
+    """
+    How often a picture shows a different sense than the card's definition.
+
+    The card's definition and its picture are chosen by two routes that never
+    speak to each other. `wiktdata._select_row` takes the first row matching
+    the part of speech, which is Wiktionary's etymology order; the picture
+    takes whatever concept Wikipedia's article for that spelling resolves to.
+    For `palais` those are the roof of the mouth and a monumental building.
+
+    This calls the rule the pipeline uses rather than a copy of it, so the
+    number reported here cannot drift away from what a run would do. What it
+    adds is the list: every drop is printed to be read, because a rule that
+    drops the right four pictures and a rule that drops any four look the
+    same in a count. ARCHITECTURE 8.47.
+    """
+    nouns = cached_nouns(language)
+    if limit and len(nouns) > limit:
+        random.Random(0).shuffle(nouns)
+        nouns = nouns[:limit]
+
+    found = images.find_images(nouns, language)
+    counts = {"nouns": len(nouns), "imaged": len(found), "judged": 0, "dropped": 0}
+    dropped: list[tuple[str, str, str]] = []
+    for word in sorted(found):
+        description = found[word].description
+        entry = wiktdata.lookup(word, language, pos="NOUN")
+        if not description or entry is None or not entry.definition:
+            continue
+        counts["judged"] += 1
+        if wiktdata.describes_other_sense(word, language, entry.definition,
+                                          description, entry.part_of_speech):
+            counts["dropped"] += 1
+            dropped.append((word, entry.definition, description))
+    return {"language": language, "counts": counts, "dropped": dropped}
+
+
+def report_senses(result: dict, samples: int = 20) -> None:
+    """Print one language's drop count and every drop, to be read by hand."""
+    c = result["counts"]
+    kept = c["imaged"] - c["dropped"]
+    print(f"\n  {result['language']}: {c['imaged']} of {c['nouns']} nouns got a "
+          f"picture, {c['judged']} of them judgeable against an index entry")
+    print(f"    picture shows another sense, dropped : {c['dropped']:>4}")
+    print(f"    picture kept                         : {kept:>4}")
+    for word, definition, description in result["dropped"][:samples]:
+        print(f"      {word}")
+        print(f"        card : {definition[:70]}")
+        print(f"        image: {description[:70]}")
+
+
 def report(result: dict, samples: int = 10) -> None:
     """Print one language's table and a sample to eyeball."""
     c = result["counts"]
@@ -188,6 +239,8 @@ def main() -> int:
     parser.add_argument("--languages", help="codes, comma separated")
     parser.add_argument("--limit", type=int, default=120,
                         help="nouns sampled per language (0 for all)")
+    parser.add_argument("--senses", action="store_true",
+                        help="measure image/definition sense agreement instead")
     parser.add_argument("--icons", action="store_true",
                         help="also size the icon fallback over refused nouns")
     args = parser.parse_args()
@@ -195,6 +248,13 @@ def main() -> int:
     languages = DEFAULT_LANGUAGES
     if args.languages:
         languages = tuple(args.languages.split(","))
+
+    if args.senses:
+        print("Do the image and the definition describe the same sense?")
+        print(f"Sampling up to {args.limit or 'all'} nouns per language.")
+        for language in languages:
+            report_senses(sense_agreement(language, args.limit))
+        return 0
 
     print("Card image coverage, measured against the definition cache in pipeline.db.")
     print(f"Sampling up to {args.limit or 'all'} nouns per language.")
