@@ -2787,6 +2787,98 @@ correct addressing fixes it, so the both-addresses-failed message names
 that nobody re-measures is a liability: this is the same failure as the
 "roughly 1.5GB" of torch in 8.41, which was out by threefold for months.
 
+### 8.46 A common noun is a class, so it has no `instance of`
+
+The image gate asked Wikidata for `instance of` (P31) and refused anything
+without it, on the reasoning that an item nothing has classified cannot be
+judged. Measured over the whole definition cache on 7 September 2026, that
+refused **127 of 785 nouns**, more than the abstract denylist and the
+missing-file case put together:
+
+| stage | fr | de | en |
+|---|---|---|---|
+| nouns in the cache | 488 | 223 | 74 |
+| has a Wikipedia article | 458 | 202 | 73 |
+| **admitted, P31 only** | 183 | 87 | 19 |
+| lost: real disambiguation page | 193 | 59 | 35 |
+| lost: **item has no P31 at all** | **67** | **50** | **10** |
+| lost: refused by the denylist | 15 | 6 | 9 |
+| lost: admitted but no file exists | 20 | 6 | 3 |
+
+Opening that bucket showed the cause is structural rather than an oversight
+somebody should fix upstream. A common noun **is** a class, and a class in
+Wikidata is described by `subclass of` (P279), not by `instance of`. `fleur`
+is Q506 flower, `Kaffee` is Q8486 coffee, and neither is an instance of
+anything. Asking only for P31 asks the wrong question of precisely the words
+a vocabulary deck is made of; it works for `Hund` only because Q144 happens
+to be an instance of a taxon.
+
+Of the 127, **101 had both a `subclass of` and a picture**. The gate now
+reads P279 when P31 is empty, applying the same denylist to whichever list it
+reads:
+
+| | before | after |
+|---|---|---|
+| French | 163 of 488, 33.4% | **214, 43.9%** |
+| German | 81 of 223, 36.3% | **121, 54.3%** |
+| English | 16 of 74, 21.6% | **25, 33.8%** |
+| overall | 260 of 785, 33.1% | **360, 45.9%** |
+
+`subclass of` is a fallback and not a second opinion, which is the part that
+needed a test rather than a sentence. Almost every concrete class has an
+abstract ancestor somewhere up its chain, so an item is judged on P279 only
+when it has no P31 at all. Reading both would refuse things that have been on
+cards since the feature existed.
+
+The permissive setting was chosen deliberately, with the trade named: some
+abstract words now get a picture, `Gedanke` a painting called *Gedanken* and
+`regret` whatever illustrates regret. That is the cost of +100 pictures, and
+it is the failure ADR-009's gate exists to limit rather than to eliminate.
+
+### 8.47 The picture and the definition were chosen by two strangers
+
+A card's definition is the first index row of the right part of speech. Its
+picture is whatever concept Wikipedia's article for that spelling resolves
+to. Nothing connected the two, so French `palais` printed "paroi supérieure
+qui sépare la fosse nasale de la bouche" beside a photograph of a monumental
+building, and `anime` printed a medieval cuirass beside Japanese animation.
+
+The obvious repair, letting the concept pick the sense, is the heuristic
+8.28 already measured and rejected. Measured again on 7 September 2026 over
+every concept the cache resolves, it went 4 better and 2 worse: it fixed
+`anime`, `est`, `grève` and `palais`, and broke `pays` (country becomes
+"compatriote") and `kaffee` (the drink becomes the café).
+
+So the definition is left alone and the **picture** is dropped instead, which
+is also the cheaper half to be wrong about. Two things make the result
+different from 8.28's:
+
+- **It only runs where a picture was earned.** `pays` is refused by the gate
+  and never reaches the check, so the gate that decides a concept is
+  photographable is also what makes its description trustworthy as a sense
+  signal.
+- **It needs positive evidence of disagreement**, not just absence of
+  agreement: the shown definition must share nothing with the description
+  *while another same-part-of-speech row does*. 18 of 66 ambiguous imaged
+  words agree with nothing anywhere, and dropping those would cost good
+  pictures to learn nothing.
+
+Measured with the gate of 8.46 in place: **4 pictures dropped out of 348**,
+`anime`, `est`, `grève` and `palais`, none in German or English, every one
+read by hand and every one showing another sense.
+
+Two details of the comparison are load-bearing, and both were found by a
+wrong answer rather than by design. Content words are matched **inside** the
+other string, because German glues compounds together and "Heißgetränk" has
+to be able to meet "Aufgussgetränk"; without that, `kaffee` lost a correct
+photograph. And stems are cut at **five characters**, because French inflects
+endings and "religieuses" has to meet "religieux"; without that, `palais`
+kept a photograph of the wrong sense.
+
+The rule is inert under `--def-lang`, knowingly. The definition then comes
+from the target-language index under a translated lemma, which `cards.py`
+does not have, so the lookup finds no rows and the picture stays.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
