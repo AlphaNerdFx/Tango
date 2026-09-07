@@ -17,6 +17,7 @@
 #                       optional LANGUAGE, DEF_LANG, FORCE=1)
 #   make review      : process the review.json file (optional LANGUAGE, DEF_LANG)
 #   make backlog     : process the Anki backlog for a deck (optional LANGUAGE, DEF_LANG)
+#   make dist        : build the PyPI distribution with pinned README badges
 #   make clean       : remove venv, output, cache files
 #   make check-os    : warn if running on Windows without a compatible shell
 # =============================================================================
@@ -69,7 +70,7 @@ CYAN   := \033[36m
 
 .PHONY: all venv install setup spacy-model dictionary antonyms translate-setup translate-stop \
         test test-all coverage format lint typecheck translate-model doctor \
-        run review backlog clean check-os help
+        run review backlog dist clean check-os help
 
 .DEFAULT_GOAL := help
 
@@ -371,6 +372,30 @@ typecheck: check-os
 	@$(VENV_PYTHON) -m mypy src/pipeline/ --ignore-missing-imports
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Type check passed.\n"
 
+# -- dist ---------------------------------------------------------------------
+
+# Build the distribution with a README fit for a page that cannot be edited.
+#
+# This target exists because the pinning step is easy to forget and
+# impossible to correct afterwards. PyPI freezes a release's description at
+# upload, so a live badge on it answers with today's version forever: the
+# v0.8.2 page shows the current one, and the five releases published before
+# this target existed cannot be fixed. CLAUDE.md 18.11.
+#
+# The restore runs whether the build succeeded or not, because leaving a
+# pinned README in the working tree is how a hardcoded version gets committed.
+dist: check-os
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Pinning README badges for PyPI...\n"
+	@$(VENV_PYTHON) scripts/pypi_readme.py --pin
+	@rm -rf dist build
+	@set +e; \
+	  $(VENV_PYTHON) -m build && $(VENV_PYTHON) -m twine check dist/*; \
+	  status=$$?; \
+	  $(VENV_PYTHON) scripts/pypi_readme.py --restore; \
+	  exit $$status
+	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  dist/ built and checked, README restored.\n"
+	@printf "  Upload with: $(CYAN)$(VENV_PYTHON) -m twine upload dist/*$(RESET)\n"
+
 # -- run ----------------------------------------------------------------------
 
 run: check-os
@@ -484,5 +509,6 @@ help:
 	@printf "  $(CYAN)make translate-stop$(RESET)                  Stop local LibreTranslate server\n"
 	@printf "\n"
 	@printf "$(BOLD)Maintenance:$(RESET)\n"
+	@printf "  $(CYAN)make dist$(RESET)                             Build for PyPI, pinning the README badges first\n"
 	@printf "  $(CYAN)make clean$(RESET)                            Remove venv, output, and cache files\n"
 	@printf "\n"
