@@ -774,11 +774,33 @@ class TestCardLayout:
         assert match, f"no rule for {selector} in the stylesheet"
         return match.group(1)
 
-    def test_the_image_is_bounded_by_the_viewport(self):
-        # The card must fit the screen it is reviewed on, so the image is a
-        # share of the viewport rather than a pixel count.
-        block = self._rules(".card-image img")
-        assert "max-height: 30vh" in block
+    def test_the_card_is_one_screen_tall(self):
+        # The whole point of the column: the card ends where the screen
+        # does. border-box because padding has to live inside that height,
+        # not on top of it.
+        block = self._rules(".card")
+        assert "min-height: 100vh" in block
+        assert "flex-direction: column" in block
+        assert "box-sizing: border-box" in block
+
+    def test_the_image_takes_the_height_the_text_leaves(self):
+        # This replaced a fixed 30vh, which could not know whether the text
+        # above it had used a fifth of the screen or all of it. `1 1` is
+        # both halves: grow into a sparse card, shrink on a full one.
+        assert "flex: 1 1 auto" in self._rules(".card-image")
+
+    def test_the_image_has_a_floor_and_a_ceiling(self):
+        # Without a floor a full card shows a sliver of photograph, and
+        # without a ceiling a sparse one shows a wall of it, which is what
+        # made every card a different height before 6 September.
+        block = self._rules(".card-image")
+        assert "min-height: 16vh" in block
+        assert "max-height: 45vh" in block
+
+    def test_the_image_is_bounded_by_its_box(self):
+        # The pair to the two above: the box is sized by the layout, and the
+        # picture follows the box rather than the viewport.
+        assert "max-height: 100%" in self._rules(".card-image img")
 
     def test_the_image_is_not_a_fixed_pixel_box(self):
         # The pair to the test above, and a deliberate reversal: a fixed
@@ -797,14 +819,23 @@ class TestCardLayout:
         # show one thing can cut that thing out of frame.
         assert "object-fit: contain" in self._rules(".card-image img")
 
-    def test_the_picture_yields_first_on_a_short_screen(self):
-        # CSS cannot measure content, only the viewport, so a full card can
-        # still overflow a small phone. The image is the most compressible
-        # thing on it; the definition is the least.
+    def test_a_short_screen_tightens_the_text_not_the_picture(self):
+        # The picture already yields continuously, so the media query has no
+        # image rule left in it. What a short screen still buys is a line or
+        # two of text, without touching a font size.
         css = re.sub(r"/\*.*?\*/", "", _build_model().css, flags=re.S)
         assert "@media (max-height: 640px)" in css
-        short = css.split("@media (max-height: 640px)", 1)[1]
-        assert "max-height: 22vh" in short.split("}}", 1)[0]
+        short = css.split("@media (max-height: 640px)", 1)[1].split("}}", 1)[0]
+        assert "line-height: 1.4" in short
+        assert "card-image" not in short
+
+    def test_the_credit_stays_with_the_picture(self):
+        # As a sibling of the image box, the licence line was pushed to the
+        # bottom of the screen while the picture stayed at the top, so a
+        # sparse card showed a credit floating alone under empty space.
+        template = _build_model().templates[0]["afmt"]
+        block = template.split('<div class="card-image">', 1)[1].split("</div>", 1)[0]
+        assert "{{Attribution}}" in block
 
     def test_every_font_size_scales_with_the_viewport(self):
         # A single absolute font-size is enough to make a card overflow on a
@@ -937,6 +968,60 @@ class TestDownloadImages:
              patch.object(cards_module.images, "fetch_image",
                           side_effect=OSError("disk full")):
             assert _download_images(["hund"], "de") == ({}, {}, [])
+
+    def test_a_picture_of_another_sense_is_dropped_before_it_is_downloaded(self):
+        # The card would read "roof of the mouth" beside a photograph of a
+        # palace. Dropping it after the download would cost the bandwidth
+        # and the disk for a file thrown away, so the guard runs first.
+        with patch.object(cards_module.images, "find_images",
+                          return_value={"palais": _an_image()}), \
+             patch.object(cards_module.wiktdata, "describes_other_sense",
+                          return_value=True), \
+             patch.object(cards_module.images, "fetch_image") as fetch:
+            names, credits, paths = _download_images(
+                ["palais"], "fr", senses={"palais": ("Paroi superieure", "noun")},
+                definition_language="fr")
+        assert (names, credits, paths) == ({}, {}, [])
+        fetch.assert_not_called()
+
+    def test_an_agreeing_picture_is_kept(self, tmp_path):
+        # The pair. Without it, a guard that dropped everything would pass.
+        path = tmp_path / "Q144.jpg"
+        path.write_bytes(b"x")
+        with patch.object(cards_module.images, "find_images",
+                          return_value={"chien": _an_image()}), \
+             patch.object(cards_module.wiktdata, "describes_other_sense",
+                          return_value=False), \
+             patch.object(cards_module.images, "fetch_image", return_value=path):
+            names, _, _ = _download_images(
+                ["chien"], "fr", senses={"chien": ("Mammifere carnivore", "noun")},
+                definition_language="fr")
+        assert names == {"chien": "Q144.jpg"}
+
+    def test_without_definitions_nothing_is_dropped(self, tmp_path):
+        # review and backlog mode build cards from lemmas alone. No
+        # definition to disagree with means no judgement to make, and the
+        # guard must not be consulted at all rather than guessing.
+        path = tmp_path / "Q144.jpg"
+        path.write_bytes(b"x")
+        with patch.object(cards_module.images, "find_images",
+                          return_value={"chien": _an_image()}), \
+             patch.object(cards_module.wiktdata, "describes_other_sense") as guard, \
+             patch.object(cards_module.images, "fetch_image", return_value=path):
+            names, _, _ = _download_images(["chien"], "fr")
+        assert names == {"chien": "Q144.jpg"}
+        guard.assert_not_called()
+
+    def test_the_guard_reads_the_definitions_language_not_the_transcripts(self):
+        # Under --def-lang the card's definition is French while the word is
+        # German, so the concept has to be described in French for the two
+        # to be comparable at all.
+        with patch.object(cards_module.images, "find_images",
+                          return_value={}) as find, \
+             patch.object(cards_module.images, "fetch_image"):
+            _download_images(["haus"], "de", senses={"haus": ("Une maison", "noun")},
+                             definition_language="fr")
+        assert find.call_args[1]["description_language"] == "fr"
 
     def test_resolution_is_one_call_for_many_lemmas(self):
         # The reason this is batched at all: resolution is paced by
