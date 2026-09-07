@@ -51,63 +51,66 @@ from pipeline.config import MODEL_ID, DECK_ID, OUTPUT_DIR
 # -- Card CSS ------------------------------------------------------------------
 
 CARD_CSS = """
+/* Every size here is clamp(floor, viewport-relative, ceiling).
+   The ceiling is what a desktop card has always shown, so nothing looks
+   different on a large screen. The floor is where text stops being worth
+   reading. Between them the card scales with the viewport it lands in.
+
+   The reason is a full card: word, part of speech, definition, three
+   example blocks, synonyms, antonyms, IPA, audio, an image and its credit.
+   Measured at the old fixed sizes that stack is roughly 850-900px, which
+   scrolls on a phone and on most desktop reviewer windows.
+
+   vh rather than vw, because the thing running out is height, and because a
+   narrow phone would otherwise shrink text that had room to be larger. */
 .card {
     font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 17px;
+    font-size: clamp(14px, 2.1vh, 17px);
     color: var(--fg, #1a1a2e);
     background-color: var(--canvas, #ffffff);
     max-width: 580px;
     margin: 0 auto;
-    padding: 24px 20px;
-    line-height: 1.65;
+    padding: clamp(10px, 2vh, 24px) 20px;
+    line-height: 1.5;
 }
 
 /* Front, centered word */
 .word-front {
-    font-size: 36px;
+    font-size: clamp(26px, 5vh, 36px);
     font-weight: 700;
     text-align: center;
     color: var(--fg, #0f3460);
-    padding: 20px 0 10px;
+    padding: clamp(8px, 2vh, 20px) 0 clamp(4px, 1vh, 10px);
     letter-spacing: 0.5px;
 }
 
 /* Back, main word */
 .word-back {
-    font-size: 30px;
+    font-size: clamp(21px, 4vh, 30px);
     font-weight: 700;
     text-align: center;
     color: var(--fg, #0f3460);
     padding: 10px 0 4px;
 }
 
-/* Translated word or synonyms secondary line */
-.word-secondary {
-    font-size: 18px;
-    text-align: center;
-    color: var(--new-count, #00b4d8);
-    margin-bottom: 4px;
-    font-style: italic;
-}
-
 hr {
     border: none;
     border-top: 1px solid var(--border, #d1d5db);
-    margin: 12px 0;
+    margin: clamp(5px, 1.2vh, 12px) 0;
 }
 
 .pos {
-    font-size: 13px;
+    font-size: clamp(11px, 1.6vh, 13px);
     color: var(--slightly-grey-text, #6b7280);
     text-align: center;
     font-style: italic;
-    margin-bottom: 10px;
+    margin-bottom: clamp(4px, 1.2vh, 10px);
 }
 
 .definition {
-    font-size: 16px;
+    font-size: clamp(13px, 2vh, 16px);
     color: var(--fg, #374151);
-    margin-bottom: 16px;
+    margin-bottom: clamp(6px, 1.8vh, 16px);
     text-align: center;
 }
 
@@ -118,7 +121,7 @@ hr {
 .example {
     font-style: italic;
     color: var(--fg, #4b5563);
-    font-size: 15px;
+    font-size: clamp(12px, 1.8vh, 15px);
     margin-bottom: 3px;
     padding-left: 14px;
     border-left: 3px solid var(--new-count, #00b4d8);
@@ -138,42 +141,65 @@ hr {
     margin-top: 16px;
 }
 
-/* A fixed box, not a fixed image. Commons files arrive in every shape
-   there is, and sizing to the file makes each card a different height, so
-   a deck reviewed in sequence jumps around. The box is constant and
-   object-fit: contain letterboxes the picture inside it, which keeps every
-   aspect ratio intact: cover would fill the box by cropping, and cropping
-   a photograph chosen to show one thing can cut that thing out.
-   240px against the 480px thumbnail that gets downloaded, so the image is
-   still sharp on a high-DPI screen. */
+/* Bounded by the viewport, not frozen at a pixel count.
+
+   This reverses the fixed 240x240 box of 6 September, and the reason it
+   was fixed still holds: sizing to the file makes every card a different
+   height and a deck reviewed in sequence jumps around. A share of the
+   viewport keeps that consistency, because every image is bounded by the
+   same fraction of the screen, without adding 240px to a card that is
+   already too tall for a phone.
+
+   object-fit: contain letterboxes inside the box, so every aspect ratio
+   survives. cover would fill it by cropping, and cropping a photograph
+   chosen to show one thing can cut that thing out of frame.
+
+   30vh leaves roughly two thirds of the screen for the text above it. */
 .card-image img {
-    width: 240px;
-    height: 240px;
+    max-height: 30vh;
+    max-width: 100%;
+    width: auto;
+    height: auto;
     object-fit: contain;
     border-radius: 6px;
 }
 
+/* On a short screen the picture yields first.
+
+   CSS cannot measure content, only the viewport, so a fully populated card
+   (three examples, synonyms, antonyms, IPA, audio, image) can still run
+   past the bottom on a small phone even with everything clamped. The image
+   is the most compressible thing on the card: shrinking it costs a little
+   detail, while shrinking the definition costs legibility. Anki's clients
+   are webviews, so a height media query is available and needs no
+   JavaScript, which this project has never shipped in a template and could
+   not verify on every device. */
+@media (max-height: 640px) {
+    .card-image img { max-height: 22vh; }
+    .card { line-height: 1.4; }
+}
+
 .attribution {
-    font-size: 11px;
+    font-size: clamp(9px, 1.3vh, 11px);
     opacity: 0.6;
     margin-top: 4px;
     text-align: center;
 }
 
 .example-source {
-    font-size: 11px;
+    font-size: clamp(9px, 1.3vh, 11px);
     color: var(--slightly-grey-text, #9ca3af);
     padding-left: 14px;
     margin-bottom: 0;
 }
 
 .section-label {
-    font-size: 11px;
+    font-size: clamp(10px, 1.4vh, 11px);
     font-weight: 700;
     text-transform: uppercase;
     color: var(--slightly-grey-text, #9ca3af);
     letter-spacing: 0.8px;
-    margin: 14px 0 6px;
+    margin: clamp(5px, 1.5vh, 14px) 0 clamp(2px, 0.6vh, 6px);
 }
 
 .vocab-row {
@@ -187,14 +213,21 @@ hr {
    literal fallbacks as everything above, so it reads correctly in both the
    light and dark card themes rather than only the one it was written in. */
 .ipa {
-    font-size: 15px;
+    font-size: clamp(12px, 1.8vh, 15px);
     color: var(--fg, #0f3460);
     font-family: "Charis SIL", "Doulos SIL", "Gentium Plus", serif;
     margin-bottom: 6px;
 }
 
+/* Used by the template at the Pronunciation section and, until now, never
+   defined, so the audio control sat unstyled. */
+.pronunciation {
+    text-align: center;
+    margin-bottom: clamp(2px, 0.8vh, 6px);
+}
+
 .audio-link {
-    font-size: 12px;
+    font-size: clamp(10px, 1.5vh, 12px);
     color: var(--new-count, #00b4d8);
     text-decoration: none;
     border: 1px solid var(--new-count, #00b4d8);
@@ -209,7 +242,7 @@ hr {
     border: 1px solid var(--new-count, #00b4d8);
     border-radius: 12px;
     padding: 2px 12px;
-    font-size: 13px;
+    font-size: clamp(11px, 1.6vh, 13px);
 }
 
 .antonym-pill {
@@ -218,15 +251,7 @@ hr {
     border: 1px solid var(--fg, #92400e);
     border-radius: 12px;
     padding: 2px 12px;
-    font-size: 13px;
-}
-
-.fallback-note {
-    font-size: 12px;
-    color: var(--slightly-grey-text, #9ca3af);
-    font-style: italic;
-    text-align: center;
-    margin-top: 10px;
+    font-size: clamp(11px, 1.6vh, 13px);
 }
 """
 
