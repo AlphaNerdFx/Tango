@@ -141,9 +141,10 @@ in `CHANGELOG.md`.
 
 ## 2. Architecture summary
 
-Thirteen modules. Nine are stages in a linear pipeline; `media.py` is called
-by `cards.py` and `antonyms.py` by `definition.py` rather than being stages
-of their own, `config.py` holds configuration, and `__main__.py` is the CLI.
+Fourteen modules. Nine are stages in a linear pipeline; `media.py` and
+`images.py` are called by `cards.py` and `antonyms.py` by `definition.py`
+rather than being stages of their own, `config.py` holds configuration, and
+`__main__.py` is the CLI.
 One video per invocation. One `.apkg` per run. All state in local SQLite. No
 server component. No async.
 
@@ -159,6 +160,7 @@ YouTube video ID
   -> translation.py    (optional) translate lemma for cross-language definitions
   -> cards.py          genanki .apkg generation
        -> media.py     download and cache pronunciation audio, paced
+       -> images.py    resolve a lemma to a Wikidata concept, gate, fetch
   -> state.py          SQLite run tracking
 ```
 
