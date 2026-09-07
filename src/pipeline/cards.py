@@ -910,6 +910,7 @@ def build_package(
     not_found_audio: Optional[dict] = None,
     progress: Optional[Callable[[str], None]] = None,
     def_language: Optional[str] = None,
+    images_enabled: Optional[bool] = None,
 ) -> PackageResult:
     """
     Build an Anki .apkg package from definition results.
@@ -952,6 +953,11 @@ def build_package(
                     benefits most from still showing how the word is said.
         not_found_audio: definition.DefinitionBatchResult.not_found_audio --
                     the Commons recording URL, same keying.
+        images_enabled: True or False to decide pictures for this package,
+                    None to let IMAGES_ENABLED decide. That is what `--images`
+                    and `--no-images` pass, and the third state is the point:
+                    a user with IMAGES_ENABLED=true still needs a way to
+                    build one deck without them.
 
     Returns:
         PackageResult with the output path and accurate card counts.
@@ -994,10 +1000,11 @@ def build_package(
         audio_wanted.setdefault(lem.lower(), url)
     media_names, media_paths = _download_audio(audio_wanted, language, progress=progress)
 
-    # Images are off unless IMAGES_ENABLED says otherwise. ADR-009 requires
-    # the measurement in Part C before this becomes a default, and the gate
-    # in images.py costs two network calls per word to say "no" to most of
-    # them, which is not a cost to impose on every run unasked.
+    # Images are off unless this run asks for them. The gate in images.py
+    # costs a network round trip per 50 words to say "no" to most of them,
+    # and a picture roughly doubles a deck that already carries audio (4.8 MB
+    # of 10.1 MB, measured on a real 299-card run), so it is not a cost to
+    # impose on somebody who did not ask.
     image_names: dict[str, str] = {}
     image_credits: dict[str, str] = {}
     # Imported here rather than at module scope so a test (and a user's
@@ -1005,7 +1012,13 @@ def build_package(
     # same reason as transcript._build_proxy().
     from pipeline.config import IMAGES_ENABLED
 
-    if IMAGES_ENABLED:
+    # Three states, not two: `--images` and `--no-images` both override the
+    # environment for one run, and no flag at all leaves IMAGES_ENABLED to
+    # decide. Without the third state a user who put IMAGES_ENABLED=true in
+    # .env would have no way to turn them off for a single deck.
+    use_images = IMAGES_ENABLED if images_enabled is None else images_enabled
+
+    if use_images:
         candidates = [r.lemma.lower() for r in found]
         candidates += [lem.lower() for lem in (not_found_audio or {})]
         # What each card will actually say, so a picture of another sense can
