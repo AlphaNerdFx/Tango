@@ -745,10 +745,14 @@ class TestCardLayout:
     The card's own layout, which no other test covers because it is CSS and
     a template rather than a value in a field.
 
-    Written after a review of a real deck: the image was sized to the file,
-    so every card came out a different height and a deck reviewed in
-    sequence jumped around. Commons files arrive in every shape there is,
-    which is exactly why the box has to be the constant.
+    Written after a review of a real deck, and revised after a second one.
+    The first review found the image sized to the file, so every card came
+    out a different height. The second found the whole card scrolling: a
+    fully populated card was roughly 850-900px at the old fixed sizes.
+
+    Both goals survive together in viewport units. The image is a share of
+    the screen rather than a pixel count, so heights stay comparable without
+    adding 240px to a card that already does not fit.
     """
 
     @staticmethod
@@ -761,26 +765,75 @@ class TestCardLayout:
         choice using the words "object-fit: contain", so a test searching
         the whole sheet passed with the declaration changed to `cover`.
         Mutation found it. The prose is not the rule.
+
+        Tolerant of whitespace around the brace so reformatting the sheet
+        cannot silently make every assertion here vacuous.
         """
         css = re.sub(r"/\*.*?\*/", "", _build_model().css, flags=re.S)
-        return css.split(selector + " {", 1)[1].split("}", 1)[0]
+        match = re.search(re.escape(selector) + r"\s*\{([^}]*)\}", css)
+        assert match, f"no rule for {selector} in the stylesheet"
+        return match.group(1)
 
-    def test_the_image_box_is_a_fixed_size(self):
+    def test_the_image_is_bounded_by_the_viewport(self):
+        # The card must fit the screen it is reviewed on, so the image is a
+        # share of the viewport rather than a pixel count.
         block = self._rules(".card-image img")
-        assert "width: 240px" in block
-        assert "height: 240px" in block
+        assert "max-height: 30vh" in block
 
-    def test_the_image_is_not_sized_to_the_file(self):
-        # The pair to the test above. max-height alone let a wide image and
-        # a tall image produce two different card heights.
+    def test_the_image_is_not_a_fixed_pixel_box(self):
+        # The pair to the test above, and a deliberate reversal: a fixed
+        # 240x240 box kept card heights equal but added 240px to a card that
+        # already scrolled on a phone.
         block = self._rules(".card-image img")
-        assert "max-height" not in block
-        assert "max-width" not in block
+        assert "240px" not in block
+        assert "width: auto" in block
+        assert "height: auto" in block
+
+    def test_the_image_still_cannot_overflow_sideways(self):
+        assert "max-width: 100%" in self._rules(".card-image img")
 
     def test_the_aspect_ratio_is_preserved_inside_the_box(self):
         # contain letterboxes, cover crops. Cropping a photograph chosen to
         # show one thing can cut that thing out of frame.
         assert "object-fit: contain" in self._rules(".card-image img")
+
+    def test_the_picture_yields_first_on_a_short_screen(self):
+        # CSS cannot measure content, only the viewport, so a full card can
+        # still overflow a small phone. The image is the most compressible
+        # thing on it; the definition is the least.
+        css = re.sub(r"/\*.*?\*/", "", _build_model().css, flags=re.S)
+        assert "@media (max-height: 640px)" in css
+        short = css.split("@media (max-height: 640px)", 1)[1]
+        assert "max-height: 22vh" in short.split("}}", 1)[0]
+
+    def test_every_font_size_scales_with_the_viewport(self):
+        # A single absolute font-size is enough to make a card overflow on a
+        # screen smaller than the one it was designed on.
+        css = re.sub(r"/\*.*?\*/", "", _build_model().css, flags=re.S)
+        fixed = re.findall(r"font-size:\s*\d+px", css)
+        assert fixed == [], fixed
+
+    def test_the_type_scale_has_a_readable_floor(self):
+        # clamp() without a floor shrinks text to nothing on a small screen.
+        css = re.sub(r"/\*.*?\*/", "", _build_model().css, flags=re.S)
+        floors = [int(m) for m in re.findall(r"font-size:\s*clamp\((\d+)px", css)]
+        assert floors, "no clamped font sizes found"
+        assert min(floors) >= 9, floors
+
+    def test_the_class_the_template_uses_for_audio_is_defined(self):
+        # `.pronunciation` was used by the template and defined nowhere, so
+        # the audio control sat unstyled.
+        template = _build_model().templates[0]["afmt"]
+        assert 'class="pronunciation"' in template
+        assert self._rules(".pronunciation")
+
+    def test_the_stylesheet_has_no_rules_nothing_uses(self):
+        # `.word-secondary` and `.fallback-note` were styled for markup that
+        # no longer exists, which is dead weight in every card.
+        css = _build_model().css
+        template = _build_model().templates[0]["afmt"]
+        for dead in (".word-secondary", ".fallback-note"):
+            assert dead not in css or dead[1:] in template, dead
 
     def test_the_image_and_its_credit_are_centred(self):
         assert "text-align: center" in self._rules(".card-image")
