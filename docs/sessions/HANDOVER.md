@@ -1,20 +1,19 @@
 # HANDOVER
 
-Written 7 September 2026.
+Written 8 September 2026.
 
 ## Where the tree is
 
 | | |
 |---|---|
-| branch | `main`, in sync with `tango-origin` |
+| branch | `main` |
 | last tag | **`v0.10.0`**, released 5 September 2026 |
 | `__version__` | `0.10.0` |
 | `make check` | exit 0 |
-| tests | **1165 unit, 33 integration deselected** |
-| PyPI | `pip install tango-anki` |
+| tests | **1204 unit, 33 integration deselected** |
+| PyPI | `pip install tango-anki`, latest published 0.10.0 |
 
-Twenty tags, twenty GitHub releases. 33 commits sit on `main` after v0.10.0,
-all of them the v0.11.0 rung.
+Everything after v0.10.0 is the v0.11.0 rung, images on cards.
 
 **Working autonomously**, under two standing decisions taken 5 September
 2026: commit and push freely, but **ask before any tag or PyPI upload**,
@@ -24,173 +23,126 @@ follow what was designed rather than asking again.
 
 ## What is in flight: v0.11.0, images on cards
 
-The rung is "images on cards, gated to concrete nouns". The feature is
-built, measured and off by default. What is left is a visual review and a
-wider measurement corpus, both of which need the user.
+The feature is built, measured and still **off by default**
+(`IMAGES_ENABLED`). Four things landed on 7 and 8 September 2026, three of
+them from the user's own list.
 
-### Done: the image source was wrong, not the gate
+### Done: the gate was asking Wikidata the wrong question
 
-ADR-009 designed phase 3 around Wikimedia Commons **text search**, which is
-why `laufen` returned a coin from the town of Laufen: a text search matches
-a spelling, not a meaning.
+Coverage sat at 33% of nouns, so the funnel was measured stage by stage. One
+branch held almost all of the loss: **127 of 785 nouns resolved to an item
+with no `instance of` claim**, which the gate refused.
 
-`src/pipeline/images.py` resolves a lemma to a *concept* instead:
+The reasoning was sound and the property was wrong. A common noun *is* a
+class, and a class carries `subclass of`: `fleur` is Q506 and is an instance
+of nothing. `Hund` only ever worked because Q144 is an instance of a taxon.
+Of those 127, **101 had both a `subclass of` and a picture**.
 
-```
-lemma -> Wikipedia article (language specific)
-      -> Wikidata item      (language independent)
-      -> P31 gate, then P18 image or the article lead image
-```
+| | before | after |
+|---|---|---|
+| French | 163 of 488, 33.4% | **214, 43.9%** |
+| German | 81 of 223, 36.3% | **121, 54.3%** |
+| English | 16 of 74, 21.6% | **25, 33.8%** |
+| overall | 260 of 785, 33.1% | **360, 45.9%** |
 
-The middle step is what fixes German. `Hund` and `chien` both resolve to
-Q144, so one judgement about whether dogs are photographable serves every
-language. This matters because the 5 September amendment to ADR-009 measured
-the WordNet gate at **0% for German**, since OMW has no German WordNet at
-all, and German is 39.5% of the cached definitions.
+The permissive setting was the user's choice, taken with its cost named:
+`Gedanke` now gets a painting called *Gedanken*, `Leidenschaft` and `regret`
+get whatever illustrates them. ARCHITECTURE 8.46, ADR-009's third amendment.
 
-Measured 5 September on 20 German nouns: **55% got an image**, against 0%
-for the WordNet-only gate. Refusals were `gedanke`, `privileg`,
-`konstellation`, all correctly abstract.
+### Done: a picture may not contradict the definition beside it
 
-### Done: two things found by running it rather than reasoning
+`palais` printed a photograph of a monumental building next to "paroi
+supérieure qui sépare la fosse nasale de la bouche".
 
-**Commons serves originals and they are enormous.** The first real download
-was **9.2 MB** for one photograph of a dog, for a card that displays it at
-240px. Both routes now request a 480px thumbnail: the same photograph is
-**46 KB**, a 200x reduction. This is the same class of error as ADR-009's
-audio estimate in ARCHITECTURE 8.35, caught earlier only because the
-download was actually run.
+Letting the concept re-pick the *definition* was measured and rejected for
+the second time (4 better, 2 worse, breaking `pays` and `kaffee`), which
+reproduces 8.28. So the picture is dropped instead, before it is downloaded,
+and only on positive evidence: the definition shares no content word with the
+concept's description **while another same-part-of-speech row does**.
 
-**Attribution is a licence obligation, not decoration.** Commons reports
-`AttributionRequired: true` on the images this actually returns. The dog
-photograph is CC BY-SA 2.0 by Markus Trienke, and shipping a deck without
-naming them would breach it. `images.attribution()` fetches the credit and
-it travels with the result, so the two cannot disagree about which file.
+Measured after the wider gate: **4 of 360 imaged words**, all French, all
+read by hand: anime, est, grève, palais. Verified end to end by reading the
+fields out of a built `.apkg`, where those four carry no image and the other
+fifteen in the deck do. ARCHITECTURE 8.47.
 
-### Done: the fields, and the migration
+Two details of the comparison are load-bearing and both came from a wrong
+answer: stems are matched **inside** the other string, or German compounds
+never meet ("Heißgetränk" against "Aufgussgetränk", which cost `kaffee` a
+correct picture), and stems are cut at **five characters**, or French endings
+never meet ("religieuses" against "religieux", which cost `palais`).
 
-`Image` and `Attribution` are fields **12 and 13**, appended per CLAUDE.md
-3.2. Verified against the live collection before committing:
+### Done: the card is one screen tall
 
-```
-notes 4773 (was 4773) | field count 14 (was 12)
-forked?: NO FORK, still 1607392321
-original field values changed: 0
-```
+`.card` is a flex column at `min-height: 100vh`, and `.card-image` is the one
+flexible row: the picture takes the height the text leaves, between a floor
+of 16vh and a ceiling of 45vh, instead of a fixed 30vh that could not know
+whether the text above had used a fifth of the screen or all of it. The
+credit line moved inside the image box, because as a sibling it was pushed to
+the bottom of the screen while the picture stayed at the top.
 
-That reproduces ARCHITECTURE 8.32 at 23x its original scale. Anki will want
-a full sync afterwards, which is expected for a schema change.
+**This is the one piece that has not been seen working**, and there are two
+open questions for the user, both below.
 
-**Images are off by default** (`IMAGES_ENABLED`, default false). Verified: a
-run with them disabled makes zero network calls and adds 0.17s. The
-measurement that ADR-009 required is now done and it justifies the feature;
-the remaining gate on the default is a person looking at real cards.
+### Done: the PyPI badges, going forward only
 
-### Done: the language counts were wrong in four places
+`make dist` now pins, builds, `twine check`s and restores in one command, so
+the manual step in CLAUDE.md 18.11 cannot be skipped. The pin step also drops
+the CI badge (it cannot be pinned: `badge.svg` takes `?branch=`, and a tag is
+not a branch), points the release badge at its own tag rather than
+`/releases/latest`, and rewrites the four repository-relative links, which
+resolve against pypi.org once uploaded and 404 there.
 
-`tango languages` and the README said "40 languages". The real figure is
-**45 codes recognised**, of which **25 can produce cards**. Worse, the README
-advertised Arabic as supported, and spaCy has no Arabic model, so a user
-with an Arabic deck followed the README into a run that could not start.
+**The five pages already published cannot be corrected.** 0.8.0, 0.8.1,
+0.8.2, 0.9.0 and 0.10.0 are frozen: PyPI has no way to edit a release
+description and a version number cannot be re-uploaded. Their badges will
+read the current version forever. This is fixed from the next upload onward
+and not before.
 
-Corrected in `README.md`, `language.py` (twice), and `wiki/[FAQ].md`, and
-`TestDocumentedLanguageCountsAreTrue` in `tests/test_hard_constraints.py`
-now fails if any of them drifts again. That test checks **every** occurrence
-rather than presence: an earlier version passed while one of language.py's
-two sites was stale, which is the exact shape of the original bug.
+## What needs the user
 
-### Done: resolution is batched, which removed the speed objection
-
-The per-lemma path cost four Wikimedia requests per noun at one a second, so
-a 400-noun deck added about 27 minutes. All three APIs take 50 items per
-request and one Wikidata call returns P31 and P18 together, so the same deck
-costs about **24 requests**. Measured on 16 German words: 3.78s against
-53.34s, with 16 of 16 results identical. A 10-card package with images on
-builds in 4.9s.
-
-`find_images()` is the batched entry point; `find_image()` remains for one
-lookup. Resolution is batched rather than threaded because Wikimedia's
-pacing is the limit, not latency. Downloads are still threaded.
-
-### Done: the icon fallback is measured and rejected
-
-Requested as "an icon source with icons representing a concept, not emoji".
-Three FOSS sets were tested, all meeting ADR-008's bar: Material Symbols
-(4,277 icons, Apache 2.0), Bootstrap Icons (2,078, MIT) and Font Awesome
-Free (1,895, CC BY 4.0).
-
-**All three matched 0 of 14 abstract words.** Against the real refused
-population, Material Symbols matched 5 of 84. The cause is structural: these
-are user interface icon sets, and the same set matched 14 of 14 UI concepts.
-Where they do have a word it is usually a concrete noun, which already gets a
-photograph. The one general-vocabulary source, the Noun Project, was already
-rejected by ADR-008 for an API key and non-free licences.
-
-Recorded in the ADR so it is not re-proposed without the numbers.
-
-### Waiting on the user: the measurement corpus
-
-`scripts/measure_image_sources.py` exists and runs. It reads the definition
-cache in `pipeline.db`, which holds **807 noun lemmas across three
-languages: fr 488, de 245, en 74**. Every other language this project has
-run end to end predates the v0.6.0 composite cache key, so its definitions
-cannot be split by language.
-
-**The ask, unchanged from the plan: 2 more video ids each for de, fr, es,
-ru, pt, ja, zh, ko, en, plus 3 for Italian. 21 in total.** Two constraints,
-both learned from the existing corpus: prefer manually captioned videos, as
-auto-generated ones produced the `Bissch` and `Herauszufinde` damage in
-issue #27, and aim for 5 to 15 minutes, since the 32-lemma Japanese video is
-too short to measure anything and the 1094-lemma English one exhausted
-Merriam-Webster's free tier in a single run (ARCHITECTURE 8.43).
-
-## A review deck is ready for you
-
-`output/IMGREVIEW1_20260906_011806.apkg`, reachable from Windows at
-`C:\DSC\Career\Projects\Tango\output\`. 60 real German nouns with their
-real cached definitions, 28 of which carry an image, 1.8 MB, average image
-65 KB. It imports into a deck named "Tango image review" and needs no schema
-change, since the collection is already on the 14-field notetype.
-
-Reading it before importing: the concepts are right. An earlier note in this
-file claimed `Tanzen` and `Stricken` were weak; that was wrong and is
-corrected here. `stricken` resolves to Q193188 knitting and gets a
-photograph of a grandmother knitting stockings, one of the better cards.
-`tanzen` gets Q11639 dance, a Renoir of people dancing: right concept,
-rendered as a painting.
-
-The real remaining softness is that some images are artworks or documents
-rather than depictions: `sprichwort` gets a medieval manuscript page and
-`politikwissenschaft` a salon painting. That is much milder than a wrong
-association, and it is the thing to judge when looking at the deck.
+1. **Look at the two review decks.** `output/IMGREVIEW2-de_*.apkg` (19 cards,
+   18 with pictures) and `output/IMGREVIEW2-fr_*.apkg` (20 cards, 15 with
+   pictures), reachable from Windows at `C:\DSC\Career\Projects\Tango\output\`.
+   Both mix the concrete words the wider gate is for with the abstract ones it
+   also admits, so the cost and the benefit are in the same deck. The French
+   deck ends with the four the sense guard dropped, which should show no
+   picture at all.
+2. **Look at the layout.** `output/card_preview.html` renders the real CSS and
+   template at 360x640, 768x1024 and 900x700, with a full card, a card with no
+   picture and a sparse one. A scrollbar inside a frame means that card does
+   not fit. Then the same judgement in Anki desktop and AnkiMobile, which is
+   the only ground truth.
+3. **Settle whether a CSS change reaches an existing collection.** Anki
+   matches a notetype by ID on import; whether it then updates the styling is
+   unverified here, and if it does not, the new layout only reaches a fresh
+   collection and the pipeline needs an AnkiConnect `updateModelStyling` step
+   next to `ensure_model_fields`. Anki was not running while this was written.
+4. **The measurement corpus, unchanged from the previous handover.** 2 more
+   video ids each for de, fr, es, ru, pt, ja, zh, ko, en, plus 3 for Italian.
+   Prefer manually captioned videos, 5 to 15 minutes.
 
 ## The exact next step
 
-1. **Run the full measurement** and record the result in ADR-009 as a second
-   amendment, including a rejection if the numbers do not justify the two
-   card fields. ADR-010 shipped on +12.5 points for French and a comparable
-   bar applies. A partial run is already in hand: 55% for German.
-2. **The icon fallback (Part A2) is measured before it is built**, exactly
-   as ADR-010 did for ConceptNet. Wikidata cannot serve it: checked live,
-   `P2910` is empty on every item tried and `P487` has the inverse of the
-   coverage needed, since `Q144` dog has an emoji and `Q2979` freedom does
-   not. Reading the refused French nouns, they split three ways: an icon is
-   defensible for `musique` and `théâtre`, dishonest for `nuance` and
-   `phénomène`, and `va` and `commu` are transcript damage that should never
-   have been cards. Forcing a match across all three reproduces the failure
-   the gate exists to prevent.
-3. **Only then** decide whether `IMAGES_ENABLED` defaults to true.
+1. The three items above, all of which need eyes rather than code.
+2. Then decide whether `IMAGES_ENABLED` defaults to true. Everything the
+   measurement can supply is now in: coverage clears ADR-010's bar in every
+   language, the runtime cost is about 24 requests for a deck, and the
+   wrong-sense failure is measured and guarded.
+3. `tango doctor` reports image coverage but not the sense guard. Worth a line
+   once the default is decided.
 
 ## Open decisions
 
 | decision | why it is waiting |
 |---|---|
-| **21 video ids** | The measurement corpus covers three languages; the user offered ids for all |
-| **Publishing the Docker image** | Builds and runs. Pushing to a registry needs an account and a choice of one |
-| **French fixed expressions** | `d'accord` becomes `accord`. 7 of 1079 cards, six legitimate words. Needs a hand-curated per-language list |
-| **Transcript fallback** | The whole pipeline depends on one extraction path. A user-supplied subtitle file is the cheap half |
-| **Learned queue matching** | Nothing records what the user answers at the y/n/s prompt, so that training data is discarded every run |
-| **ruff and mypy debt** | 256 and 26 findings, both advisory, neither gating |
+| **`IMAGES_ENABLED` default** | Needs the two review decks looked at |
+| **CSS reaching an existing collection** | Unverified, Anki was not running |
+| **21 video ids** | The corpus is still three languages |
+| **Publishing the Docker image** | Builds and runs. Pushing needs an account and a choice of registry |
+| **French fixed expressions** | `d'accord` becomes `accord`. 7 of 1079 cards. Needs a hand-curated per-language list |
+| **Transcript fallback** | The whole pipeline depends on one extraction path |
+| **Learned queue matching** | Nothing records what the user answers at the y/n/s prompt |
+| **ruff and mypy debt** | 262 and 26 findings, both advisory, neither gating. The new `Optional[...]` annotations match the house style rather than ruff's preference |
 
 ## Known-broken
 
@@ -199,50 +151,36 @@ Nothing. `make check` exits 0.
 Environmental notes, not this repository's bugs:
 
 - **`make check` takes about ten minutes here.**
-- **There is no pre-commit hook**, despite an earlier version of this file
-  saying one gates every commit. Run `make check` yourself before committing.
+- **There is no pre-commit hook.** Run `make check` yourself before committing.
 - **There is no `pip` script in `.tangovenv/bin`.** Use
   `.tangovenv/bin/python -m pip`.
-- **pytest's summary line is suppressed here.** The progress dots and the
-  exit code are reliable; the "N passed" line does not appear for the full
-  suite. Count with `--collect-only -q`, which prints per-file totals.
-- **The pre-commit hook matches the literal text "git commit" in a
-  command**, so writing a file whose contents mention it is blocked. Use
-  the editor tool, not a shell heredoc.
+- **pytest's summary line is suppressed here** for the full suite. Per-file
+  runs do print it, so count that way: 1237 collected, 33 integration.
+- **The pre-commit hook matches the literal text "git commit" in a command**,
+  so writing a file whose contents mention it is blocked. Use the editor tool,
+  not a shell heredoc.
 - **`ca_core_news_sm` was installed while verifying the first-run offer.**
   Removable with `pip uninstall ca-core-news-sm`.
 
 ## One thing found and deliberately not fixed
 
-**Twelve tests in `test_definition.py` attempt real network connections**,
-24 attempts in total, which breaks CLAUDE.md 3.5. Found by running the suite
-with `socket.socket.connect` patched to raise. They are pre-existing and
-unrelated to the image work, and every image and cards test passes under the
-same guard, so this was reported rather than folded into an unrelated change
-(CLAUDE.md 7.4). The guard is four lines and worth keeping as a test:
-
-```python
-import socket
-def guard(self, addr):
-    raise AssertionError(f"unit test attempted a network connection to {addr}")
-socket.socket.connect = guard
-```
+**Twelve tests in `test_definition.py` attempt real network connections**, 24
+attempts in total, which breaks CLAUDE.md 3.5. Found by running the suite with
+`socket.socket.connect` patched to raise. Pre-existing and unrelated to the
+image work, so reported rather than folded into it (CLAUDE.md 7.4).
 
 ## Conventions worth not relearning
 
-Read CLAUDE.md section 18. The three that earned their place again this
-session:
+Read CLAUDE.md section 18. The ones that earned their place again:
 
-- **Run the feature and watch it work before writing tests for it.** The
-  9.2 MB download and the licence obligation were both found this way, and
-  neither was visible from the code.
-- **Mutation-verify every new test.** Three tests in this session passed
-  while the thing they named was broken. One claimed images are never
-  counted as missing by `doctor`; the mutation survived twice before the
-  test was rewritten to compare the reported count, because `_run_doctor`
-  returns `1 if missing else 0` and an exit code cannot see one extra item.
-- **Measure it, and write the date next to the number.** Four separate
-  documents said "40 languages" and the real figure was 45.
-
-Also: `make check` before every commit, one commit per file, no em dashes,
-and update CLAUDE.md section 1 before tagging rather than after.
+- **Mutation-verify every new test.** Three mutations survived in this session
+  and all three were the test's fault: a gate test that could not see
+  `subclass of` because the single-lemma path never passes both lists, a
+  fixture whose extra shared word hid whether stems were truncated, and a
+  part-of-speech test whose other row agreed anyway.
+- **Run the feature and watch it work.** The sense guard was driven against
+  real Wikidata and the real French index before a line of test was written,
+  which is how the German compound problem was found at all.
+- **Measure it, and write the date next to the number.** "807 nouns, de 245"
+  in the previous handover was wrong: the cache holds 1838 rows and 785 noun
+  lemmas, fr 488, de 223, en 74, measured 7 September 2026.
