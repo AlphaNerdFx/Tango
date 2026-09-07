@@ -414,6 +414,43 @@ that objection but not all of it: 8.25 and the `Tapa` card record that the
 pipeline still takes the first dictionary entry rather than the sense
 matching the video.
 
+**Superseded on 6 September 2026, and the table above is the old plan.** The
+problem was never the gate, it was the source. Commons *text search* matches
+a spelling rather than a meaning, which is the whole reason `laufen` found a
+coin from the town of Laufen. Resolving the lemma to a **concept** instead,
+Wikipedia article to Wikidata item to image, makes the judgement
+language-independent: `Hund` and `chien` are both Q144, so no German WordNet
+is needed and German goes from 0% to 38%.
+
+| language | nouns | old WordNet gate | shipped gate |
+|---|---|---|---|
+| French | 150 | ~9% | **33.3%** |
+| German | 150 | **0%** | **38.0%** |
+| English | 74 | ~4% | **23.0%** |
+| overall | 374 | | **33.2%** |
+
+So images ship for **every** language, not only the 19 in OMW, which
+reverses the restriction above. Both card fields are appended: `Image` at
+12 and `Attribution` at 13, the second because Commons reports
+`AttributionRequired: true` on the files this actually returns.
+
+Two corrections that came from running it rather than reasoning about it.
+Commons serves originals and the first real download was 9.2 MB for a
+photograph displayed at 240px, so both routes request a 480px thumbnail and
+the same file is 46 KB. And resolution is batched at 50 items per request,
+about 24 requests for a deck instead of 1600, which removed the runtime
+argument against enabling it.
+
+The **icon fallback for abstract words was measured and rejected**: three
+FOSS icon sets, 8,250 icons between them, matched 0 of 14 abstract words,
+because a UI icon set is built to label buttons rather than vocabulary. See
+the ADR-009 amendment.
+
+`IMAGES_ENABLED` is **false** by default. The remaining gate is a person
+looking at a deck of these cards in Anki, because the failure this guards
+against is visual and the first measurement read as a success while putting
+a newborn on the card for `leben`.
+
 ### v0.12.0: Runs on modest hardware
 
 **Measured, 15 August 2026: `.tangovenv` is 5.9 GB and `dictionaries/` is
