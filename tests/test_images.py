@@ -329,6 +329,64 @@ class TestThumbnails:
         assert images._commons_url([]) is None
 
 
+class TestTheCreditAsksForTheFileNotTheRendition:
+    """
+    Found 7 September 2026 by counting credits in a real review deck: 4 of 15
+    pictures had none, and all four came from the Wikipedia lead-image route.
+
+    That route hands back a *thumbnail* URL, whose last path segment is the
+    rendition rather than the file:
+
+        .../thumb/c/c8/Scout_Girl.jpg/500px-Scout_Girl.jpg
+
+    Commons has no page called `500px-Scout_Girl.jpg`, so the credit came
+    back empty and looked exactly like "this file has none". Two of the four
+    were CC BY, so the cards were shipping licensed work uncredited. Same
+    shape as the underscores bug in `_attributions`, different cause.
+    """
+
+    def test_a_thumbnail_url_yields_the_file_it_is_a_thumbnail_of(self):
+        assert images._commons_filename(
+            "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c8/"
+            "Scout_Girl_in_Concentration.jpg/500px-Scout_Girl_in_Concentration.jpg"
+        ) == "Scout_Girl_in_Concentration.jpg"
+
+    def test_a_file_url_yields_itself(self):
+        # The pair: the Wikidata route already gives a file URL, and reading
+        # the second-to-last segment of one would name a directory.
+        assert images._commons_filename(
+            "https://commons.wikimedia.org/wiki/Special:FilePath/"
+            "Candy_in_Damascus.jpg?width=480"
+        ) == "Candy_in_Damascus.jpg"
+
+    def test_a_plain_commons_path_yields_the_file(self):
+        assert images._commons_filename(
+            "https://upload.wikimedia.org/wikipedia/commons/c/c8/Plain_File.jpg"
+        ) == "Plain_File.jpg"
+
+    def test_percent_escapes_are_decoded(self):
+        # The API wants a title, not a URL path, and a Chinese file name is
+        # a real case here rather than a hypothetical one.
+        assert images._commons_filename(
+            "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3c/"
+            "%E5%9B%A0%E6%99%82.png/500px-anything.png"
+        ) == "因時.png"
+
+    def test_the_batch_asks_commons_for_the_file_name(self):
+        # The end of the chain, and the part that was actually broken: what
+        # gets sent to Commons.
+        page = {"pageprops": {"wikibase_item": "Q1"},
+                "thumbnail": {"source": "https://thumb.wikimedia.org/wikipedia/commons/"
+                                        "thumb/c/c8/Real_File.jpg/500px-Real_File.jpg"}}
+        with patch.object(images, "_articles", return_value={"attention": page}), \
+             patch.object(images, "_entities",
+                          return_value={"Q1": {"P31": ["Q811102"], "P279": [],
+                                               "P18": [], "description": ""}}), \
+             patch.object(images, "_attributions", return_value={}) as credits:
+            images.find_images(["attention"], "fr")
+        assert credits.call_args[0][0] == ["Real_File.jpg"]
+
+
 class TestExtension:
     """
     Anki picks a renderer from the file extension, so the cached filename
