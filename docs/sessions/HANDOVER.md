@@ -1,6 +1,6 @@
 # HANDOVER
 
-Written 6 September 2026.
+Written 7 September 2026.
 
 ## Where the tree is
 
@@ -10,7 +10,7 @@ Written 6 September 2026.
 | last tag | **`v0.10.0`**, released 5 September 2026 |
 | `__version__` | `0.10.0` |
 | `make check` | exit 0 |
-| tests | **1141 unit, 24 integration deselected** |
+| tests | **1165 unit, 33 integration deselected** |
 | PyPI | `pip install tango-anki` |
 
 Twenty tags, twenty GitHub releases. 33 commits sit on `main` after v0.10.0,
@@ -24,8 +24,9 @@ follow what was designed rather than asking again.
 
 ## What is in flight: v0.11.0, images on cards
 
-The rung is "images on cards, gated to concrete nouns". Four parts were
-planned; three are done and the fourth is waiting on the user.
+The rung is "images on cards, gated to concrete nouns". The feature is
+built, measured and off by default. What is left is a visual review and a
+wider measurement corpus, both of which need the user.
 
 ### Done: the image source was wrong, not the gate
 
@@ -81,8 +82,9 @@ That reproduces ARCHITECTURE 8.32 at 23x its original scale. Anki will want
 a full sync afterwards, which is expected for a schema change.
 
 **Images are off by default** (`IMAGES_ENABLED`, default false). Verified: a
-run with them disabled makes zero network calls and takes 0.17s longer than
-none. ADR-009 requires the measurement below before that default moves.
+run with them disabled makes zero network calls and adds 0.17s. The
+measurement that ADR-009 required is now done and it justifies the feature;
+the remaining gate on the default is a person looking at real cards.
 
 ### Done: the language counts were wrong in four places
 
@@ -96,6 +98,35 @@ Corrected in `README.md`, `language.py` (twice), and `wiki/[FAQ].md`, and
 now fails if any of them drifts again. That test checks **every** occurrence
 rather than presence: an earlier version passed while one of language.py's
 two sites was stale, which is the exact shape of the original bug.
+
+### Done: resolution is batched, which removed the speed objection
+
+The per-lemma path cost four Wikimedia requests per noun at one a second, so
+a 400-noun deck added about 27 minutes. All three APIs take 50 items per
+request and one Wikidata call returns P31 and P18 together, so the same deck
+costs about **24 requests**. Measured on 16 German words: 3.78s against
+53.34s, with 16 of 16 results identical. A 10-card package with images on
+builds in 4.9s.
+
+`find_images()` is the batched entry point; `find_image()` remains for one
+lookup. Resolution is batched rather than threaded because Wikimedia's
+pacing is the limit, not latency. Downloads are still threaded.
+
+### Done: the icon fallback is measured and rejected
+
+Requested as "an icon source with icons representing a concept, not emoji".
+Three FOSS sets were tested, all meeting ADR-008's bar: Material Symbols
+(4,277 icons, Apache 2.0), Bootstrap Icons (2,078, MIT) and Font Awesome
+Free (1,895, CC BY 4.0).
+
+**All three matched 0 of 14 abstract words.** Against the real refused
+population, Material Symbols matched 5 of 84. The cause is structural: these
+are user interface icon sets, and the same set matched 14 of 14 UI concepts.
+Where they do have a word it is usually a concrete noun, which already gets a
+photograph. The one general-vocabulary source, the Noun Project, was already
+rejected by ADR-008 for an API key and non-free licences.
+
+Recorded in the ADR so it is not re-proposed without the numbers.
 
 ### Waiting on the user: the measurement corpus
 
@@ -112,6 +143,26 @@ auto-generated ones produced the `Bissch` and `Herauszufinde` damage in
 issue #27, and aim for 5 to 15 minutes, since the 32-lemma Japanese video is
 too short to measure anything and the 1094-lemma English one exhausted
 Merriam-Webster's free tier in a single run (ARCHITECTURE 8.43).
+
+## A review deck is ready for you
+
+`output/IMGREVIEW1_20260906_011806.apkg`, reachable from Windows at
+`C:\DSC\Career\Projects\Tango\output\`. 60 real German nouns with their
+real cached definitions, 28 of which carry an image, 1.8 MB, average image
+65 KB. It imports into a deck named "Tango image review" and needs no schema
+change, since the collection is already on the 14-field notetype.
+
+Reading it before importing: the concepts are right. An earlier note in this
+file claimed `Tanzen` and `Stricken` were weak; that was wrong and is
+corrected here. `stricken` resolves to Q193188 knitting and gets a
+photograph of a grandmother knitting stockings, one of the better cards.
+`tanzen` gets Q11639 dance, a Renoir of people dancing: right concept,
+rendered as a painting.
+
+The real remaining softness is that some images are artworks or documents
+rather than depictions: `sprichwort` gets a medieval manuscript page and
+`politikwissenschaft` a salon painting. That is much milder than a wrong
+association, and it is the thing to judge when looking at the deck.
 
 ## The exact next step
 
@@ -160,6 +211,22 @@ Environmental notes, not this repository's bugs:
   the editor tool, not a shell heredoc.
 - **`ca_core_news_sm` was installed while verifying the first-run offer.**
   Removable with `pip uninstall ca-core-news-sm`.
+
+## One thing found and deliberately not fixed
+
+**Twelve tests in `test_definition.py` attempt real network connections**,
+24 attempts in total, which breaks CLAUDE.md 3.5. Found by running the suite
+with `socket.socket.connect` patched to raise. They are pre-existing and
+unrelated to the image work, and every image and cards test passes under the
+same guard, so this was reported rather than folded into an unrelated change
+(CLAUDE.md 7.4). The guard is four lines and worth keeping as a test:
+
+```python
+import socket
+def guard(self, addr):
+    raise AssertionError(f"unit test attempted a network connection to {addr}")
+socket.socket.connect = guard
+```
 
 ## Conventions worth not relearning
 
