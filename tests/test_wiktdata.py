@@ -715,3 +715,144 @@ class TestFormOfSpellings:
                     senses=[_sense("первый момент чего-либо")]),
         ]))
         assert lookup("начала", "ru").definition == "первый момент чего-либо"
+
+
+# -- Sense agreement with a card's picture ------------------------------------
+
+class TestDescribesOtherSense:
+    """
+    The guard behind cards.py dropping a picture that shows another sense.
+
+    A card's definition and its picture are chosen by two routes that never
+    speak to each other, so `palais` can print the roof of the mouth beside
+    a photograph of a monumental building. Every fixture here is a real case
+    from the 7 September 2026 measurement over the definition cache, because
+    the failures this rule has to avoid are all real ones: a rule that only
+    drops is easy, and a rule that never drops the right picture is the job.
+    """
+
+    DESCRIPTION = "edifice monumental, siege des autorites civiles ou religieuses"
+    ROOF = "Paroi superieure qui separe la fosse nasale de la bouche."
+    # Shares exactly one thing with the description, and only as a stem:
+    # religieux against religieuses. That single link is deliberate, so a
+    # test about the ending cannot be satisfied by some other word agreeing.
+    BUILDING = "Vaste demeure urbaine d'un roi ou d'un prince religieux."
+    COURT = "Salle ou siegent les autorites civiles."
+
+    def _palais(self, tmp_path, extra=()):
+        build_index("fr", archive=_archive(tmp_path, [
+            _record("palais", gloss=self.ROOF, pos="noun"),
+            _record("palais", gloss=self.BUILDING, pos="noun"),
+            *extra,
+        ]))
+
+    def test_a_picture_of_another_sense_is_reported(self, tmp_path):
+        self._palais(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.ROOF, self.DESCRIPTION, "noun") is True
+
+    def test_the_sense_the_picture_shows_keeps_it(self, tmp_path):
+        # The pair to the test above. One alone passes for a function that
+        # answers True whenever a word has more than one sense.
+        self._palais(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.BUILDING, self.DESCRIPTION, "noun") is False
+
+    def test_agreement_survives_an_inflected_ending(self, tmp_path):
+        # Why stems are cut at five characters: the description says
+        # "religieuses" and the index row says "religieux". Comparing whole
+        # words called those two different senses and threw away a correct
+        # photograph of a palace.
+        #
+        # The third row is what makes this test able to fail. Without it,
+        # comparing whole words would find no agreement anywhere and keep
+        # the picture for the other reason, so the assertion would hold
+        # whether the ending was handled or not.
+        self._palais(tmp_path, extra=[_record("palais", gloss=self.COURT, pos="noun")])
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.BUILDING, self.DESCRIPTION, "noun") is False
+
+    def test_agreement_survives_a_german_compound(self, tmp_path):
+        # Why a stem is looked for *inside* the definition rather than
+        # matched as a whole word. These are the real strings: the card says
+        # "Aufgussgetränk" and Wikidata says "Heißgetränk", which agree, and
+        # a whole-word comparison scores them zero and drops a correct
+        # photograph of a cup of coffee.
+        #
+        # It works here because "getra" is a stem of its own: ß is not a
+        # letter this splits on, so "Heißgetränk" yields "getrank" and that
+        # is found inside "Aufgussgetränk". A compound with no ß in it would
+        # not meet its parts this way. Splitting German compounds properly
+        # needs a decompounder, and this rule does not have one: it is built
+        # so that failing to see an agreement keeps the picture.
+        build_index("de", archive=_archive(tmp_path, [
+            _record("kaffee", lang_code="de", pos="noun",
+                    gloss="anregendes schwarzes Aufgussgetränk"),
+            _record("kaffee", lang_code="de", pos="noun",
+                    gloss="Gaststätte, in der Kaffee ausgeschenkt wird"),
+        ]))
+        assert wiktdata.describes_other_sense(
+            "kaffee", "de", "anregendes schwarzes Aufgussgetränk",
+            "Heißgetränk aus meist gerösteten Kaffeebohnen", "noun") is False
+
+    def test_no_agreement_anywhere_is_not_a_disagreement(self, tmp_path):
+        # Absence of evidence. Measured over the cache, 18 of 66 ambiguous
+        # imaged words share no word with their description in any row, and
+        # dropping those would cost good pictures to learn nothing.
+        self._palais(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.ROOF, "batiment ancien", "noun") is False
+
+    def test_an_inflected_row_is_not_an_alternative_sense(self, tmp_path):
+        # A form-of row is a pointer, not a sense the card could have shown.
+        build_index("fr", archive=_archive(tmp_path, [
+            _record("palais", gloss=self.ROOF, pos="noun"),
+            _record("palais", lang_code="fr", pos="noun",
+                    senses=[_sense("Pluriel de edifice religieux", form_of="palai")]),
+        ]))
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.ROOF, self.DESCRIPTION, "noun") is False
+
+    def _one_noun_and_a_verb(self, tmp_path):
+        """Only the verb row agrees with the concept, so only it could fire."""
+        build_index("fr", archive=_archive(tmp_path, [
+            _record("palais", gloss=self.ROOF, pos="noun"),
+            _record("palais", gloss="Batir un edifice religieux.", pos="verb"),
+        ]))
+
+    def test_a_row_of_another_part_of_speech_is_not_an_alternative(self, tmp_path):
+        # The card is showing a noun. A verb row agreeing with the concept
+        # says nothing about the noun the learner is looking at, and scoring
+        # every row reproduced the result ARCHITECTURE 8.28 recorded.
+        self._one_noun_and_a_verb(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.ROOF, "edifice religieux", "noun") is False
+
+    def test_without_a_part_of_speech_every_row_counts(self, tmp_path):
+        # The pair to the test above, and the reason it is not vacuous: the
+        # verb row really does agree, and it is the part of speech that
+        # excludes it rather than anything else about the fixture.
+        self._one_noun_and_a_verb(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.ROOF, "edifice religieux", None) is True
+
+    def test_a_word_the_index_does_not_have_keeps_its_picture(self, tmp_path):
+        self._palais(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "manoir", "fr", self.ROOF, self.DESCRIPTION, "noun") is False
+
+    def test_no_index_keeps_its_picture(self):
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.ROOF, self.DESCRIPTION, "noun") is False
+
+    def test_a_concept_with_no_description_keeps_its_picture(self, tmp_path):
+        # Wikidata has no description in every language for every item, and
+        # nothing to compare is not a disagreement.
+        self._palais(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.ROOF, "", "noun") is False
+
+    def test_a_card_with_no_definition_keeps_its_picture(self, tmp_path):
+        self._palais(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", "", self.DESCRIPTION, "noun") is False
