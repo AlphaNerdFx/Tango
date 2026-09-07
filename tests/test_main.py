@@ -95,6 +95,26 @@ class TestCommandSurface:
         assert args.force is False and args.no_cache is False and args.verbose is False
         assert args.deck is None
 
+    def test_images_is_three_states_not_two(self):
+        # --images and --no-images both override the environment for one
+        # run, and no flag at all leaves IMAGES_ENABLED to decide. Without
+        # the third state, somebody with IMAGES_ENABLED=true in .env has no
+        # way to build a single deck without pictures.
+        seen = {}
+        for argv, label in (([], "absent"), (["--images"], "on"), (["--no-images"], "off")):
+            with patch.object(main_module, "_run_pipeline") as run_pipeline:
+                self.runner.invoke(main_module.app, ["run", VIDEO_ID] + argv)
+            seen[label] = run_pipeline.call_args.args[0].images
+        assert seen == {"absent": None, "on": True, "off": False}
+
+    def test_review_and_backlog_take_the_images_flag_too(self):
+        # All three modes build a package, so all three need the same say
+        # over what goes on the cards.
+        for command, target in (("review", "_run_review"), ("backlog", "_run_backlog")):
+            with patch.object(main_module, target) as runner:
+                self.runner.invoke(main_module.app, [command, "--deck", DECK_NAME, "--images"])
+            assert runner.call_args.args[0].images is True, command
+
     def test_review_and_backlog_need_no_video_id(self):
         for command, target in (("review", "_run_review"), ("backlog", "_run_backlog")):
             with patch.object(main_module, target) as runner:
