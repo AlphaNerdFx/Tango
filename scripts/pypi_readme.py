@@ -37,6 +37,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 README = ROOT / "README.md"
 BACKUP = ROOT / "README.md.orig"
+REPO = "https://github.com/AlphaNerdFx/Tango"
 
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -44,9 +45,31 @@ sys.path.insert(0, str(ROOT / "src"))
 _LIVE_BADGES = (
     (re.compile(r"!\[PyPI\]\(https://img\.shields\.io/pypi/v/tango-anki[^)]*\)"),
      "![PyPI](https://img.shields.io/badge/pypi-v{v}-orange)"),
-    (re.compile(r"!\[Release\]\(https://img\.shields\.io/github/v/release/[^)]*\)"),
-     "![Release](https://img.shields.io/badge/release-v{v}-orange)"),
+    # The link goes with the image here. A badge reading "release v0.8.2"
+    # that opens the latest release is the same lie in a different place,
+    # and on a frozen page /releases/latest is never this release for long.
+    (re.compile(r"\[!\[Release\]\(https://img\.shields\.io/github/v/release/[^)]*\)\]"
+                r"\([^)]*\)"),
+     "[![Release](https://img.shields.io/badge/release-v{v}-orange)]"
+     "(" + REPO + "/releases/tag/v{v})"),
 )
+
+# The CI badge cannot be pinned, only dropped, and that is a property of the
+# badge rather than a decision taken here. GitHub renders it from the
+# workflow's *current* state and offers no way to ask for the state at a tag:
+# badge.svg takes ?branch= and ?event=, and a tag is neither. On a frozen page
+# it therefore reports whatever main is doing months later, so the v0.8.2 page
+# would turn red the next time someone breaks a build. Saying nothing is
+# better than saying something that is only accidentally true.
+_CI_BADGE = re.compile(r"^\[!\[CI\]\([^)]*\)\]\([^)]*\)\n", re.M)
+
+# A README written for GitHub links to files by repository-relative path, and
+# those resolve against pypi.org once uploaded: `](LICENSE)` becomes a 404 on
+# the project page. Rewritten to point into the repository *at this tag*, so a
+# frozen page links to the files as they were when it was frozen.
+#
+# Anchors are left alone, they work on the PyPI page like anywhere else.
+_RELATIVE_LINK = re.compile(r"\]\((?!https?://|#)([^)]+)\)")
 
 
 def version() -> str:
@@ -56,11 +79,21 @@ def version() -> str:
 
 
 def pin(text: str, v: str) -> tuple[str, int]:
-    """Return the text with live version badges replaced, and how many changed."""
+    """
+    Return the text ready for a frozen page, and how many things changed.
+
+    Three edits, all of the same kind: anything that answers with "now" is
+    replaced by what it says at this release, and anything that resolves
+    against the wrong host is made absolute.
+    """
     changed = 0
     for pattern, replacement in _LIVE_BADGES:
         text, n = pattern.subn(replacement.format(v=v), text)
         changed += n
+    text, n = _CI_BADGE.subn("", text)
+    changed += n
+    text, n = _RELATIVE_LINK.subn(rf"]({REPO}/blob/v{v}/\1)", text)
+    changed += n
     return text, changed
 
 
