@@ -446,10 +446,39 @@ FOSS icon sets, 8,250 icons between them, matched 0 of 14 abstract words,
 because a UI icon set is built to label buttons rather than vocabulary. See
 the ADR-009 amendment.
 
-`IMAGES_ENABLED` is **false** by default. The remaining gate is a person
-looking at a deck of these cards in Anki, because the failure this guards
-against is visual and the first measurement read as a success while putting
-a newborn on the card for `leben`.
+**Amended 7 and 8 September 2026, and this is the shipped state.**
+
+The gate was asking Wikidata the wrong property. `instance of` refused 127
+of 785 nouns, because a common noun *is* a class and a class carries
+`subclass of`: `fleur` is Q506 and is an instance of nothing. Reading
+`subclass of` when `instance of` is absent took coverage from 33.1% to
+**45.9%** (French 43.9, German 54.3, English 33.8). Permissively, so some
+abstract words get an illustrative picture, which is the named cost.
+
+A picture whose concept describes a **different sense** than the card's
+definition is now dropped before it is downloaded, on positive evidence
+only: 4 of 360 imaged words, all French, each read by hand. Re-picking the
+*definition* from the concept was measured and rejected for the second time,
+reproducing 8.28. ARCHITECTURE 8.46 and 8.47.
+
+Counting the credits found a licence bug: the Wikipedia lead-image route
+returns a thumbnail URL, so the credit lookup asked Commons about
+`500px-Scout_Girl.jpg` and got nothing, and 4 of 15 pictures in a review
+deck shipped uncredited, two of them CC BY. Fixed; every picture in a real
+299-card run now carries its licence line.
+
+The card is one screen tall, with the picture taking the height the text
+leaves between 16vh and 45vh. Verified against the live collection: Anki
+updates the notetype styling and template on import when the ID and field
+schema match, and merged 5311 notes without forking.
+
+**Images stay off by default, and are asked for per run with `--images`.**
+`IMAGES_ENABLED` still sets the default for every run, and `--no-images`
+overrides it the other way. The reasoning is cost rather than doubt: a
+picture roughly doubles a deck that already carries audio (4.8 MB of 10.1 MB
+on a real 299-card run) and adds about 24 requests, so it is a choice to
+offer rather than a cost to impose. Trying it is now one flag instead of an
+edit to `.env`.
 
 ### v0.12.0: Runs on modest hardware
 
@@ -580,7 +609,8 @@ this project's cards.**
 2. **The CLI surface.** Command names and their options: `run`, `review`,
    `backlog`, `languages`, `doctor`, `setup`, `install-model`,
    `install-translation`, `build-dictionary`, `build-antonyms`, and the
-   options `--deck`, `--language`, `--def-lang`, `--force`, `--no-cache`.
+   options `--deck`, `--language`, `--def-lang`, `--force`, `--no-cache`,
+   `--images/--no-images`.
 3. **Configuration keys.** Every `ANKI_*`, `DEF_LANG`, `MW_API_KEY`,
    `DB_PATH`, `DICT_DIR`, and the rest of `.env.example`.
 4. **On-disk schemas.** `pipeline.db` (definition cache, vocabulary, runs,
