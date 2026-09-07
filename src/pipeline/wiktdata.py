@@ -34,6 +34,7 @@ from pipeline import TangoError
 import gzip
 import json
 import logging
+import re
 import sqlite3
 import threading
 import unicodedata
@@ -421,6 +422,118 @@ def lookup(word: str, language: str, pos: Optional[str] = None) -> Optional[Dict
     except sqlite3.Error as exc:
         logger.warning("Dictionary lookup failed for '%s' (%s): %s", word, language, exc)
     return None
+
+
+# ── Sense agreement with a card's picture ─────────────────────────────────────
+
+# Content words are compared as five-character stems, matched anywhere inside
+# the other string rather than as whole words. Both halves of that were
+# measured on 7 September 2026 and both earned their place.
+#
+# Inside, because German glues its compounds together. The card for `Kaffee`
+# reads "anregendes schwarzes Aufgussgetränk" and Wikidata says "Heißgetränk
+# aus meist gerösteten Kaffeebohnen". Those agree, and a whole-word
+# comparison scores them zero, which would have thrown away a correct
+# picture of a cup of coffee.
+#
+# Five characters, because French inflects the ending. `palais` is described
+# as the seat of "autorités civiles ou religieuses" while the index row says
+# "religieux", and comparing whole words missed it, leaving a photograph of
+# a palace on a card defining the roof of the mouth.
+_STEM_LENGTH = 5
+_CONTENT_WORD = re.compile(r"[a-z]{4,}")
+
+
+def _fold(text: str) -> str:
+    """Lowercase and strip accents, so `écrit` and `ecrit` are the same word."""
+    flat = unicodedata.normalize("NFKD", (text or "").lower())
+    return "".join(c for c in flat if not unicodedata.combining(c))
+
+
+def _shares_a_word(text: str, stems: set[str]) -> bool:
+    """Whether any of `stems` appears anywhere inside `text`."""
+    folded = _fold(text)
+    return any(stem in folded for stem in stems)
+
+
+def describes_other_sense(
+    word: str,
+    language: str,
+    definition: str,
+    description: str,
+    pos: Optional[str] = None,
+) -> bool:
+    """
+    Whether a picture's concept describes a different sense than the card.
+
+    A card's definition and its picture are chosen by two routes that never
+    speak to each other: the definition is the first index row of the right
+    part of speech, and the picture is whatever concept Wikipedia's article
+    for that spelling resolves to. For French `palais` those are the roof of
+    the mouth and a monumental building.
+
+    Args:
+        word:        The lemma on the card.
+        language:    Which index to read. The language the definition is
+                     written in, not necessarily the transcript's.
+        definition:  The definition the card is about to show.
+        description: The concept's Wikidata description, same language.
+        pos:         The card's part of speech as an index value ("noun"),
+                     narrowing which rows count as an alternative sense.
+
+    Returns:
+        True only when the definition shares no content word with the
+        description *and* another sense of the same word does. Both clauses
+        matter: the second is what makes this evidence of disagreement
+        rather than absence of evidence. Measured over the definition cache
+        on 7 September 2026, 18 of 66 ambiguous imaged words share nothing
+        with their description in any row, and dropping those would cost
+        good pictures for nothing.
+
+    Measured the same day, the rule drops 4 of 348 imaged words: anime, est,
+    grève and palais in French, none in German or English. All four were
+    read by hand and all four were showing a picture of another sense.
+
+    Never raises. A missing index, a word with no entry, an empty definition
+    or an empty description all mean no evidence, and no evidence keeps the
+    picture.
+
+    Inert under --def-lang, knowingly. The definition then comes from the
+    target-language index under a *translated* lemma, which this function is
+    not given, so it finds no rows and answers False.
+    """
+    if not definition or not description:
+        return False
+    stems = {w[:_STEM_LENGTH] for w in _CONTENT_WORD.findall(_fold(description))}
+    if not stems:
+        return False
+    if _shares_a_word(definition, stems):
+        return False
+
+    conn = _connection(language)
+    if conn is None:
+        return False
+    try:
+        for variant in _lookup_variants(word):
+            rows = conn.execute(
+                "SELECT definition, pos, form_of FROM entries WHERE word = ?", (variant,)
+            ).fetchall()
+            if not rows:
+                continue
+            for row in rows:
+                # An inflection pointer is not a sense, and a row of another
+                # part of speech is not one this card could have shown. Both
+                # exclusions come from the measurement: scoring every row
+                # reproduced 8.28's result, and every regression it caused
+                # was a verb row or a form-of row.
+                if row["form_of"] or (pos and row["pos"] != pos):
+                    continue
+                if _shares_a_word(row["definition"] or "", stems):
+                    return True
+            return False
+    except sqlite3.Error as exc:
+        logger.warning("Sense comparison failed for '%s' (%s): %s", word, language, exc)
+    return False
 
 
 # ── Build ─────────────────────────────────────────────────────────────────────
