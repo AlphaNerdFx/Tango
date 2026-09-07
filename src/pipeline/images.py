@@ -37,6 +37,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
+from urllib.parse import unquote, urlsplit
 
 import requests
 
@@ -299,12 +300,41 @@ def find_image(lemma: str, language: str,
     for source, url in (("wikidata", _commons_url(_claims(qid, "P18"))),
                         ("wikipedia", page.get("thumbnail", {}).get("source"))):
         if url:
-            name = url.rsplit("/", 1)[-1].split("?")[0]
+            name = _commons_filename(url)
             return ImageResult(url=url, qid=qid, source=source, filename=name,
                                attribution=attribution(name),
                                description=_description(
                                    qid, description_language or language))
     return None
+
+
+def _commons_filename(url: str) -> str:
+    """
+    The Commons file a URL refers to, not the name of a rendition of it.
+
+    Wikidata's route gives a file URL and the last segment is the file. The
+    Wikipedia lead-image route gives a *thumbnail* URL, whose last segment is
+    the rendition:
+
+        .../thumb/c/c8/Scout_Girl.jpg/500px-Scout_Girl.jpg
+
+    Asking Commons about `500px-Scout_Girl.jpg` finds no page and returns no
+    credit, so a picture shipped with an empty Attribution field. Measured
+    7 September 2026 on a real review deck: 4 of 15 pictures, every one of
+    them from this route, and the files are CC BY-SA. The credit is a licence
+    obligation, so this is a licence bug rather than an untidy card.
+
+    Same failure as the underscores in `_attributions`, a different cause,
+    and the reason both are tested: an empty credit looks like "Commons has
+    none" from the outside.
+
+    Percent-escapes are decoded, because the API wants a title and not a URL
+    path: `%E5%9B%A0...` is a real file name here, not an encoding artefact.
+    """
+    parts = [p for p in unquote(urlsplit(url).path).split("/") if p]
+    if not parts:
+        return ""
+    return parts[-2] if "thumb" in parts and len(parts) >= 2 else parts[-1]
 
 
 def _commons_url(p18: list[str]) -> Optional[str]:
@@ -676,7 +706,7 @@ def find_images(lemmas: list[str], language: str,
                 or pages[lemma].get("thumbnail", {}).get("source")
             if not url:
                 continue
-            name = url.rsplit("/", 1)[-1].split("?")[0]
+            name = _commons_filename(url)
             pending[name] = ImageResult(
                 url=url, qid=qid,
                 source="wikidata" if claims["P18"] else "wikipedia",
