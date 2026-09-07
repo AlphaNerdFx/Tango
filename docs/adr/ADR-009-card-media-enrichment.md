@@ -481,6 +481,61 @@ field costs a learner nothing, and a wrong or arbitrary symbol costs them
 the association. Recorded here so the idea is not re-proposed without the
 numbers.
 
+## Amendment, 7 September 2026: the gate asked the wrong property
+
+Coverage sat at 33% of nouns and the funnel was measured stage by stage to
+find out where the other two thirds went. The answer was one branch: **127 of
+785 nouns resolved to an item with no `instance of` claim at all**, which the
+gate refused on the reasoning that an unclassified item cannot be judged.
+
+That reasoning was sound and the property was wrong. A common noun *is* a
+class, and a class in Wikidata carries `subclass of` rather than `instance
+of`: `fleur` is Q506, `Kaffee` is Q8486, and neither is an instance of
+anything. `Hund` only ever worked because Q144 happens to be an instance of a
+taxon. Of those 127, **101 had both a `subclass of` and a picture**, among
+them bonbon, coussin, apfelsaft, kühlschrank, einkaufswagen and frühstück.
+
+The gate now falls back to `subclass of` when `instance of` is empty, with
+the same denylist applied to whichever list it reads. Measured before and
+after, over the whole definition cache:
+
+| language | before | after | change |
+|---|---|---|---|
+| French | 163 of 488, 33.4% | **214, 43.9%** | +10.5 |
+| German | 81 of 223, 36.3% | **121, 54.3%** | +18.0 |
+| English | 16 of 74, 21.6% | **25, 33.8%** | +12.2 |
+| overall | 260 of 785, 33.1% | **360, 45.9%** | +12.8 |
+
+`subclass of` is consulted only when `instance of` is absent. Almost every
+concrete class has an abstract ancestor somewhere up its chain, so reading
+both would refuse concepts that have been on cards since this shipped.
+
+**The permissive setting was chosen with its cost named.** Some abstract
+words now get a picture: `Gedanke` gets a painting titled *Gedanken*,
+`regret` and `Leidenschaft` get whatever illustrates them. This ADR's gate
+exists to limit that failure rather than to eliminate it, and the judgement
+was that 100 more pictures is worth a handful of illustrative ones. ARCHITECTURE 8.46.
+
+### The picture may not contradict the definition it sits beside
+
+A card's definition and its picture were chosen by two routes that never
+consulted each other, so `palais` showed a monumental building beside the
+roof of the mouth, and `anime` a Japanese cartoon beside a medieval cuirass.
+
+Letting the concept pick the *sense* instead is the heuristic 8.28 measured
+and rejected, and re-measuring it confirmed that: 4 better, 2 worse, breaking
+`pays` and `kaffee`. So the definition is left alone and the picture is
+dropped, which is the cheaper half of the disagreement to be wrong about.
+
+The rule fires only on positive evidence: the definition shares no content
+word with the concept's description **while another sense of the same word
+does**. Absence of agreement is not disagreement, and 18 of 66 ambiguous
+imaged words agree with nothing anywhere.
+
+Measured with the new gate in place, **4 of 348 imaged words lose their
+picture**: anime, est, grève and palais, all French, none in German or
+English, each read by hand and each showing another sense. ARCHITECTURE 8.47.
+
 ## Consequences
 
 **Card fields may only be appended.** CLAUDE.md 3.2 makes field order
