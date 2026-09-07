@@ -320,13 +320,67 @@ def attribution(filename: str) -> str:
     return _credit_line(info[0].get("extmetadata", {}))
 
 
+# What a file actually is, read from its first bytes. Anki picks a renderer
+# from the extension, so a name that disagrees with the content shows a
+# broken-image icon and nothing else.
+_MAGIC: tuple[tuple[bytes, str], ...] = (
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"GIF87a", ".gif"),
+    (b"GIF89a", ".gif"),
+    (b"<svg", ".svg"),
+    (b"<?xml", ".svg"),
+)
+
+# Content-Type is the cheaper answer when the server sends a usable one.
+_CONTENT_TYPES: dict[str, str] = {
+    "image/png": ".png",
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "image/svg+xml": ".svg",
+}
+
+
 def _extension(url: str) -> str:
-    """The file extension Anki needs to render the image, defaulting to .jpg."""
+    """
+    The extension implied by a URL, which is a guess and not the answer.
+
+    Kept for the cache-hit path, where there are no bytes to inspect yet.
+    Anything that has actually been downloaded should be named by
+    `_extension_for()` instead, because the URL routinely lies: see there.
+    """
     tail = url.rsplit("/", 1)[-1].split("?")[0].lower()
     for ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"):
         if tail.endswith(ext):
             return ext
     return ".jpg"
+
+
+def _extension_for(content: bytes, content_type: str, url: str) -> str:
+    """
+    Name a downloaded file after what it is, not after where it came from.
+
+    The URL is the least reliable of the three, and this is measured rather
+    than cautious. Commons *rasterises* an SVG when a width is requested, so
+    `Special:FilePath/Procent-teken.svg?width=480` answers
+    `Content-Type: image/png` with PNG bytes. Naming that file `.svg` from
+    the URL is why the `pourcent` card showed a broken-image icon: Anki read
+    the extension, chose an SVG renderer, and got PNG.
+
+    Order: the magic bytes, which cannot be wrong; then Content-Type; then
+    the URL as a last resort.
+    """
+    for signature, extension in _MAGIC:
+        if content.startswith(signature):
+            return extension
+
+    base = (content_type or "").split(";")[0].strip().lower()
+    if base in _CONTENT_TYPES:
+        return _CONTENT_TYPES[base]
+
+    return _extension(url)
 
 
 def fetch_image(result: ImageResult, lemma: str) -> Optional[Path]:
@@ -342,9 +396,12 @@ def fetch_image(result: ImageResult, lemma: str) -> Optional[Path]:
     picture. Same posture as media.fetch_audio.
     """
     IMAGE_DIR.mkdir(parents=True, exist_ok=True)
-    path = IMAGE_DIR / f"{result.qid}{_extension(result.url)}"
-    if path.exists():
-        return path
+
+    # Any extension, because the file is named after its content and the URL
+    # cannot predict that. Globbing the id is what makes a cache hit work
+    # when the URL says .svg and the bytes on disk are .png.
+    for cached in sorted(IMAGE_DIR.glob(f"{result.qid}.*")):
+        return cached
 
     _LIMITER.acquire()
     try:
@@ -358,6 +415,10 @@ def fetch_image(result: ImageResult, lemma: str) -> Optional[Path]:
     if not response.content:
         return None
 
+    extension = _extension_for(response.content,
+                               response.headers.get("Content-Type", ""),
+                               result.url)
+    path = IMAGE_DIR / f"{result.qid}{extension}"
     try:
         path.write_bytes(response.content)
     except OSError as exc:
@@ -557,3 +618,60 @@ def find_images(lemmas: list[str], language: str) -> dict[str, ImageResult]:
             results[by_qid[result.qid]] = result
 
     return results
+
+
+def mislabelled_cached_files() -> list[tuple[Path, str]]:
+    """
+    Cached images whose extension disagrees with their content.
+
+    Returns (path, correct extension) pairs, empty when the cache is sound.
+
+    Files downloaded before the naming fix keep their wrong name, because
+    the bytes are fine and only the label is wrong. Anki picks a renderer
+    from the extension, so such a file is a broken-image icon on every card
+    that uses it until it is renamed.
+
+    Reported rather than repaired silently: a cache is the user's data, and
+    `tango doctor` is where this project tells someone what is wrong and
+    what fixes it.
+    """
+    if not IMAGE_DIR.exists():
+        return []
+
+    wrong: list[tuple[Path, str]] = []
+    for path in sorted(IMAGE_DIR.glob("*")):
+        if not path.is_file():
+            continue
+        try:
+            head = path.read_bytes()[:16]
+        except OSError:
+            continue
+        actual = next((ext for sig, ext in _MAGIC if head.startswith(sig)), "")
+        if not actual:
+            continue
+        # .jpeg and .jpg are the same renderer, so not a fault.
+        current = path.suffix.lower()
+        if current == actual or {current, actual} == {".jpg", ".jpeg"}:
+            continue
+        wrong.append((path, actual))
+    return wrong
+
+
+def repair_cached_names() -> int:
+    """
+    Rename cached images to match their content, returning how many moved.
+
+    Never raises: a cache that cannot be repaired is still a working cache
+    with some broken pictures in it, which is what it was already.
+    """
+    moved = 0
+    for path, extension in mislabelled_cached_files():
+        target = path.with_suffix(extension)
+        try:
+            path.replace(target)
+        except OSError as exc:
+            logger.debug("Could not rename %s: %s", path.name, exc)
+            continue
+        moved += 1
+        logger.debug("Renamed %s -> %s", path.name, target.name)
+    return moved
