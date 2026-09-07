@@ -37,6 +37,23 @@ by default** pending a look at real cards in Anki.
 
 ### Changed
 
+- **The image gate reads `subclass of` when an item has no `instance of`.**
+  A common noun is a class in Wikidata and a class is described by what it is
+  a subclass of, so asking only for `instance of` refused 127 of 785 nouns,
+  more than the denylist and missing files together. Coverage of the
+  definition cache goes from 33.1% to **45.9%**: French 33.4 to 43.9, German
+  36.3 to 54.3, English 21.6 to 33.8. Some abstract words now get an
+  illustrative picture, which is the named cost of the extra hundred.
+- **A picture that shows another sense than the card's definition is
+  dropped**, before it is downloaded. French `palais` was printing a
+  photograph of a monumental building beside "paroi supérieure qui sépare la
+  fosse nasale de la bouche". Measured: 4 of 348 imaged words, all French,
+  each one read by hand.
+- **The card is one screen tall and the image takes the height the text
+  leaves**, between a sixth and a half of the screen, instead of a fixed 30%
+  of the viewport that could not know how much room the text had used. The
+  credit line now sits with the picture rather than at the bottom of the
+  screen.
 - **Images are requested as 480px thumbnails, not originals.** The first real
   download was 9.2 MB for one photograph shown on the card at 240px; the same
   file is 46 KB as a thumbnail.
