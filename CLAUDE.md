@@ -141,16 +141,24 @@ because the licence requires it, not because it is nice to have. Resolution
 is batched at 50 items per request: about 24 requests for a deck rather than
 1600. The icon fallback for abstract words was measured and rejected; three
 FOSS icon sets cover 0 of 14 abstract words between them, because they are
-built to label buttons. The remaining gate on turning images on by default
-is a person looking at a deck of the cards in Anki.
+built to label buttons. Turning images on by default was **decided against**
+on 8 September 2026, and not for doubt about the pictures: a picture roughly
+doubles a deck that already carries audio, so it is a choice to offer rather
+than a cost to impose. `--images` is how a run asks for it.
 
 The card itself is now one screen tall, with the picture taking the height
 the text leaves rather than a fixed 30% of the viewport, between a floor of
-16vh and a ceiling of 45vh. Whether a change to `CARD_CSS` reaches a
-collection that already holds this notetype is unverified: Anki matches a
-notetype by ID on import, and there is no evidence in this repository either
-way about whether it then updates the styling. Check that before concluding
-the CSS does nothing.
+16vh and a ceiling of 45vh. **Anki does update a notetype's styling and
+template on import** when the ID and field list match, verified 8 September
+2026 against the live collection: it took today's CSS and template and
+merged 5311 notes without forking. So a CSS change reaches existing cards,
+and the only requirement is that the field schema already matches, which
+`ensure_model_fields` guarantees.
+
+Images are asked for per run with `--images`, and stay off by default.
+`IMAGES_ENABLED` sets the default for every run and the flags override it
+either way. The cost is why: a picture roughly doubles a deck that already
+carries audio, 4.8 MB of 10.1 MB on a real 299-card run.
 
 The
 packaging rung moved forward three places on 27 August 2026, from v0.10.0:
@@ -583,6 +591,7 @@ tango build-antonyms
 tango run <id> --deck "<deck name>"
 tango run <id> --deck "French" --language fr
 tango run <id> --deck "French" --language fr --def-lang en
+tango run <id> --deck "French" --language fr --images   # pictures on concrete nouns
 tango review --deck "<deck name>"    # process review.json decisions
 tango backlog --deck "<deck name>"   # process the SQLite backlog
 tango languages                      # supported language codes
