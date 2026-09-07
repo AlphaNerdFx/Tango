@@ -121,6 +121,130 @@ class TestTheGateRefusesWhatLooksConcrete:
             assert images.is_photographable("Q1") is True, word
 
 
+class TestSubclassIsHowACommonNounIsClassified:
+    """
+    Added 7 September 2026, after the funnel was measured stage by stage.
+
+    Of 785 nouns in the definition cache, 127 resolved to an item with no
+    `instance of` claim at all, and 101 of those had both a `subclass of`
+    and a picture: bonbon, coussin, fleur, apfelsaft, kühlschrank,
+    frühstück, einkaufswagen. That was the largest recoverable loss in the
+    funnel, bigger than the denylist and bigger than missing files.
+
+    The cause is structural rather than an oversight in Wikidata. A common
+    noun *is* a class, and a class is described by what it is a subclass of.
+    Asking only for `instance of` asks the wrong question of exactly the
+    words a vocabulary deck is made of.
+    """
+
+    def test_a_concrete_subclass_is_admitted_when_there_is_no_instance_of(self):
+        # kaffee -> Q8486, no P31, P279 beverage. Refused until today.
+        with patch.object(images, "_claims", side_effect=[[], ["Q40050"]]):
+            assert images.is_photographable("Q8486") is True
+
+    def test_an_abstract_subclass_is_refused(self):
+        # The denylist has to apply to whichever list is read, or the
+        # fallback is a hole straight through the gate.
+        with patch.object(images, "_claims", side_effect=[[], ["Q151885"]]):
+            assert images.is_photographable("Q1") is False
+
+    def test_instance_of_wins_when_the_item_has_both(self):
+        # The pair to the two above. `subclass of` is a fallback, not a
+        # second opinion: almost every concrete class has an abstract
+        # ancestor somewhere up its chain, so reading both would refuse
+        # concepts that pass today.
+        with patch.object(images, "_claims", side_effect=[["Q811102"], ["Q151885"]]):
+            assert images.is_photographable("Q3947") is True
+
+    def test_an_abstract_ancestor_does_not_refuse_a_concrete_instance_of(self):
+        # The rule itself, given both lists at once. The test above cannot
+        # see this: the single-lemma path never asks for `subclass of` once
+        # `instance of` answered, so a rule reading both would pass it while
+        # refusing real concepts in the batched path. Mutation found that.
+        assert images._admits(["Q811102"], ["Q151885"]) is True
+
+    def test_the_second_request_is_not_made_when_it_is_not_needed(self):
+        # Every lookup here is a paced network call, so the fallback costs a
+        # request only for the items that need one.
+        with patch.object(images, "_claims", side_effect=[["Q811102"]]) as claims:
+            images.is_photographable("Q3947")
+        assert claims.call_count == 1
+
+    def test_a_disambiguation_page_is_still_refused_when_it_has_a_subclass(self):
+        with patch.object(images, "_claims", side_effect=[["Q4167410"], ["Q811102"]]):
+            assert images.is_photographable("Q1") is False
+
+
+class TestTheBatchedGateAgreesWithTheSingleOne:
+    """
+    `find_images` carries its own copy of the gate, because it works from
+    claims already in hand rather than fetching them per item. Two copies of
+    a judgement can disagree, so both are tested against the same cases.
+    """
+
+    @staticmethod
+    def _resolve(claims, language="de", description_language=None):
+        page = {"pageprops": {"wikibase_item": "Q8486"}}
+        with patch.object(images, "_articles", return_value={"kaffee": page}), \
+             patch.object(images, "_entities", return_value={"Q8486": claims}), \
+             patch.object(images, "_attributions", return_value={}):
+            return images.find_images(["kaffee"], language,
+                                      description_language=description_language)
+
+    def test_a_subclass_only_item_is_admitted(self):
+        found = self._resolve({"P31": [], "P279": ["Q40050"],
+                               "P18": ["A_small_cup_of_coffee.JPG"],
+                               "description": "Heißgetränk"})
+        assert found["kaffee"].qid == "Q8486"
+
+    def test_an_abstract_subclass_is_refused(self):
+        found = self._resolve({"P31": [], "P279": ["Q151885"],
+                               "P18": ["Anything.jpg"], "description": ""})
+        assert found == {}
+
+    def test_a_disambiguation_page_is_refused(self):
+        found = self._resolve({"P31": ["Q4167410"], "P279": ["Q811102"],
+                               "P18": ["Anything.jpg"], "description": ""})
+        assert found == {}
+
+    def test_an_abstract_subclass_beside_a_concrete_instance_of_still_passes(self):
+        # This is the path that really holds both lists at once, so this is
+        # where a rule that read both would do its damage: Haus is a type of
+        # building and a subclass of something abstract, and it has been on
+        # cards since the feature existed.
+        found = self._resolve({"P31": ["Q811102"], "P279": ["Q151885"],
+                               "P18": ["Haus.jpg"], "description": "Gebäude"})
+        assert found["kaffee"].qid == "Q8486"
+
+    def test_the_description_travels_with_the_result(self):
+        # cards.py compares it against the definition it is about to print,
+        # so it has to arrive on the same object as the filename. Two
+        # parallel dicts is how the credit line went missing in the batch.
+        found = self._resolve({"P31": [], "P279": ["Q40050"],
+                               "P18": ["A_small_cup_of_coffee.JPG"],
+                               "description": "Heißgetränk aus Kaffeebohnen"})
+        assert found["kaffee"].description == "Heißgetränk aus Kaffeebohnen"
+
+    def test_the_description_is_read_in_the_language_asked_for(self):
+        # Under --def-lang the card's definition is not in the transcript's
+        # language, and comparing a French definition against a German
+        # description would find no agreement anywhere.
+        page = {"pageprops": {"wikibase_item": "Q8486"}}
+        with patch.object(images, "_articles", return_value={"kaffee": page}), \
+             patch.object(images, "_entities", return_value={}) as entities, \
+             patch.object(images, "_attributions", return_value={}):
+            images.find_images(["kaffee"], "de", description_language="fr")
+        assert entities.call_args[0][1] == "fr"
+
+    def test_the_transcript_language_is_the_default(self):
+        page = {"pageprops": {"wikibase_item": "Q8486"}}
+        with patch.object(images, "_articles", return_value={"kaffee": page}), \
+             patch.object(images, "_entities", return_value={}) as entities, \
+             patch.object(images, "_attributions", return_value={}):
+            images.find_images(["kaffee"], "de")
+        assert entities.call_args[0][1] == "de"
+
+
 class TestFindImage:
 
     def test_a_missing_article_yields_nothing(self):
