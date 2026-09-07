@@ -563,7 +563,70 @@ Files are named by hashing `language:lemma`, so a French recording can only
 ever be named `tango-fr-*` and cannot turn up in a German package. That
 naming is also what makes the cache safe to share across runs.
 
-### 3.12 state.py
+### 3.12 images.py
+
+Finds and caches the picture a card shows, called by
+`cards.build_package()`. Its own module for the same reason `media.py` is:
+`cards.py` is otherwise offline and trivially testable, and downloading
+belongs to neither it nor the definition stage.
+
+**The source is the whole story.** ADR-009 phase 3 specified Wikimedia
+Commons text search, which matches a spelling rather than a meaning, and so
+returned a 1920 coin from the town of Laufen for the verb `laufen`. This
+module resolves a lemma to a *concept* instead:
+
+```
+lemma -> Wikipedia article (language specific)
+      -> Wikidata item      (language independent)
+      -> P31 gate, then the P18 image or the article lead image
+```
+
+The middle step is what makes German work. `Hund` and `chien` both resolve
+to Q144, so one judgement about whether dogs can be photographed serves
+every language. That matters because the concreteness gate in
+`definition.py` needs WordNet, OMW has no German at all, and German is 39.5%
+of this project's cached definitions: a WordNet-only gate reached 0% of
+German cards. Verbs and adjectives fall out for free, since `laufen` has no
+lead image and `schwierig` has no article.
+
+**A coverage number cannot see the failure this guards against.** The first
+version admitted 36.9% of nouns, which read as success until the files were
+opened: `leben` returned a photograph of a newborn, `cowardice` the Cowardly
+Lion, `government` a group portrait of Dutch ministers, and `couple` a
+Bolero choreography reached through a disambiguation page. Twelve abstract
+Wikidata classes and disambiguation pages are now refused by name, which
+cost 3.7 points of coverage and removed all of those. 33.2% of nouns get an
+image: French 33.3%, German 38.0%, English 23.0%.
+
+**Attribution is a licence obligation.** Commons reports
+`AttributionRequired: true` on the files this returns, so the credit is
+fetched with the image and travels with it, and `Attribution` is card field
+13. The dog photograph is CC BY-SA 2.0 by Markus Trienke. A credit that
+arrived empty because of a key mismatch is a breach rather than a cosmetic
+miss, which is why the batched path normalises Commons' spaces to the
+underscores a URL-derived filename carries.
+
+**Thumbnails, not originals.** The first real download was 9.2 MB for one
+photograph shown on a card at 240px. Both routes now ask for 480px and the
+same file is 46 KB, a 200x reduction. This is the same error as ADR-009's
+audio estimate in 8.35, caught earlier only because the download was run.
+
+**Resolution is batched, downloads are threaded**, and the distinction
+matters. All three APIs accept 50 items per request and one Wikidata call
+returns P31 and P18 together, so a 400-noun deck costs about 24 requests
+rather than 1600. Batching helps because Wikimedia's pacing is the limit,
+not latency, so threads would buy nothing; the file downloads are
+independent and per-file, so those still thread. `find_images()` is the
+batched entry point and `find_image()` remains for a single lookup.
+
+Files are cached by Wikidata id rather than by lemma, because the concept is
+what the image belongs to: `Hund` and `chien` share one file instead of
+downloading it twice.
+
+`IMAGES_ENABLED` is false by default, and a run with it off makes no network
+calls for images at all.
+
+### 3.13 state.py
 
 Owns pipeline-level SQLite tables and the in-memory session.
 
@@ -618,7 +681,7 @@ rather than failing on a primary key conflict.
 The `Session` class is an in-memory container for the selected deck name. It is
 not persisted. When the process exits, the session ends.
 
-### 3.13 __main__.py
+### 3.14 __main__.py
 
 CLI entry point using `argparse`.
 
@@ -710,19 +773,17 @@ summary output + optional AnkiConnect import
 
 ## 5. Dependency graph
 
-The module dependency graph is a directed acyclic graph. Arrows point
-downward only.
-
 ```
                     __main__.py
                          |
      +---------+---------+---------+---------+
      |         |         |         |         |
 transcript   nlp      deck    definition   cards    state
-     |                             |
-     |                        translation
-     |                             |
-     +---------+-------------------+
+     |         |                  |          |
+  language  wiktdata      antonyms|media  images|media
+     |                        wiktdata     definition
+     |                       translation    language
+     +---------+-------------------+-----------+
                     |
                  config.py
               (imports nothing)
@@ -731,14 +792,38 @@ transcript   nlp      deck    definition   cards    state
 `config.py` is a leaf, it imports nothing from the package, so it can never
 create a cycle despite every module importing it.
 
-`definition.py` imports `translation.py` lazily inside the function body to
-avoid loading argostranslate and PyTorch at module import time.
+**Measured 7 September 2026 rather than described**, because the paragraph
+that used to sit here was wrong in two ways. It said "no pipeline module
+imports another pipeline module except that one edge"; there are **24**
+intra-package edges excluding `config`. And it called the graph acyclic;
+there is one cycle:
 
-No pipeline module imports another pipeline module except that one edge and
-`transcript.py` importing `language.resolve_transcript` lazily.
+```
+antonyms -> language -> definition -> antonyms
+```
 
-This acyclic property is why `nlp.py` can be tested without a network, without
-Anki, and without mocking three levels of dependency.
+**It is harmless, and worth understanding rather than removing.** Two of its
+three edges are function-body imports, so no cycle exists at import time:
+`antonyms.build_index()` imports `language`, and
+`language.language_capabilities()` imports `definition`. Only
+`definition -> antonyms` is eager, at module level.
+
+The `language -> definition` edge is the newest, added with
+`language_capabilities()` in the v0.11.0 work, and it is the edge that
+closed the loop. It is lazy because it needs `_OMW_LANGUAGE_CODES`, which
+lives in `definition.py` and would drag WordNet loading into every
+`language` import if taken eagerly. That is the same reason
+`definition.py` imports `translation.py` inside a function: to keep
+argostranslate and PyTorch out of module import time.
+
+So the useful property is not that the graph is acyclic, which it is not. It
+is that **every cycle is broken by a lazy import, and `config.py` is a
+leaf**. That is what still lets `nlp.py` be tested without a network,
+without Anki, and without mocking three levels of dependency.
+
+To re-derive the graph rather than trust this paragraph, walk the modules
+with `ast` and collect `ImportFrom` nodes whose module starts with
+`pipeline`. That is how these numbers were taken.
 
 ---
 
