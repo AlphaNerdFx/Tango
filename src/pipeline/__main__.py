@@ -748,6 +748,7 @@ def _run_pipeline(args: SimpleNamespace, session: Session) -> None:
             not_found_audio=batch.not_found_audio,
             progress=_info,
             def_language=def_language,
+            images_enabled=getattr(args, "images", None),
         )
     except ValueError as exc:
         _err(str(exc))
@@ -874,6 +875,7 @@ def _run_review(args: SimpleNamespace, session: Session) -> None:
             not_found_audio=batch.not_found_audio,
             progress=_info,
             def_language=def_language,
+            images_enabled=getattr(args, "images", None),
         )
     except ValueError as exc:
         _err(str(exc))
@@ -950,6 +952,7 @@ def _run_backlog(args: SimpleNamespace, session: Session) -> None:
             not_found_audio=batch.not_found_audio,
             progress=_info,
             def_language=def_language,
+            images_enabled=getattr(args, "images", None),
         )
     except ValueError as exc:
         _err(str(exc))
@@ -1107,6 +1110,8 @@ def _app_callback(
 _DECK = typer.Option(None, "--deck", "-d", help='Target Anki deck, e.g. "Language::French". Prompts if omitted.')
 _LANGUAGE = typer.Option(None, "--language", "-l", help="Transcript language as a BCP-47 code. Inferred from the deck name if omitted.")
 _DEF_LANG = typer.Option(None, "--def-lang", help="Write definitions in this language instead of the transcript's. Needs a translation model.")
+_IMAGES = typer.Option(None, "--images/--no-images",
+                      help="Put a picture on cards for concrete nouns. Off unless asked for; IMAGES_ENABLED sets the default when neither flag is given.")
 _VERBOSE = typer.Option(False, "--verbose", "-v", help="Debug logging.")
 
 
@@ -1124,6 +1129,7 @@ def _args(**kwargs) -> SimpleNamespace:
     kwargs.setdefault("def_lang", None)
     kwargs.setdefault("force", False)
     kwargs.setdefault("no_cache", False)
+    kwargs.setdefault("images", None)
     kwargs.setdefault("verbose", False)
     return SimpleNamespace(**kwargs)
 
@@ -1136,13 +1142,14 @@ def run(
     def_lang: Optional[str] = _DEF_LANG,
     force: bool = typer.Option(False, "--force", "-f", help="Process a video already recorded as done."),
     no_cache: bool = typer.Option(False, "--no-cache", help="Ignore the definition cache and refetch."),
+    images: Optional[bool] = _IMAGES,
     verbose: bool = _VERBOSE,
 ) -> None:
     """Turn one YouTube video into an Anki package."""
     _setup_logging(verbose)
     _run_pipeline(
         _args(video_id=video_id, deck=deck, language=language, def_lang=def_lang,
-              force=force, no_cache=no_cache, verbose=verbose),
+              force=force, no_cache=no_cache, images=images, verbose=verbose),
         Session(),
     )
 
@@ -1152,11 +1159,13 @@ def review(
     deck: Optional[str] = _DECK,
     language: Optional[str] = _LANGUAGE,
     def_lang: Optional[str] = _DEF_LANG,
+    images: Optional[bool] = _IMAGES,
     verbose: bool = _VERBOSE,
 ) -> None:
     """Process the words deferred to review.json."""
     _setup_logging(verbose)
-    _run_review(_args(deck=deck, language=language, def_lang=def_lang, verbose=verbose), Session())
+    _run_review(_args(deck=deck, language=language, def_lang=def_lang,
+                      images=images, verbose=verbose), Session())
 
 
 @app.command()
@@ -1164,11 +1173,13 @@ def backlog(
     deck: Optional[str] = _DECK,
     language: Optional[str] = _LANGUAGE,
     def_lang: Optional[str] = _DEF_LANG,
+    images: Optional[bool] = _IMAGES,
     verbose: bool = _VERBOSE,
 ) -> None:
     """Process the words queued in SQLite while Anki was unavailable."""
     _setup_logging(verbose)
-    _run_backlog(_args(deck=deck, language=language, def_lang=def_lang, verbose=verbose), Session())
+    _run_backlog(_args(deck=deck, language=language, def_lang=def_lang,
+                       images=images, verbose=verbose), Session())
 
 
 @app.command()
@@ -1589,9 +1600,11 @@ def _run_doctor() -> int:
                   "so they show as a broken icon")
             print("    -> tango repair-images")
     else:
-        # Not counted as missing. Off is the intended state until the
-        # measurement in ADR-009 justifies changing it.
-        print("    disabled -> set IMAGES_ENABLED=true in .env")
+        # Not counted as missing. Off is the intended default, and the flag
+        # is named first because trying a feature should not require editing
+        # a config file: `--images` is per run, IMAGES_ENABLED is per install.
+        print("    disabled -> tango run <id> --images, "
+              "or IMAGES_ENABLED=true in .env for every run")
 
     # Which languages: every one, and that is the point worth printing.
     # The concreteness gate in definition.py needs WordNet, which OMW has
