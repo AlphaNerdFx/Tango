@@ -10,6 +10,7 @@ image:
 
     lemma -> Wikipedia article (language-specific)
           -> Wikidata item      (language-independent)
+          -> P31 gate, or P279 when the item has no P31
           -> P18 image, else the article's lead image
 
 The middle step is what makes German work. `Hund` and `chien` both resolve
@@ -89,9 +90,17 @@ class ImageResult:
     source: str          # "wikidata" or "wikipedia"
     filename: str
     attribution: str = ""   # rendered credit line, "" when Commons has none
+    # The concept's one-line Wikidata description, in whichever language was
+    # asked for. Carried so the caller can ask whether the picture and the
+    # definition on the card describe the same sense: `palais` resolves to a
+    # building while the card's first index row is the roof of the mouth.
+    # Empty when Wikidata has no description in that language.
+    description: str = ""
 
 
-# Wikidata P31 (instance of) classes that mark a concept as unphotographable.
+# Wikidata classes that mark a concept as unphotographable. Read from
+# `instance of`, and from `subclass of` when an item has no `instance of`,
+# which is the usual shape for a common noun. See _admits.
 # Measured, not guessed: Q2979 (freedom) carries Q840396 and Q1207505, and
 # is the item both `Freiheit` and `liberté` resolve to. Wikipedia will
 # happily hand back the Statue of Liberty for it, which is a photograph of a
@@ -194,33 +203,78 @@ def _claims(qid: str, prop: str) -> list[str]:
     return out
 
 
-def is_photographable(qid: str) -> bool:
+def _admits(p31: list[str], p279: list[str]) -> bool:
     """
-    Whether a Wikidata concept is a thing rather than an idea.
+    The gate itself, over one item's classes. Shared by both lookup paths.
 
-    Refuses when *any* `instance of` claim is abstract, and when there are no
-    claims at all. Deliberately strict in the same way as
-    definition.is_concrete_noun: an empty image field costs a learner
-    nothing, a wrong one costs them the association.
+    `instance of` is asked first and `subclass of` only when it is empty,
+    which is not a fallback for tidiness but for how Wikidata models
+    vocabulary. A common noun is a *class*: `fleur` is Q506, flower, and a
+    class is described by what it is a subclass of, not by what it is an
+    instance of. Measured 7 September 2026 over the definition cache, 127 of
+    785 nouns had no `instance of` at all, and 101 of those had both a
+    `subclass of` and a picture, among them bonbon, coussin, apfelsaft,
+    kühlschrank and frühstück. That was the single largest recoverable loss
+    in the funnel, larger than the denylist and larger than missing files.
+
+    The same denylist applies to whichever list is used, so an abstract
+    superclass refuses the item exactly as an abstract class does.
 
     Language-independent, which is the whole point. The judgement attaches to
     the concept, so it holds for every language that reaches the same item.
     """
-    classes = _claims(qid, "P31")
-    if not classes:
+    # A disambiguation page is not a concept, so it is refused before
+    # anything else: its "image" belongs to whichever sense Wikipedia
+    # happened to list first.
+    if _DISAMBIGUATION in p31:
         return False
-    if _DISAMBIGUATION in classes:
+    classes = p31 or p279
+    if not classes:
         return False
     return not any(c in _ABSTRACT_CLASSES for c in classes)
 
 
-def find_image(lemma: str, language: str) -> Optional[ImageResult]:
+def is_photographable(qid: str) -> bool:
+    """
+    Whether a Wikidata concept is a thing rather than an idea.
+
+    Refuses when *any* class is abstract, and when the item carries no
+    classes at all. Deliberately strict in the same way as
+    definition.is_concrete_noun: an empty image field costs a learner
+    nothing, a wrong one costs them the association.
+
+    Costs a second request only for the items that need it, since
+    `subclass of` is fetched only when `instance of` is empty.
+    """
+    p31 = _claims(qid, "P31")
+    return _admits(p31, [] if p31 else _claims(qid, "P279"))
+
+
+def _description(qid: str, language: str) -> str:
+    """One item's short description in `language`, or "" when it has none."""
+    data = _get(_WIKIDATA_API, {
+        "action": "wbgetentities", "ids": qid, "props": "descriptions",
+        "languages": language.split("-")[0], "format": "json",
+    })
+    if not data:
+        return ""
+    entity = data.get("entities", {}).get(qid, {})
+    value = entity.get("descriptions", {}).get(language.split("-")[0], {}).get("value", "")
+    return value if isinstance(value, str) else ""
+
+
+def find_image(lemma: str, language: str,
+               description_language: Optional[str] = None) -> Optional[ImageResult]:
     """
     Find an image for `lemma`, or None if there is no defensible one.
 
     Args:
         lemma:    The word, in its own language.
         language: BCP-47 code of that language.
+        description_language: Which language to fetch the concept's
+                  description in, for a caller comparing it against a
+                  definition. Defaults to `language`; pass the definition's
+                  language under --def-lang, since the two differ there.
 
     Returns:
         An ImageResult, or None. None is the common and correct answer: most
@@ -247,7 +301,9 @@ def find_image(lemma: str, language: str) -> Optional[ImageResult]:
         if url:
             name = url.rsplit("/", 1)[-1].split("?")[0]
             return ImageResult(url=url, qid=qid, source=source, filename=name,
-                               attribution=attribution(name))
+                               attribution=attribution(name),
+                               description=_description(
+                                   qid, description_language or language))
     return None
 
 
@@ -491,27 +547,38 @@ def _articles(lemmas: list[str], language: str) -> dict[str, dict]:
     return out
 
 
-def _entities(qids: list[str]) -> dict[str, dict]:
+def _entities(qids: list[str], description_language: str = "") -> dict[str, dict]:
     """
-    P31 and P18 for many Wikidata items in one request.
+    The classes, the image and the description for many items in one request.
 
-    Returns {qid: {"P31": [...], "P18": [...]}}. One call rather than two per
-    item, which is where most of the saving comes from.
+    Returns {qid: {"P31": [...], "P279": [...], "P18": [...],
+    "description": str}}. One call rather than four per item, which is where
+    most of the saving comes from. `P279` and the description ride along free
+    of charge: the request is the cost, not the fields on it.
+
+    Args:
+        qids: Wikidata item ids, at most _BATCH of them.
+        description_language: Language to read the description in. Empty
+                  asks for none, which is what a caller that only needs the
+                  gate should pass.
     """
-    data = _get(_WIKIDATA_API, {
+    params = {
         "action": "wbgetentities",
         "ids": "|".join(qids),
-        "props": "claims",
+        "props": "claims|descriptions" if description_language else "claims",
         "format": "json",
-    })
+    }
+    if description_language:
+        params["languages"] = description_language.split("-")[0]
+    data = _get(_WIKIDATA_API, params)
     if not data:
         return {}
 
     out: dict[str, dict] = {}
     for qid, entity in data.get("entities", {}).items():
         claims = entity.get("claims", {})
-        parsed: dict[str, list] = {}
-        for prop in ("P31", "P18"):
+        parsed: dict = {}
+        for prop in ("P31", "P279", "P18"):
             values = []
             for claim in claims.get(prop, []):
                 value = claim.get("mainsnak", {}).get("datavalue", {}).get("value")
@@ -520,6 +587,10 @@ def _entities(qids: list[str]) -> dict[str, dict]:
                 elif isinstance(value, str):
                     values.append(value)
             parsed[prop] = values
+        code = description_language.split("-")[0] if description_language else ""
+        parsed["description"] = (
+            entity.get("descriptions", {}).get(code, {}).get("value", "") if code else ""
+        )
         out[qid] = parsed
     return out
 
@@ -552,13 +623,18 @@ def _attributions(filenames: list[str]) -> dict[str, str]:
     return out
 
 
-def find_images(lemmas: list[str], language: str) -> dict[str, ImageResult]:
+def find_images(lemmas: list[str], language: str,
+                description_language: Optional[str] = None) -> dict[str, ImageResult]:
     """
     Resolve many lemmas at once, applying the same gate as find_image.
 
     Args:
         lemmas:   Words in their own language.
         language: BCP-47 code of that language.
+        description_language: Which language to read each concept's
+                  description in. Defaults to `language`. cards.py passes
+                  the definition's language, because the description is
+                  there to be compared against the definition on the card.
 
     Returns:
         {lemma: ImageResult} for the lemmas that earned an image. A lemma
@@ -585,7 +661,7 @@ def find_images(lemmas: list[str], language: str) -> dict[str, ImageResult]:
 
         if not by_qid:
             continue
-        entities = _entities(list(by_qid))
+        entities = _entities(list(by_qid), description_language or language)
 
         # filename -> the finished result, less its credit line
         pending: dict[str, ImageResult] = {}
@@ -593,10 +669,7 @@ def find_images(lemmas: list[str], language: str) -> dict[str, ImageResult]:
             claims = entities.get(qid)
             if not claims:
                 continue
-            p31 = claims["P31"]
-            if not p31 or _DISAMBIGUATION in p31:
-                continue
-            if any(c in _ABSTRACT_CLASSES for c in p31):
+            if not _admits(claims["P31"], claims["P279"]):
                 continue
 
             url = _commons_url(claims["P18"]) \
@@ -608,6 +681,7 @@ def find_images(lemmas: list[str], language: str) -> dict[str, ImageResult]:
                 url=url, qid=qid,
                 source="wikidata" if claims["P18"] else "wikipedia",
                 filename=name,
+                description=claims["description"],
             )
 
         if not pending:
