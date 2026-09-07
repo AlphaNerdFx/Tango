@@ -984,6 +984,25 @@ class TestDownloadImages:
         assert (names, credits, paths) == ({}, {}, [])
         fetch.assert_not_called()
 
+    def test_the_run_names_the_words_whose_picture_was_dropped(self):
+        # Counted, a drop tells nobody whether the rule is working. Named,
+        # it can be checked against the cards in a second. The definition
+        # phase was changed for the same reason in v0.6.0.
+        lines = []
+        with patch.object(cards_module.images, "find_images",
+                          return_value={"palais": _an_image(), "chien": _an_image()}), \
+             patch.object(cards_module.wiktdata, "describes_other_sense",
+                          side_effect=lambda lemma, *a, **k: lemma == "palais"), \
+             patch.object(cards_module.images, "fetch_image", return_value=None):
+            _download_images(["palais", "chien"], "fr", progress=lines.append,
+                             senses={"palais": ("Paroi superieure", "noun"),
+                                     "chien": ("Mammifere carnivore", "noun")},
+                             definition_language="fr")
+        dropped = [line for line in lines if "another sense" in line]
+        assert dropped, f"no line named the drop: {lines}"
+        assert "palais" in dropped[0]
+        assert "chien" not in dropped[0]
+
     def test_an_agreeing_picture_is_kept(self, tmp_path):
         # The pair. Without it, a guard that dropped everything would pass.
         path = tmp_path / "Q144.jpg"
