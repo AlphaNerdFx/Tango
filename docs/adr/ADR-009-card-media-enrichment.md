@@ -536,6 +536,20 @@ Measured with the new gate in place, **4 of 348 imaged words lose their
 picture**: anime, est, grève and palais, all French, none in German or
 English, each read by hand and each showing another sense. ARCHITECTURE 8.47.
 
+### Counting the credits found a licence bug
+
+This ADR made `Attribution` a field because Commons reports
+`AttributionRequired: true` on the files it returns. Counting them in a real
+deck on 7 September 2026 found 4 of 15 pictures with an empty credit, all
+four from the Wikipedia lead-image route and two of them CC BY. The cause is
+that the route hands back a *thumbnail* URL, so the credit lookup asked
+Commons about `500px-Scout_Girl.jpg` instead of `Scout_Girl.jpg` and got
+nothing back, which looks exactly like a file that has no credit.
+
+The lesson is the one this ADR keeps relearning: an empty field is invisible
+until somebody counts it, so the obligation needs a number and not a
+mechanism that looks right.
+
 ## Consequences
 
 **Card fields may only be appended.** CLAUDE.md 3.2 makes field order
