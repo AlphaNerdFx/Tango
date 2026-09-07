@@ -115,8 +115,23 @@ was redesigned on 6 September 2026: it had specified Wikimedia Commons text
 search, which matches a spelling rather than a meaning, and that is why
 `laufen` returned a coin from the town of Laufen. Resolving the lemma to a
 Wikidata concept instead fixed German, which the WordNet gate could not
-judge at all, from 0% to 38%. Coverage is 33.2% of nouns across French,
-German and English, against a WordNet gate that reached 9%, 0% and 4%.
+judge at all, from 0% to 38%.
+
+Coverage was 33.2% of nouns and is now **45.9%**, measured 7 September 2026
+over the whole definition cache: French 43.9%, German 54.3%, English 33.8%,
+against a WordNet gate that reached 9%, 0% and 4%. The extra hundred
+pictures came from one property. The gate asked Wikidata for `instance of`
+and refused an item without one, which is 127 of 785 nouns, because a common
+noun *is* a class and a class carries `subclass of` instead: `fleur` is Q506
+and is an instance of nothing. `subclass of` is now read when `instance of`
+is absent, permissively, so `Gedanke` gets an illustrative painting and that
+is the named cost. ARCHITECTURE 8.46.
+
+A picture that describes a different sense than the card's definition is
+dropped before it is downloaded (4 of 348 imaged words: `anime`, `est`,
+`grève`, `palais`). Letting the concept re-pick the definition instead was
+measured and rejected for the second time, reproducing 8.28. ARCHITECTURE
+8.47.
 
 Two things were found only by running it. Commons serves originals, and the
 first real download was 9.2 MB for one photograph shown at 240px, so both
@@ -128,6 +143,14 @@ is batched at 50 items per request: about 24 requests for a deck rather than
 FOSS icon sets cover 0 of 14 abstract words between them, because they are
 built to label buttons. The remaining gate on turning images on by default
 is a person looking at a deck of the cards in Anki.
+
+The card itself is now one screen tall, with the picture taking the height
+the text leaves rather than a fixed 30% of the viewport, between a floor of
+16vh and a ceiling of 45vh. Whether a change to `CARD_CSS` reaches a
+collection that already holds this notetype is unverified: Anki matches a
+notetype by ID on import, and there is no evidence in this repository either
+way about whether it then updates the styling. Check that before concluding
+the CSS does nothing.
 
 The
 packaging rung moved forward three places on 27 August 2026, from v0.10.0:
@@ -585,7 +608,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1165 passing, 33 deselected. The count drifts as tests are added,
+Expected: 1204 passing, 33 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
