@@ -151,6 +151,7 @@ tango run <id> --deck "Deck::Name"                     run the full pipeline
 tango run <id> --deck "French" --language fr           pick the subtitle language
 tango run <id> --deck "French" -l fr --def-lang en     define words in English
 tango run <id> --deck "Deck::Name" --force             reprocess a finished video
+tango run <id> --deck "Deck::Name" --images            put a picture on concrete nouns
 tango review --deck "Deck::Name"                       process deferred review.json
 tango backlog --deck "Deck::Name"                      process the Anki backlog
 
