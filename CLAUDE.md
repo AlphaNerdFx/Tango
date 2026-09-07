@@ -895,3 +895,21 @@ with pip, and the published page could not be corrected any other way.
 
 The same applies to anything with an audience. A Dockerfile is built and run
 before it ships, not written and hoped for.
+
+**Frozen text is not the same as a frozen page.** PyPI freezes the
+description, but a badge is an image the reader's browser fetches when the
+page opens, so a live badge answers with today's number on a page published
+months ago: the v0.8.2 release page showed a v0.10.0 badge. So the upload
+carries pinned badges and the repository keeps live ones:
+
+```bash
+python scripts/pypi_readme.py --pin       # before python -m build
+python -m build && twine check dist/*
+python scripts/pypi_readme.py --restore   # before committing anything
+```
+
+This is the one place 18.2 is deliberately inverted. Hardcoding is right
+here precisely because the page it lands on cannot change, so a live value
+on it is not fresh, it is wrong. `tests/test_pypi_readme.py` matches the
+patterns against the real README, because the failure is silent: if a badge
+line is edited, `--pin` pins nothing and says so only in its exit code.
