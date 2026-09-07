@@ -36,7 +36,7 @@ from typing import Callable, Optional
 
 import genanki
 
-from pipeline import images, media
+from pipeline import images, media, wiktdata
 from pipeline.definition import DefinitionResult
 from pipeline.language import localise_pos
 
@@ -72,6 +72,17 @@ CARD_CSS = """
     margin: 0 auto;
     padding: clamp(10px, 2vh, 24px) 20px;
     line-height: 1.5;
+    /* One screen tall, and a column, so the picture can take the height the
+       text leaves instead of a share of the viewport decided in advance.
+
+       border-box because the padding has to live inside the 100vh rather
+       than on top of it. Without it a card that exactly fills the screen
+       scrolls by its own padding, which is the most annoying kind of
+       scrolling: a centimetre of nothing under a card that looked fine. */
+    box-sizing: border-box;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
 }
 
 /* Front, centered word */
@@ -129,34 +140,44 @@ hr {
 
 /* Image (ADR-009 phase 3). Conditional on the field, so a card without one
    looks exactly as it did before: most vocabulary is not photographable and
-   the field is meant to stay empty. Capped rather than sized, because a
-   Commons original can be several thousand pixels wide and the card has to
-   read on a phone.
+   the field is meant to stay empty.
 
-   The attribution is small and quiet, but present: Commons images are CC or
-   public domain, and the CC ones require credit. A licence obligation is not
-   satisfied by a field nobody renders. */
+   This is the card's one flexible row, and everything above it is text at
+   its natural height. The picture takes what the text leaves: most of the
+   screen on a sparse card, a strip on a full one, and either way the card
+   ends at the bottom of the screen instead of past it. That replaces a
+   fixed 30vh, which could not know whether the text above it had used 20%
+   of the screen or 95%.
+
+   Between a floor and a ceiling, both deliberate. Below a sixth of the
+   screen a photograph stops teaching anything, so the card scrolls rather
+   than showing a sliver: the one place this trades the no-scrolling goal
+   for legibility. Above 45vh a sparse card would show a wall-sized
+   photograph and the deck would stop looking consistent card to card,
+   which is why the box was fixed in the first place on 6 September.
+
+   The credit sits inside this box rather than after it. As a sibling it
+   was pushed to the bottom of the screen while the picture stayed at the
+   top, leaving the licence line floating alone under empty space. */
 .card-image {
-    text-align: center;
     margin-top: 16px;
+    flex: 1 1 auto;
+    min-height: 16vh;
+    max-height: 45vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    text-align: center;
 }
 
-/* Bounded by the viewport, not frozen at a pixel count.
-
-   This reverses the fixed 240x240 box of 6 September, and the reason it
-   was fixed still holds: sizing to the file makes every card a different
-   height and a deck reviewed in sequence jumps around. A share of the
-   viewport keeps that consistency, because every image is bounded by the
-   same fraction of the screen, without adding 240px to a card that is
-   already too tall for a phone.
+/* Sized to the box above, which is sized to what is left of the screen.
 
    object-fit: contain letterboxes inside the box, so every aspect ratio
    survives. cover would fill it by cropping, and cropping a photograph
-   chosen to show one thing can cut that thing out of frame.
-
-   30vh leaves roughly two thirds of the screen for the text above it. */
+   chosen to show one thing can cut that thing out of frame. */
 .card-image img {
-    max-height: 30vh;
+    max-height: 100%;
     max-width: 100%;
     width: auto;
     height: auto;
@@ -164,18 +185,14 @@ hr {
     border-radius: 6px;
 }
 
-/* On a short screen the picture yields first.
+/* On a short screen, tighter lines.
 
-   CSS cannot measure content, only the viewport, so a fully populated card
-   (three examples, synonyms, antonyms, IPA, audio, image) can still run
-   past the bottom on a small phone even with everything clamped. The image
-   is the most compressible thing on the card: shrinking it costs a little
-   detail, while shrinking the definition costs legibility. Anki's clients
-   are webviews, so a height media query is available and needs no
-   JavaScript, which this project has never shipped in a template and could
-   not verify on every device. */
+   The picture already yields continuously, so it needs nothing here. What
+   is left is the text, and 1.4 buys back a line or two on a phone without
+   touching any font size. Anki's clients are webviews, so a height media
+   query is available and needs no JavaScript, which this project has never
+   shipped in a template and could not verify on every device. */
 @media (max-height: 640px) {
-    .card-image img { max-height: 22vh; }
     .card { line-height: 1.4; }
 }
 
@@ -308,12 +325,10 @@ BACK_TEMPLATE = """
 {{/Pronunciation}}
 
 {{#Image}}
-<div class="card-image">{{Image}}</div>
+<div class="card-image">{{Image}}
+{{#Attribution}}<div class="attribution">{{Attribution}}</div>{{/Attribution}}
+</div>
 {{/Image}}
-
-{{#Attribution}}
-<div class="attribution">{{Attribution}}</div>
-{{/Attribution}}
 
 """
 
@@ -512,6 +527,8 @@ def _download_images(
     language: str,
     progress: Optional[Callable[[str], None]] = None,
     max_workers: int = 4,
+    senses: Optional[dict[str, tuple[str, str]]] = None,
+    definition_language: Optional[str] = None,
 ) -> tuple[dict[str, str], dict[str, str], list[Path]]:
     """
     Resolve and download an image per lemma.
@@ -522,6 +539,13 @@ def _download_images(
                   resolving the lemma to a concept is most of the work.
         language: BCP-47 code, used to pick which Wikipedia to ask.
         progress: Optional callback for status lines.
+        senses:   {lemma: (definition, part of speech)} for the cards about
+                  to be built. Given these, a picture whose concept
+                  describes a different sense than its card is dropped
+                  before it is downloaded. Omitting them keeps every
+                  picture the gate admitted.
+        definition_language: The language `senses` is written in, which is
+                  the definition's language rather than the transcript's.
 
     Returns:
         ({lemma: filename}, {lemma: credit line}, [paths for the package])
@@ -542,10 +566,30 @@ def _download_images(
         return {}, {}, []
 
     try:
-        found = images.find_images(wanted, language)
+        found = images.find_images(wanted, language,
+                                   description_language=definition_language or language)
     except Exception:
         logger.debug("Image resolution raised for %s.", language, exc_info=True)
         return {}, {}, []
+
+    # A picture and a definition are chosen by two routes that never speak to
+    # each other, so they can describe different senses of the same spelling:
+    # `palais` gets a photograph of a building beside the roof of the mouth.
+    # Dropping the picture is the cheaper half of that disagreement to fix,
+    # and it happens before the download rather than after.
+    if senses:
+        contradicted = [
+            lemma for lemma, result in found.items()
+            if wiktdata.describes_other_sense(
+                lemma, definition_language or language,
+                senses.get(lemma, ("", ""))[0], result.description,
+                senses.get(lemma, ("", ""))[1] or None,
+            )
+        ]
+        for lemma in contradicted:
+            logger.info("Image for '%s' shows another sense (%s), dropped.",
+                        lemma, found[lemma].description)
+            del found[lemma]
 
     if progress:
         progress(f"  images {len(found)}/{len(wanted)} words have one, fetching")
@@ -957,8 +1001,13 @@ def build_package(
     if IMAGES_ENABLED:
         candidates = [r.lemma.lower() for r in found]
         candidates += [lem.lower() for lem in (not_found_audio or {})]
+        # What each card will actually say, so a picture of another sense can
+        # be dropped before it is downloaded. A fallback card has no
+        # definition to disagree with and so is not listed here.
+        senses = {r.lemma.lower(): (r.definition, r.part_of_speech) for r in found}
         image_names, image_credits, image_paths = _download_images(
-            sorted(set(candidates)), language, progress=progress
+            sorted(set(candidates)), language, progress=progress,
+            senses=senses, definition_language=pos_language,
         )
         media_paths = media_paths + image_paths
 
