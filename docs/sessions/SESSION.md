@@ -1,9 +1,11 @@
 # SESSION.md: Current working state
 
-Last updated: 18 August 2026, after the v0.5.x line was tagged and the
-repository was swept for inconsistencies. Sections 3 and 7 were revised on
-26 August 2026 for the torch install size; nothing else in this file was
-re-verified that day, so read the rest as of the 18th.
+Last updated: 8 September 2026. **Section 1 only** was rewritten that day,
+because ROADMAP §5 asks each tag to leave it holding a re-measured test
+count and coverage figure, and it had carried v0.6.0's numbers through five
+releases. Sections 3 and 7 were revised on 26 August 2026 for the torch
+install size. Everything from section 2 down should be read as of 18 August
+2026 and verified before it is quoted.
 
 Read this to understand exactly where development stands and what was learned.
 Everything here was checked against `git log`, the working tree, and the
@@ -14,45 +16,36 @@ installed environment at the time of writing, not recalled from memory. See
 
 ## 1. Where the project is
 
-**Tagged release:** v0.6.0, card quality, released 27 August 2026. All
-fourteen tags have GitHub release notes, v0.4.1 to v0.4.5 having been
-backfilled from CHANGELOG on 18 August 2026. The 0.5.x line before it ran
-v0.5.0 (pronunciation on cards, the migration release), v0.5.1
-(pronunciation describes the word on the card), v0.5.2 (audio plays inside
-the card) and v0.5.3 (part of speech in the learner's language).
-`CHANGELOG.md` has an entry for each.
-**Shipped in v0.6.0.** All five items on the rung: filler sounds no longer
-become cards, inflection pointers resolve to a real definition in Russian as
-they already did in German and French, the definition cache key carries the
-transcript language as well as the definition language, and the run names
-the words that got no definition.
-Antonyms, the last of them, shipped on 26 August 2026 as ADR-010: an
-offline ConceptNet index, `make antonyms`, French 19.7% to 34.8% measured
-end to end. The gain is concentrated in French because kaikki and ConceptNet
-extract the same Wiktionary edition with different tools and disagree about
-which words carry an antonym: 15 045 French words in the index against
-12 376 in ConceptNet, comparable and overlapping only partly, where German
-and Russian already hold eight to thirteen times more than ConceptNet does.
-The first version of this claim, written the same day, said the gap was
-between editions. It was wrong; see ARCHITECTURE 8.42 and 6.22. `ROADMAP.md` has the ladder to v1.0.0 and
-the rule that picks the number; CLAUDE.md 15 is the short form, and
-CLAUDE.md 16 is the commit and tag format.
-**HEAD:** in sync with `tango-origin/main`, tagged v0.6.0 on
-27 August 2026. Working tree clean.
-**In development:** v0.7.0, the command line as a product.
-**Pull requests and issues: none open.** All six Dependabot pull requests were
-handled on 25 August 2026 (five merged, thinc 9.1.1 closed as unresolvable
-against spaCy 3.8), and issues #1, #13 and #16 were closed against measured
-evidence rather than assumption. #13's exact reported cases were re-run: the
-pipeline collapses `joue`/`jouent` to one `jouer` and `sors`/`sortir` to one
-`sortir`.
+**Tagged release:** v0.10.0, runs on any operating system, released
+5 September 2026. Twenty tags, twenty sets of GitHub release notes. The
+releases between this and v0.6.0, which the rest of this file still
+describes as current: v0.7.0 the command line as a product, v0.8.0 packaged
+and on PyPI, v0.8.1 documentation for the people who can now install it,
+v0.8.2 an install that looks after itself, v0.9.0 nothing fails without
+saying why, v0.10.0 cross-platform. `CHANGELOG.md` has an entry for each.
 
-**Both audio behaviours are confirmed on real cards, by ear, not inferred.**
-Embedded audio plays on opening a card and can be replayed. Cross-language
-keeps the transcript language throughout: a German word defined in French
-carries `[haʊ̯s]` and `tango-de-haus-*.mp3`, never maison's. The media
-filename hashes `language:lemma`, so a French recording could only ever be
-named `tango-fr-*`, and no such file appears in a German package.
+**In development:** v0.11.0, images on cards. Feature complete as of
+8 September 2026 and awaiting a tag. What it carries:
+
+- Pictures for concrete nouns, gated on a Wikidata concept rather than a
+  text search, so the judgement is language independent
+- **45.9% of nouns get one**, measured over the whole definition cache on
+  7 September 2026: French 43.9%, German 54.3%, English 33.8%. It was 33.1%
+  until the gate learned to read `subclass of`, which is how Wikidata
+  describes a common noun (ARCHITECTURE 8.46)
+- A picture describing a **different sense** than the card's definition is
+  dropped before it is downloaded, 4 of 360 imaged words (8.47)
+- `Image` and `Attribution` are fields 12 and 13. Attribution is a licence
+  obligation and was measured rather than assumed: counting credits found
+  the Wikipedia route shipping CC BY files uncredited
+- The card is one screen tall, the picture taking the height the text leaves
+- **Off by default**, asked for per run with `--images`, since a picture
+  roughly doubles a deck that already carries audio
+
+**HEAD:** on `main`, in sync with `tango-origin`. Working tree clean.
+
+**Pull requests and issues: none open** as of the last check on 27 August
+2026.
 
 **The remote is `tango-origin`, not `origin`, and there is only one.**
 `origin` used to point at `AlphaNerdFx/Youtube-Anki-Flashcards`, which no
@@ -61,12 +54,18 @@ both existed, `git log origin/main..HEAD` printed nothing and read exactly
 like "fully pushed", because it compares against a ref that does not
 resolve; seventeen commits sat unpushed behind that. Prefer `git status -sb`,
 which names the real upstream.
-**Test state:** 972 passing, 0 failing, 24 integration deselected (`make test`)
-**Coverage:** 88% overall, 2549 statements, 308 missed, measured 18 August
-2026. Weakest: `translation.py` 71%, `__main__.py` and `transcript.py` 82%.
-The 87% carried here before was stale again, taken about 1500 lines ago.
-**Overall completion estimate:** roughly 85 percent toward a v1.0.0 CLI tool,
-roughly 25 percent toward the full multi-surface product vision
+
+**Test state, measured 8 September 2026:** 1215 passing, 0 failing, 33
+integration deselected (`make check`, exit 0). It was 972 at v0.6.0.
+**Coverage, measured 8 September 2026:** 86% overall, 3627 statements, 494
+missed. Weakest: `images.py` at 65%, because most image tests patch at the
+`find_images` seam and leave the batched resolver, the downloader and the
+cache repair paths uncovered. The 88% carried here since 18 August was taken
+about 1100 statements ago.
+
+**Overall completion estimate:** roughly 90 percent toward a v1.0.0 CLI
+tool. What is left is v0.12.0 (runs on modest hardware) and v0.13.0 (the
+freeze candidate); ROADMAP §2 has both.
 
 The pipeline works end to end for English with no setup beyond the spaCy
 model, and for any language with a built dictionary index. Cross-language
@@ -76,14 +75,14 @@ translation models installed.
 Start any session with:
 
 ```bash
-make doctor       # or: python -m pipeline --doctor
+tango doctor      # or, in a clone: make doctor
 ```
 
 It reports spaCy models, dictionary indexes and their sizes, translation
-pairs, the MW key and AnkiConnect reachability, and prints the command that
-fixes anything missing. It was written because nearly every failure
-investigated in this project turned out to be setup rather than logic, and
-none of it was visible from the failure itself.
+pairs, the MW key, AnkiConnect reachability and the image cache, and prints
+the command that fixes anything missing. It was written because nearly every
+failure investigated in this project turned out to be setup rather than
+logic, and none of it was visible from the failure itself.
 
 ---
 
