@@ -1078,6 +1078,33 @@ class TestImagesAreOffByDefault:
         import pipeline.config
         assert pipeline.config.IMAGES_ENABLED is False
 
+    def test_asking_for_them_on_one_run_overrides_the_environment(self, sample_result):
+        # What `--images` does. The default stays off, so a user turns them
+        # on per run rather than editing .env to try the feature once.
+        with patch("pipeline.config.IMAGES_ENABLED", False), \
+             patch.object(cards_module.images, "find_images", return_value={}) as find:
+            build_package("vidimg0005", "German", [sample_result], [], language="de",
+                          images_enabled=True)
+        find.assert_called_once()
+
+    def test_refusing_them_on_one_run_overrides_the_environment(self, sample_result):
+        # The pair, and the reason the parameter is three-state. Somebody
+        # with IMAGES_ENABLED=true still needs one deck without pictures,
+        # and a plain boolean flag could not express it.
+        with patch("pipeline.config.IMAGES_ENABLED", True), \
+             patch.object(cards_module.images, "find_images", return_value={}) as find:
+            build_package("vidimg0006", "German", [sample_result], [], language="de",
+                          images_enabled=False)
+        find.assert_not_called()
+
+    def test_no_answer_leaves_the_environment_to_decide(self, sample_result):
+        # The third state: the flag was not given at all.
+        with patch("pipeline.config.IMAGES_ENABLED", True), \
+             patch.object(cards_module.images, "find_images", return_value={}) as find:
+            build_package("vidimg0007", "German", [sample_result], [], language="de",
+                          images_enabled=None)
+        find.assert_called_once()
+
     def test_no_network_when_disabled(self, sample_result):
         with patch("pipeline.config.IMAGES_ENABLED", False), \
              patch.object(cards_module.images, "find_images") as find:
