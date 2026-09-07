@@ -133,17 +133,31 @@ hr {
    The attribution is small and quiet, but present: Commons images are CC or
    public domain, and the CC ones require credit. A licence obligation is not
    satisfied by a field nobody renders. */
+.card-image {
+    text-align: center;
+    margin-top: 16px;
+}
+
+/* A fixed box, not a fixed image. Commons files arrive in every shape
+   there is, and sizing to the file makes each card a different height, so
+   a deck reviewed in sequence jumps around. The box is constant and
+   object-fit: contain letterboxes the picture inside it, which keeps every
+   aspect ratio intact: cover would fill the box by cropping, and cropping
+   a photograph chosen to show one thing can cut that thing out.
+   240px against the 480px thumbnail that gets downloaded, so the image is
+   still sharp on a high-DPI screen. */
 .card-image img {
-    max-width: 100%;
-    max-height: 240px;
+    width: 240px;
+    height: 240px;
+    object-fit: contain;
     border-radius: 6px;
-    margin-top: 12px;
 }
 
 .attribution {
     font-size: 11px;
     opacity: 0.6;
     margin-top: 4px;
+    text-align: center;
 }
 
 .example-source {
