@@ -590,6 +590,13 @@ def _download_images(
             logger.info("Image for '%s' shows another sense (%s), dropped.",
                         lemma, found[lemma].description)
             del found[lemma]
+        # Named, not counted. A run that says "4 dropped" tells nobody
+        # whether the rule is working; the same run saying "anime, est,
+        # grève, palais" can be checked against the cards in a second.
+        # v0.6.0 made the definition phase name its misses for this reason.
+        if contradicted and progress:
+            progress(f"  images {len(contradicted)} dropped, the picture showed "
+                     f"another sense: {', '.join(sorted(contradicted))}")
 
     if progress:
         progress(f"  images {len(found)}/{len(wanted)} words have one, fetching")
