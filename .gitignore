@@ -75,6 +75,10 @@ Thumbs.db
 # Pronunciation audio cache (ADR-009). Rebuildable, and large in aggregate.
 media/
 
+# Written by scripts/pypi_readme.py --pin while a release is being built,
+# and removed by --restore. Present only if a release was interrupted.
+README.md.orig
+
 # Card image cache (ADR-009 phase 3). Same reasoning as media/: rebuildable,
 # and it grows with every deck. Note this is the cache at the repo root, not
 # docs/assets/, which holds committed diagrams.
