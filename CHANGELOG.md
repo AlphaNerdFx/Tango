@@ -52,8 +52,13 @@ by default** pending a look at real cards in Anki.
 - **A picture that shows another sense than the card's definition is
   dropped**, before it is downloaded. French `palais` was printing a
   photograph of a monumental building beside "paroi supérieure qui sépare la
-  fosse nasale de la bouche". Measured: 4 of 348 imaged words, all French,
-  each one read by hand.
+  fosse nasale de la bouche". Measured: 4 of 214 imaged French words, 0 of
+  121 German and 0 of 25 English, each drop read by hand.
+
+  The comparison runs only where the card is showing a row from the offline
+  index. Judging a Merriam-Webster definition against Wiktionary rows dropped
+  29 correct pictures of 159 on a real English run, because the two word a
+  sense differently and that is not a disagreement about meaning.
 - **The card is one screen tall and the image takes the height the text
   leaves**, between a sixth and a half of the screen, instead of a fixed 30%
   of the viewport that could not know how much room the text had used. The
