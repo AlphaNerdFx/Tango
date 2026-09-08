@@ -365,8 +365,22 @@ def _credit_line(meta: dict) -> str:
     asks for attribution, and a truncated name still attributes.
     """
     def field(key: str) -> str:
+        # Order matters, and the wrong order is a script injection. Commons
+        # metadata is wiki content that anyone can edit, an Anki card is
+        # rendered HTML in a webview with JavaScript, and this text goes
+        # straight into a field.
+        #
+        # Stripping tags before unescaping let an escaped payload through:
+        # `&lt;img src=x onerror=...&gt;` carries no literal `<`, so the tag
+        # stripper saw nothing to remove and `unescape` then turned it into
+        # live markup on the card. Verified 8 September 2026 by calling this
+        # with that value.
+        #
+        # So: unescape to get the real text, strip any markup that reveals,
+        # then escape what is left, because the destination is HTML. A double
+        # encoding survives as visible text rather than becoming a tag.
         raw = str(meta.get(key, {}).get("value", ""))
-        text = html.unescape(_TAG_RE.sub("", raw))
+        text = html.escape(_TAG_RE.sub("", html.unescape(raw)))
         return " ".join(text.split())
 
     artist, licence = field("Artist"), field("LicenseShortName")
