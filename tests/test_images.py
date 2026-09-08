@@ -8,7 +8,7 @@ require it. The real Wikipedia and Wikidata behaviour is pinned by the
 integration tests at the bottom, which are deselected by default.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -680,3 +680,161 @@ class TestAgainstTheRealSources:
         de = images.find_image("Hund", "de")
         fr = images.find_image("chien", "fr")
         assert de.qid == fr.qid == "Q144"
+
+
+# -- The layer under the mocks ------------------------------------------------
+
+class TestTheResponseParsers:
+    """
+    The functions that turn a Wikimedia response into something this module
+    can use, tested against the shapes the real APIs return.
+
+    Added 8 September 2026 during a coverage audit, which found `images.py`
+    at 66% with every uncovered block in this layer. The reason is visible in
+    the tests above: they mock `_articles` and `_entities`, which is the
+    right seam for testing the *gate*, and it leaves the parsing beneath
+    those seams never executed. Redirect following, claim shapes and credit
+    keying all had zero coverage, and two of the three have already shipped a
+    bug this year.
+    """
+
+    def test_a_redirect_is_followed_back_to_the_lemma_asked_for(self):
+        # Wikipedia normalises titles and follows redirects, so the page
+        # comes back filed under a different name than the one requested.
+        # The caller has to get its own lemma back or it cannot key on it.
+        response = {"query": {
+            "normalized": [{"from": "hund", "to": "Hund"}],
+            "redirects": [{"from": "Hund", "to": "Haushund"}],
+            "pages": {"1": {"title": "Haushund",
+                            "pageprops": {"wikibase_item": "Q144"}}},
+        }}
+        with patch.object(images, "_get", return_value=response):
+            pages = images._articles(["hund"], "de")
+        assert "hund" in pages, "the lemma asked for must be the key"
+        assert pages["hund"]["pageprops"]["wikibase_item"] == "Q144"
+
+    def test_a_missing_page_is_absent_rather_than_empty(self):
+        # A word with no article must not appear at all: an empty dict for it
+        # would read as "resolved, but no image", which is a different thing.
+        response = {"query": {"pages": {"-1": {"title": "Nope", "missing": ""}}}}
+        with patch.object(images, "_get", return_value=response):
+            assert images._articles(["nope"], "de") == {}
+
+    def test_a_failed_request_yields_no_pages(self):
+        with patch.object(images, "_get", return_value=None):
+            assert images._articles(["hund"], "de") == {}
+
+    def test_claims_are_read_from_both_shapes_wikidata_returns(self):
+        # An entity-valued claim is {"id": "Q..."}; a filename claim is a
+        # bare string. Both appear on the same item, P31 and P18.
+        response = {"entities": {"Q144": {"claims": {
+            "P31": [{"mainsnak": {"datavalue": {"value": {"id": "Q55983715"}}}}],
+            "P279": [{"mainsnak": {"datavalue": {"value": {"id": "Q39201"}}}}],
+            "P18": [{"mainsnak": {"datavalue": {"value": "Dog.jpg"}}}],
+        }, "descriptions": {"de": {"value": "Haustier"}}}}}
+        with patch.object(images, "_get", return_value=response):
+            out = images._entities(["Q144"], "de")
+        assert out["Q144"]["P31"] == ["Q55983715"]
+        assert out["Q144"]["P279"] == ["Q39201"]
+        assert out["Q144"]["P18"] == ["Dog.jpg"]
+        assert out["Q144"]["description"] == "Haustier"
+
+    def test_a_description_in_another_language_is_not_borrowed(self):
+        # Asking for German must not return the English description, which
+        # would then be compared against a German definition.
+        response = {"entities": {"Q144": {"claims": {},
+                                          "descriptions": {"en": {"value": "a dog"}}}}}
+        with patch.object(images, "_get", return_value=response):
+            assert images._entities(["Q144"], "de")["Q144"]["description"] == ""
+
+    def test_a_credit_is_found_despite_commons_reporting_spaces(self):
+        # Commons reports titles with spaces while the filenames come from a
+        # URL path and carry underscores. Keying on the raw title returned no
+        # credit for every file, which is a licence breach rather than an
+        # untidy card. This is that bug, pinned.
+        response = {"query": {"pages": {"1": {
+            "title": "File:A Small Cup.jpg",
+            "imageinfo": [{"extmetadata": {
+                "Artist": {"value": "Jane"},
+                "LicenseShortName": {"value": "CC BY-SA 4.0"}}}],
+        }}}}
+        with patch.object(images, "_get", return_value=response):
+            credits = images._attributions(["A_Small_Cup.jpg"])
+        assert credits["A_Small_Cup.jpg"] == "Jane, CC BY-SA 4.0"
+
+    def test_a_file_commons_has_no_information_about_yields_no_credit(self):
+        response = {"query": {"pages": {"1": {"title": "File:Gone.jpg"}}}}
+        with patch.object(images, "_get", return_value=response):
+            assert images._attributions(["Gone.jpg"]) == {}
+
+    def test_one_property_is_read_off_an_item(self):
+        response = {"claims": {"P18": [
+            {"mainsnak": {"datavalue": {"value": "Dog.jpg"}}}]}}
+        with patch.object(images, "_get", return_value=response):
+            assert images._claims("Q144", "P18") == ["Dog.jpg"]
+
+    def test_a_property_the_item_lacks_is_an_empty_list(self):
+        with patch.object(images, "_get", return_value={"claims": {}}):
+            assert images._claims("Q144", "P18") == []
+
+
+class TestFetchingTheFile:
+    """
+    The download and its cache. Nothing here may raise: an image is an
+    enhancement, and a run that has already paid for a transcript and a
+    thousand definitions must not fail for want of a picture.
+    """
+
+    @staticmethod
+    def _result(qid="Q144", url="https://x/dog.jpg"):
+        return images.ImageResult(url=url, qid=qid, source="wikidata",
+                                  filename="dog.jpg")
+
+    def test_a_cached_file_is_returned_without_a_request(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        (tmp_path / "Q144.png").write_bytes(b"already here")
+        with patch.object(images.requests, "get") as get:
+            path = images.fetch_image(self._result(), "hund")
+        assert path.name == "Q144.png"
+        get.assert_not_called()
+
+    def test_the_cache_hit_ignores_what_the_url_claimed(self, tmp_path, monkeypatch):
+        # The pair to the test above, and the reason the glob exists: the
+        # file is named after its content, so a URL ending .svg can be
+        # satisfied by Q144.png on disk.
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        (tmp_path / "Q144.png").write_bytes(b"png bytes")
+        path = images.fetch_image(self._result(url="https://x/dog.svg"), "hund")
+        assert path.name == "Q144.png"
+
+    def test_a_download_is_named_by_its_content(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        png = b"\x89PNG\r\n\x1a\n" + b"0" * 40
+        response = MagicMock(content=png, headers={"Content-Type": "image/png"})
+        response.raise_for_status = lambda: None
+        with patch.object(images.requests, "get", return_value=response):
+            path = images.fetch_image(self._result(url="https://x/dog.svg"), "hund")
+        assert path.name == "Q144.png", "the bytes decide, not the URL"
+        assert path.read_bytes() == png
+
+    def test_a_failed_request_is_no_image_rather_than_an_error(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        with patch.object(images.requests, "get",
+                          side_effect=images.requests.RequestException("offline")):
+            assert images.fetch_image(self._result(), "hund") is None
+
+    def test_an_empty_body_is_not_written(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        response = MagicMock(content=b"", headers={})
+        response.raise_for_status = lambda: None
+        with patch.object(images.requests, "get", return_value=response):
+            assert images.fetch_image(self._result(), "hund") is None
+        assert list(tmp_path.glob("Q144.*")) == []
+
+    def test_a_disk_that_will_not_take_it_does_not_fail_the_run(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(images, "IMAGE_DIR", tmp_path)
+        response = MagicMock(content=b"\xff\xd8\xffdata", headers={})
+        response.raise_for_status = lambda: None
+        with patch.object(images.requests, "get", return_value=response), \
+             patch.object(images.Path, "write_bytes", side_effect=OSError("disk full")):
+            assert images.fetch_image(self._result(), "hund") is None
