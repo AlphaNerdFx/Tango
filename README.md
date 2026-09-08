@@ -322,10 +322,10 @@ Windows, macOS and Linux, on low-end and high-end hardware alike.
 | v0.8.0 | packaged and installable | **released, on PyPI** |
 | v0.8.1 | documentation for people who can now install it | released |
 | v0.8.2 | an install that looks after itself | released |
-| v0.9.0 | nothing fails without saying why | next |
-| v0.10.0 | runs on any operating system | |
-| v0.11.0 | images on cards, gated to concrete nouns | |
-| v0.12.0 | runs on modest hardware | |
+| v0.9.0 | nothing fails without saying why | released |
+| v0.10.0 | runs on any operating system | released |
+| v0.11.0 | images on cards, gated to concrete nouns | **released, on PyPI** |
+| v0.12.0 | runs on modest hardware, and the 1.0 freeze | next |
 | v1.0.0 | a finished CLI | |
 
 Packaging moved forward three rungs on 27 August 2026, from v0.10.0, after
