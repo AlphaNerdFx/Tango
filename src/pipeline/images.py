@@ -37,7 +37,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
-from urllib.parse import unquote, urlsplit
+from urllib.parse import quote, unquote, urlsplit
 
 import requests
 
@@ -341,7 +341,10 @@ def _commons_url(p18: list[str]) -> Optional[str]:
     """Turn a Wikidata P18 filename into a Commons file URL."""
     if not p18:
         return None
-    name = p18[0].replace(" ", "_")
+    # Escaped, because MediaWiki's legal title characters include `?` and a
+    # file called "Why Not?.jpg" would otherwise end the path early: the
+    # download 404s and the credit lookup asks about "Why_Not".
+    name = quote(p18[0].replace(" ", "_"), safe="")
     # ?width= asks Commons for a thumbnail rather than the original.
     return (f"https://commons.wikimedia.org/wiki/Special:FilePath/{name}"
             f"?width={_THUMB_WIDTH}")
@@ -681,45 +684,72 @@ def find_images(lemmas: list[str], language: str,
         if not pages:
             continue
 
-        by_qid: dict[str, str] = {}
+        # Every lemma that reached a concept, not just the first. Two words
+        # in one deck can be the same concept (`auto` and `voiture` are both
+        # Q1420), and keeping one lemma per item shipped the other with an
+        # empty Image field even though the file was already being fetched.
+        by_qid: dict[str, list[str]] = {}
         for lemma, page in pages.items():
             qid = page.get("pageprops", {}).get("wikibase_item")
             # No Wikidata item means no way to judge the concept, and an
             # ungated image is what this module exists to avoid.
             if qid:
-                by_qid.setdefault(qid, lemma)
+                by_qid.setdefault(qid, []).append(lemma)
 
         if not by_qid:
             continue
         entities = _entities(list(by_qid), description_language or language)
 
-        # filename -> the finished result, less its credit line
-        pending: dict[str, ImageResult] = {}
-        for qid, lemma in by_qid.items():
+        # A list rather than a dict keyed by filename, because two concepts
+        # can share one Commons file: closely related articles often carry
+        # the same lead image, and keying on the name dropped whichever came
+        # second. The credit lookup wants filenames, and it can have its own.
+        pending: list[tuple[str, ImageResult]] = []
+        for qid, qid_lemmas in by_qid.items():
             claims = entities.get(qid)
             if not claims:
                 continue
             if not _admits(claims["P31"], claims["P279"]):
                 continue
 
-            url = _commons_url(claims["P18"]) \
-                or pages[lemma].get("thumbnail", {}).get("source")
+            # Any of this concept's lemmas will do for the lead image: they
+            # all resolved to the same article, so they carry the same page.
+            thumbnail = next(
+                (pages[lem].get("thumbnail", {}).get("source")
+                 for lem in qid_lemmas if pages[lem].get("thumbnail")), None)
+            url = _commons_url(claims["P18"]) or thumbnail
             if not url:
                 continue
             name = _commons_filename(url)
-            pending[name] = ImageResult(
+            pending.append((qid, ImageResult(
                 url=url, qid=qid,
                 source="wikidata" if claims["P18"] else "wikipedia",
                 filename=name,
                 description=claims["description"],
-            )
+            )))
 
         if not pending:
             continue
-        credits = _attributions(list(pending))
-        for name, result in pending.items():
-            result.attribution = credits.get(name, "")
-            results[by_qid[result.qid]] = result
+        credits = _attributions(sorted({result.filename for _, result in pending}))
+        for qid, result in pending:
+            result.attribution = credits.get(result.filename, "")
+            # An article's lead image is not always a Commons file. Wikipedia
+            # allows local uploads, and on the English one those are mostly
+            # non-free logos and cover art. Commons then knows nothing about
+            # the file, the credit comes back empty, and shipping it would
+            # redistribute work whose terms this never read. A P18 value is
+            # always a Commons file, so an empty credit there means Commons
+            # genuinely holds none.
+            #
+            # Measured 8 September 2026 over 551 images in three languages:
+            # every one carried a credit, so this refuses nothing today. It
+            # is here for the file that eventually does not.
+            if result.source == "wikipedia" and not result.attribution:
+                logger.debug("No licence for %s, refusing the lead image.",
+                             result.filename)
+                continue
+            for lemma in by_qid[qid]:
+                results[lemma] = result
 
     return results
 
