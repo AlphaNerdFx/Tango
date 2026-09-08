@@ -1,6 +1,6 @@
 # HANDOVER
 
-Written 8 September 2026.
+Written 9 September 2026.
 
 ## Where the tree is
 
@@ -10,13 +10,19 @@ Written 8 September 2026.
 | last tag | **`v0.11.0`**, tagged and pushed 8 September 2026 |
 | `__version__` | `0.11.0` |
 | `make check` | exit 0 |
-| tests | **1230 unit, 33 integration deselected** |
+| tests | **1290 unit, 33 integration deselected** |
+| coverage | **89%**, 3623 statements, 397 missed, measured 9 September |
 | PyPI | **0.11.0 published**, `pip install tango-anki` |
-| Docker | image built and verified against the published package, **not yet pushed** |
+| Docker | **published as `yousseflarbi/tango`** |
+| security | `make audit`: bandit clean at every severity, pip-audit 11, all in the translation server extra |
 
 The v0.11.0 rung is released. The tag names `9cb0866`, which is the exact
 commit the PyPI artefacts were built from, so a checkout of the tag rebuilds
-what people downloaded. What is left is pushing the image to Docker Hub.
+what people downloaded. The image is on Docker Hub.
+
+Since the tag, a code-quality and security audit has run against the whole
+package rather than a release diff. What it found and changed is in the
+section below, and the numbers behind it are in ARCHITECTURE 8.49 to 8.51.
 
 **Working autonomously**, under two standing decisions taken 5 September
 2026: commit and push freely, but **ask before any tag or PyPI upload**,
@@ -138,6 +144,29 @@ be read is now refused rather than redistributed; and ten user-facing
 messages told a pip or Docker user to run `make`, which is v0.8.1's bug
 returning, now scanned for across the package.
 
+## The audit, 8 and 9 September 2026
+
+Ran against the whole package, using coverage, ruff, bandit and pip-audit,
+plus cProfile for the one hot path. Full account in the session log; the
+short version:
+
+- **Redundant code.** Six dead declarations, a 44-line diagnostic that a
+  repair beside it had made unreachable at import, sixteen unused test
+  imports, and a 35 MB measurement intermediate that was inflating a release
+  metric. Source is 120 lines lighter.
+- **Correctness and security.** A mutable default argument, six re-raises
+  that lost their cause, two bare `except Exception: pass` around schema
+  migrations, an unvalidated URL scheme before `urlretrieve`, and a SHA1
+  call that now says it is not cryptographic. Dependency advisories went
+  from 37 to 11, and the 11 that remain are all inside the local translation
+  server, which is now its own extra.
+- **Performance.** The transcript search was 66% of a package build and is
+  now 8.5x faster on hits and 13x on misses. ARCHITECTURE 8.51.
+- **Coverage** 86% to 89%, with `images.py` 66% to 93%. Six tests that could
+  not fail were rewritten to assert what their names promise.
+
+`make audit` runs bandit and pip-audit together. Both are in the `dev` extra.
+
 ## What needs the user
 
 1. **Look at the two review decks.** `output/IMGREVIEW2-de_*.apkg` (19 cards,
@@ -190,7 +219,9 @@ Nothing. `make check` exits 0.
 
 Environmental notes, not this repository's bugs:
 
-- **`make check` takes about ten minutes here.**
+- **`make check` takes about 145 seconds here**, measured 8 September. The
+  "about ten minutes" in every previous handover was never timed, and was
+  reading contention from background jobs left running in the same session.
 - **There is no pre-commit hook.** Run `make check` yourself before committing.
 - **There is no `pip` script in `.tangovenv/bin`.** Use
   `.tangovenv/bin/python -m pip`.
@@ -202,12 +233,13 @@ Environmental notes, not this repository's bugs:
 - **`ca_core_news_sm` was installed while verifying the first-run offer.**
   Removable with `pip uninstall ca-core-news-sm`.
 
-## One thing found and deliberately not fixed
+## Fixed since: the tests that reached the network
 
-**Twelve tests in `test_definition.py` attempt real network connections**, 24
-attempts in total, which breaks CLAUDE.md 3.5. Found by running the suite with
-`socket.socket.connect` patched to raise. Pre-existing and unrelated to the
-image work, so reported rather than folded into it (CLAUDE.md 7.4).
+Thirteen tests opened outbound connections during a default run, breaking
+CLAUDE.md 3.5. `tests/conftest.py` now has an autouse fixture that refuses
+any non-loopback connect and names the offending test, so the constraint is
+enforced rather than described, and the thirteen are mocked. ARCHITECTURE
+8.49.
 
 ## Conventions worth not relearning
 
