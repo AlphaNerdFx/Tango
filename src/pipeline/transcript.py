@@ -160,13 +160,18 @@ class _ProxyAwareIpBlocked(IpBlocked, TangoError):
 
 # ── 1. get_transcript ─────────────────────────────────────────────────────────
 
-def get_transcript(video_id: str, languages: list[str] = ["en"]) -> Transcript:
+def get_transcript(video_id: str,
+                   languages: Optional[list[str]] = None) -> Transcript:
     """
     Fetch and return a Transcript object for the given video ID.
 
     Args:
         video_id:  11-character YouTube video ID (not a URL).
         languages: Ordered language preference list. First available is used.
+                   Defaults to English. A mutable default would be shared by
+                   every call that omits it, so the default is None and the
+                   list is built per call: nothing mutates it today, and the
+                   hazard is that nothing has to for the bug to appear.
 
     Returns:
         youtube_transcript_api Transcript object.
@@ -175,25 +180,28 @@ def get_transcript(video_id: str, languages: list[str] = ["en"]) -> Transcript:
         All exceptions are re-raised with a clear message. Callers should
         catch the specific types they want to handle; let the rest propagate.
     """
+    if languages is None:
+        languages = ["en"]
+
     proxy = _build_proxy()
     api = YouTubeTranscriptApi(proxy_config=proxy)
 
     try:
         transcript_list = api.list(video_id)
-    except VideoUnavailable:
-        raise VideoUnavailable(video_id)
-    except AgeRestricted:
-        raise AgeRestricted(video_id)
+    except VideoUnavailable as exc:
+        raise VideoUnavailable(video_id) from exc
+    except AgeRestricted as exc:
+        raise AgeRestricted(video_id) from exc
     except VideoUnplayable as exc:
         raise VideoUnplayable(video_id, exc.reason) from exc
-    except TranscriptsDisabled:
-        raise TranscriptsDisabled(video_id)
+    except TranscriptsDisabled as exc:
+        raise TranscriptsDisabled(video_id) from exc
     except (IpBlocked, RequestBlocked) as exc:
         raise _ProxyAwareIpBlocked(video_id, proxy) from exc
-    except PoTokenRequired:
-        raise PoTokenRequired(video_id)
-    except YouTubeDataUnparsable:
-        raise YouTubeDataUnparsable(video_id)
+    except PoTokenRequired as exc:
+        raise PoTokenRequired(video_id) from exc
+    except YouTubeDataUnparsable as exc:
+        raise YouTubeDataUnparsable(video_id) from exc
     except YouTubeRequestFailed as exc:
         raise YouTubeRequestFailed(video_id, exc) from exc
 
@@ -204,9 +212,9 @@ def get_transcript(video_id: str, languages: list[str] = ["en"]) -> Transcript:
 
     try:
         return transcript_list.find_transcript(languages)
-    except (NoTranscriptFound, CouldNotRetrieveTranscript):
+    except (NoTranscriptFound, CouldNotRetrieveTranscript) as exc:
         available = [t.language_code for t in transcript_list]
-        raise NoTranscriptFound(video_id, languages, available)
+        raise NoTranscriptFound(video_id, languages, available) from exc
 
 
 # ── 2. get_properties ─────────────────────────────────────────────────────────
