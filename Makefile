@@ -274,7 +274,7 @@ translate-setup: venv
 		printf "$(CYAN)$(BOLD)[info]$(RESET)  Installing CPU-only torch (the CUDA build is 4.5 GB and unusable without an NVIDIA GPU)...\n"; \
 		$(VENV_PIP) install --quiet --index-url https://download.pytorch.org/whl/cpu torch; \
 	fi
-	@$(VENV_PIP) install --quiet argostranslate libretranslate
+	@$(VENV_PIP) install --quiet ".[translation,translation-server]"
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  argostranslate and libretranslate installed.\n"
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Translation models will be downloaded on first use.\n"
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Language pair loaded from LANGUAGE and DEF_LANG in .env\n"
