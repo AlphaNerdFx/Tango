@@ -612,12 +612,43 @@ upstream change:
 - with translation: **≤ 600 MB** of code, which step 1 alone does not reach.
   Measured after it: 2203 MB, of which torch is 725 and the nine spaCy models
   are roughly 400. It needs steps 3 and 4 as well
-- peak RSS on a normal run: **≤ 1 GB**
-- index build completes within **2 GB RAM** (currently the most memory-hungry
-  step by far, and unmeasured)
-- a full run completes on a **4 GB / 2-core** machine
+- ~~peak RSS on a normal run: **≤ 1 GB**~~ **met, 564 MB**
+- ~~index build completes within **2 GB RAM**~~ **met, 38 MB**
+- ~~a full run completes on a **4 GB / 2-core** machine~~ **met**
 - per-language index: currently 131–423 MB, and worth asking what could be
-  dropped or compressed
+  dropped or compressed. **Still open, and now the only open item on this
+  rung's size half.**
+
+**Measured 8 September 2026 with `scripts/measure_footprint.py`, and the
+memory half of this rung was already finished before anyone looked.** Each
+stage runs in its own interpreter, because `ru_maxrss` reports a high-water
+mark for the whole process and measuring them together would attribute the
+worst to whichever ran last:
+
+| stage | peak RSS | target | |
+|---|---|---|---|
+| import every module, before any work | 268 MB | none | the floor |
+| spaCy loaded, 1650 words tokenised | **447 MB** | 1024 MB | the heaviest stage |
+| a 400-card package built and written | 33 MB | none | |
+| index built from 200k records | **38 MB** | 2048 MB | |
+| index opened and queried, 994k rows | 23 MB | 2048 MB | |
+| **a real run end to end, images on** | **564 MB** | 1024 MB | 185 cards, 4m04s |
+
+The real run is the one that counts: `2yHn8uc5_-4` with `--force --images`,
+185 cards, 60 pictures, 564 MB peak. A 4 GB machine has room for that six
+times over.
+
+**And the parenthesis in the old third bullet was wrong.** The index build
+was called "the most memory-hungry step by far"; it is 38 MB, the lightest
+substantial stage there is, because `build_index` streams the archive line
+by line and flushes batches with `executemany` rather than reading it in.
+The heavy stage is spaCy, at 447 MB, and that is the model itself rather
+than anything this project controls.
+
+That is the fourth item on this rung to survive contact with a measurement
+badly, after pymupdf, minisbd and the spaCy models. The common cause is the
+same each time: the rung was written from reasoning about the code rather
+than from running it.
 
 High-end hardware should be able to spend more, not merely avoid crashing:
 worker counts, batch sizes and cache behaviour should scale to what the

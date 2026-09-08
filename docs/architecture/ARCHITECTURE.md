@@ -2984,6 +2984,67 @@ The lesson generalises past this repository. A test that reaches a network
 is not merely slow: it reports on the wrong thing, and it does so most
 convincingly when the network is healthy.
 
+### 8.50 Where an index's megabytes actually are
+
+Measured 8 September 2026 for the v0.12.0 rung, which asks what a
+per-language index could drop. 8.30 recorded that 81.4% of the German index
+is inflected forms, and that is right, but it is a count of rows and the
+question is bytes. The columns say something different:
+
+| column | on pointer rows | on definition rows |
+|---|---|---|
+| `audio_url` | **83.1 MB** | 17.7 MB |
+| `definition` | **57.2 MB** | 11.6 MB |
+| `ipa` | 13.1 MB | 2.7 MB |
+| `word` | 10.0 MB | 2.1 MB |
+| `form_of` | 8.8 MB | 0 |
+| `example1` / `example2` | 0 | 30.3 MB |
+| everything else | 3.0 MB | 3.3 MB |
+
+243 MB of text in a 305 MB file; `dbstat` puts 284 MB in the `entries` table
+and 21 MB in `idx_word`. So the inflected forms are not expensive because
+there are many of them, they are expensive because each one carries a
+pronunciation URL and a gloss.
+
+Two savings follow, and they are different in kind.
+
+**The audio URL is 100% prefix.** Every one of the 943,755 German URLs
+begins `https://upload.wikimedia.org/wikipedia/commons/`, 46 characters
+stored 943,755 times. Implying it saves **44.4 MB in German and 63 MB across
+the four built indexes**, with no information lost and nothing to judge.
+
+**A pointer row's own gloss is unreachable when its target resolves.**
+`_follow_form_of` replaces it with the real entry's, and falls back to the
+stored gloss only when the target is missing from the index. Measured: 85%
+of German pointer rows resolve, so their "Dativ Plural des Substantivs
+Krieg" is never read. The other 15% is the only definition those words have,
+so this cannot be applied blindly. Saving: **46.5 MB German, 151 MB across
+the four.**
+
+| | de | en | fr | ru | total |
+|---|---|---|---|---|---|
+| index size | 305 MB | 236 MB | 423 MB | 131 MB | 1095 MB |
+| URL prefix | 44.4 | 6.0 | 12.0 | 1.0 | **63 MB** |
+| unreachable glosses | 46.5 | 15.4 | 88.5 | 0.8 | **151 MB** |
+| together | 30% | 9% | 24% | 1% | **20%** |
+
+Russian barely benefits, because only 3% of its rows are pointers: the
+Russian edition writes inflections differently. French benefits most in
+absolute terms, at 100 MB.
+
+**What this changes about the cost.** ROADMAP §3 says a schema bump costs
+every user a full re-download, 288 MB for German and 682 MB for French, and
+that is what has made this item look unaffordable. It is not true here.
+Both transformations are **lossless and local**: stripping a known prefix
+and dropping a gloss that is provably unreachable can both be done to an
+existing file in place. A migration can do it without touching the network,
+which is what makes a 20% saving worth having.
+
+The remaining judgement is whether 20% justifies a schema version, a
+migration path and the risk attached to a file format that v1.0.0 freezes.
+That is a decision, not a measurement, and it is recorded here so that it is
+taken with the numbers in view.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
