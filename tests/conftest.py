@@ -81,6 +81,54 @@ def isolated_environment(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_outbound_network(request, monkeypatch):
+    """
+    Fail any default-run test that opens a connection to another machine.
+
+    CLAUDE.md 3.5 says no test in the default run may require network
+    access. That was enforced by reading the diff, which is not a mechanism:
+    running the suite with this guard on 8 September 2026 found **thirteen
+    tests making real requests**, twelve of them in `test_definition.py`
+    reaching `en.wiktionary.org`, and one in `test_images.py` reaching
+    Wikidata because a function grew a third call that morning and its test
+    still mocked the first two.
+
+    None of them meant to. Each was written when the code under it had one
+    fewer source, and nothing failed when the next was added, so a unit test
+    quietly became an integration test that happened to pass while the
+    network was up.
+
+    Loopback is allowed. A test that stands up its own `http.server` on a
+    spare port and talks to it is not reaching the outside world, and that
+    is a technique this project uses deliberately (ARCHITECTURE 18.7).
+
+    Integration tests are exempt: reaching real services is their entire
+    purpose, and they are deselected by default.
+    """
+    if request.node.get_closest_marker("integration"):
+        yield
+        return
+
+    import socket
+
+    real_connect = socket.socket.connect
+
+    def guarded(self, address, *args, **kwargs):
+        host = address[0] if isinstance(address, tuple) else address
+        if isinstance(host, str) and (host.startswith("127.") or host in {
+                "localhost", "::1", "0.0.0.0"}):
+            return real_connect(self, address, *args, **kwargs)
+        raise AssertionError(
+            f"This test opened a network connection to {host}. Unit tests may "
+            "not (CLAUDE.md 3.5): mock the call, or mark the test "
+            "@pytest.mark.integration if it genuinely needs the real service."
+        )
+
+    monkeypatch.setattr(socket.socket, "connect", guarded)
+    yield
+
+
+@pytest.fixture(autouse=True)
 def isolated_dictionary_indexes(tmp_path, monkeypatch):
     """
     Point the Wiktionary indexes at an empty directory for every test.
