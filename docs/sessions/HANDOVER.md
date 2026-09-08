@@ -7,13 +7,15 @@ Written 8 September 2026.
 | | |
 |---|---|
 | branch | `main`, remote is `origin` |
-| last tag | **`v0.10.0`**, released 5 September 2026 |
-| `__version__` | `0.10.0` |
+| last tag | **`v0.10.0`**. v0.11.0 is complete and documented, **tag pending** |
+| `__version__` | `0.11.0`, bumped ahead of the tag on purpose |
 | `make check` | exit 0 |
-| tests | **1204 unit, 33 integration deselected** |
-| PyPI | `pip install tango-anki`, latest published 0.10.0 |
+| tests | **1230 unit, 33 integration deselected** |
+| PyPI | `pip install tango-anki`. **0.10.0 is the latest published; 0.11.0 is tagged but not uploaded** |
 
-Everything after v0.10.0 is the v0.11.0 rung, images on cards.
+The v0.11.0 rung is done and tagged. What is left of the release is the PyPI
+upload, which needs the user's credentials, and the Docker image, which can
+only be built once the package is on PyPI.
 
 **Working autonomously**, under two standing decisions taken 5 September
 2026: commit and push freely, but **ask before any tag or PyPI upload**,
@@ -80,8 +82,15 @@ whether the text above had used a fifth of the screen or all of it. The
 credit line moved inside the image box, because as a sibling it was pushed to
 the bottom of the screen while the picture stayed at the top.
 
-**This is the one piece that has not been seen working**, and there are two
-open questions for the user, both below.
+A pre-release review pointed out on 8 September that Anki renders the
+template inside `<div id="qa">` while `.card` is the body, which would make
+the picture a grandchild of the flex column and the rule inert. That could
+not be checked here: this machine's Anki is a frozen build with no readable
+Python. The CSS is now correct either way, with `#qa` joining the chain when
+it exists and `max-height: min(100%, 45vh)` bounding the picture when a
+percentage cannot resolve. **It still has not been seen working**, and
+`output/card_preview.html` renders every card twice, once in each DOM shape,
+so the two can be compared.
 
 ### Done: the PyPI badges, going forward only
 
@@ -98,6 +107,36 @@ description and a version number cannot be re-uploaded. Their badges will
 read the current version forever. This is fixed from the next upload onward
 and not before.
 
+### Done: a pre-release audit, which found nine things
+
+Run on `v0.10.0..HEAD` on 8 September 2026 at the user's request, before the
+tag. Two of the findings were live bugs shipping silently:
+
+- **A fallback card could never get a picture** unless the word happened to
+  have a Wikimedia recording: the candidate list read `not_found_audio`
+  where it meant `not_found`. A card with no definition is the one a picture
+  helps most.
+- **Two words for one concept, and only one got the picture.** `auto` and
+  `voiture` are both Q1420, and the resolver kept one lemma per item. The
+  same shape one line down: the pending map was keyed by Commons filename,
+  so two concepts sharing a lead image lost one.
+
+And one security finding, the only one of the release: **a Commons credit
+could put live markup on a card.** `Artist` metadata is wiki text anyone can
+edit and a card is HTML in a webview, but tags were stripped before entities
+were decoded, so `&lt;img src=x onerror=...&gt;` passed the stripper
+untouched and unescaping made it a working tag. Now decoded, stripped, then
+escaped. ARCHITECTURE 8.48, which also records the same shape in definition
+and example fields, measured at 11 rows of 2.1M in French and 4 of 994k in
+German, cosmetic today and carried to v0.12.0.
+
+The rest: `IMAGES_ENABLED` in a developer's `.env` leaked into the suite and
+made it network-dependent (CLAUDE.md 3.5); an unescaped `?` in a Commons
+filename broke both download and credit; a lead image whose licence could not
+be read is now refused rather than redistributed; and ten user-facing
+messages told a pip or Docker user to run `make`, which is v0.8.1's bug
+returning, now scanned for across the package.
+
 ## What needs the user
 
 1. **Look at the two review decks.** `output/IMGREVIEW2-de_*.apkg` (19 cards,
@@ -112,11 +151,11 @@ and not before.
    picture and a sparse one. A scrollbar inside a frame means that card does
    not fit. Then the same judgement in Anki desktop and AnkiMobile, which is
    the only ground truth.
-3. **Settle whether a CSS change reaches an existing collection.** Anki
-   matches a notetype by ID on import; whether it then updates the styling is
-   unverified here, and if it does not, the new layout only reaches a fresh
-   collection and the pipeline needs an AnkiConnect `updateModelStyling` step
-   next to `ensure_model_fields`. Anki was not running while this was written.
+3. **Settled, 8 September 2026: Anki does update a notetype's styling and
+   template on import** when the ID and field list match. Read back from the
+   live collection after importing a review deck: today's CSS and template
+   were both there, on notetype 1607392321 holding 5,311 notes, with no fork.
+   No `updateModelStyling` step is needed.
 4. **The measurement corpus, unchanged from the previous handover.** 2 more
    video ids each for de, fr, es, ru, pt, ja, zh, ko, en, plus 3 for Italian.
    Prefer manually captioned videos, 5 to 15 minutes.
@@ -135,14 +174,14 @@ and not before.
 
 | decision | why it is waiting |
 |---|---|
-| **`IMAGES_ENABLED` default** | Needs the two review decks looked at |
-| **CSS reaching an existing collection** | Unverified, Anki was not running |
+| **The PyPI upload** | Needs the user's token; there is no `~/.pypirc` here |
+| **Docker Hub** | Recipe verified from a local wheel. Publishing needs 1c first, plus an account and a namespace |
 | **21 video ids** | The corpus is still three languages |
 | **Publishing the Docker image** | Builds and runs. Pushing needs an account and a choice of registry |
 | **French fixed expressions** | `d'accord` becomes `accord`. 7 of 1079 cards. Needs a hand-curated per-language list |
-| **Transcript fallback** | The whole pipeline depends on one extraction path |
+| **Transcript fallback** | Decided 8 September 2026: `youtube-transcript-api` will do for 1.0, documented as a known single point of failure rather than fixed |
 | **Learned queue matching** | Nothing records what the user answers at the y/n/s prompt |
-| **ruff and mypy debt** | 262 and 26 findings, both advisory, neither gating. The new `Optional[...]` annotations match the house style rather than ruff's preference |
+| **ruff and mypy debt** | 267 and 26 findings, both advisory, neither gating. The new `Optional[...]` annotations match the house style rather than ruff's preference |
 
 ## Known-broken
 
