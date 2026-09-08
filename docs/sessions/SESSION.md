@@ -42,18 +42,27 @@ saying why, v0.10.0 cross-platform. `CHANGELOG.md` has an entry for each.
 - **Off by default**, asked for per run with `--images`, since a picture
   roughly doubles a deck that already carries audio
 
-**HEAD:** on `main`, in sync with `tango-origin`. Working tree clean.
+**HEAD:** on `main`, in sync with `origin`. Working tree clean.
 
 **Pull requests and issues: none open** as of the last check on 27 August
 2026.
 
-**The remote is `tango-origin`, not `origin`, and there is only one.**
-`origin` used to point at `AlphaNerdFx/Youtube-Anki-Flashcards`, which no
-longer exists, and it was removed on 18 August 2026. Keep it that way. While
-both existed, `git log origin/main..HEAD` printed nothing and read exactly
-like "fully pushed", because it compares against a ref that does not
-resolve; seventeen commits sat unpushed behind that. Prefer `git status -sb`,
-which names the real upstream.
+**There is one remote and it is called `origin`.** Renamed back from
+`tango-origin` on 8 September 2026, because the old name was working around
+a problem that no longer exists and was itself breaking tools: the
+`security-review` skill asks for `git diff origin/HEAD...` and simply could
+not run.
+
+The history is worth keeping, because the trap it describes is real and this
+rename is what removes it. `origin` used to point at
+`AlphaNerdFx/Youtube-Anki-Flashcards`, which no longer exists; it was deleted
+on 18 August 2026 and the remaining remote was given a distinct name so the
+two could not be confused. While both existed, `git log origin/main..HEAD`
+printed nothing and read exactly like "fully pushed", because it compares
+against a ref that does not resolve, and seventeen commits sat unpushed
+behind that. With one remote named `origin`, that command resolves and
+answers honestly. `git status -sb` still names the upstream and is still the
+better habit.
 
 **Test state, measured 8 September 2026:** 1215 passing, 0 failing, 33
 integration deselected (`make check`, exit 0). It was 972 at v0.6.0.
@@ -597,7 +606,7 @@ OS:              Windows 11 with WSL2 (Ubuntu)
 Python:          3.10.12
 Virtual env:     .tangovenv  (NOT .venv)
 Project path:    /mnt/c/DSC/Career/Projects/Tango
-Git remotes:     tango-origin -> https://github.com/AlphaNerdFx/Tango  (current)
+Git remotes:     origin -> https://github.com/AlphaNerdFx/Tango  (current)
                  origin       -> .../Youtube-Anki-Flashcards.git       (renamed, dead)
 Anki:            running on Windows, AnkiConnect bound to 0.0.0.0
 ANKI_HOST:       http://172.28.144.1:8765 (WSL gateway, changes on WSL restart)

@@ -6,7 +6,7 @@ Written 8 September 2026.
 
 | | |
 |---|---|
-| branch | `main` |
+| branch | `main`, remote is `origin` |
 | last tag | **`v0.10.0`**, released 5 September 2026 |
 | `__version__` | `0.10.0` |
 | `make check` | exit 0 |
