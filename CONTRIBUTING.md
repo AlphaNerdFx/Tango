@@ -111,6 +111,32 @@ and `jq`, and **it writes to your real collection**. Use a video you have not
 processed before: Anki dedups notes by GUID, so re-importing one you already
 have updates those notes in place rather than filling the new deck.
 
+## Publishing a release (maintainers)
+
+`make dist` pins the README badges, builds, runs `twine check` and restores
+the README, so the pinning cannot be skipped. Then:
+
+```bash
+.tangovenv/bin/python -m twine upload dist/*
+```
+
+Two things that have cost this project a release each:
+
+- **The username is the literal string `__token__`**, not your PyPI account
+  name. An account name paired with a `pypi-` token is rejected with a 403
+  that does not say why. This is the single most common PyPI upload failure
+  and it is what tripped the first upload here.
+- **Scope the token to the `tango-anki` project**, not to the whole account.
+  An account-wide token sitting in a file grants publish rights to every
+  project you own, and a release only ever needs the one.
+
+Do not keep the token in `.env`. `config.py` calls `load_dotenv()` at import,
+so anything in that file is loaded into the environment of every `tango run`,
+which is more exposure than a publishing credential needs. Type it at the
+prompt, or use `TWINE_USERNAME` and `TWINE_PASSWORD` for the one command.
+The same applies to a Docker Hub token: `docker login` stores it in
+`~/.docker/config.json` and it does not belong here.
+
 ## Commit messages
 
 Follow the conventional commits format used throughout the project.
