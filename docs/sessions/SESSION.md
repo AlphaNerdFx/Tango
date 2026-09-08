@@ -16,16 +16,17 @@ installed environment at the time of writing, not recalled from memory. See
 
 ## 1. Where the project is
 
-**Tagged release:** v0.10.0, runs on any operating system, released
-5 September 2026. Twenty tags, twenty sets of GitHub release notes. The
+**Tagged release:** v0.10.0, runs on any operating system, 5 September 2026.
+Twenty tags, twenty sets of GitHub release notes. **v0.11.0, images on cards,
+is complete and its version is bumped, but the tag is not cut yet**, so this
+tree is ahead of its newest tag by design. The
 releases between this and v0.6.0, which the rest of this file still
 describes as current: v0.7.0 the command line as a product, v0.8.0 packaged
 and on PyPI, v0.8.1 documentation for the people who can now install it,
 v0.8.2 an install that looks after itself, v0.9.0 nothing fails without
 saying why, v0.10.0 cross-platform. `CHANGELOG.md` has an entry for each.
 
-**In development:** v0.11.0, images on cards. Feature complete as of
-8 September 2026 and awaiting a tag. What it carries:
+**In development:** v0.12.0, runs on modest hardware. What v0.11.0 shipped:
 
 - Pictures for concrete nouns, gated on a Wikidata concept rather than a
   text search, so the judgement is language independent
@@ -64,8 +65,9 @@ behind that. With one remote named `origin`, that command resolves and
 answers honestly. `git status -sb` still names the upstream and is still the
 better habit.
 
-**Test state, measured 8 September 2026:** 1215 passing, 0 failing, 33
-integration deselected (`make check`, exit 0). It was 972 at v0.6.0.
+**Test state, measured 8 September 2026:** 1230 passing, 0 failing, 33
+integration deselected (`make check`, exit 0). It was 972 at v0.6.0. The last
+15 arrived with the pre-release audit.
 **Coverage, measured 8 September 2026:** 86% overall, 3627 statements, 494
 missed. Weakest: `images.py` at 65%, because most image tests patch at the
 `find_images` seam and leave the batched resolver, the downloader and the
