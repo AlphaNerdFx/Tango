@@ -1860,11 +1860,11 @@ def fetch_definitions(
     # in both the NEW list and the user-approved QUEUE list.
     seen: set = set()
     unique_lemmas: list = []
-    for l in lemmas:
-        key = l.lower().strip()
+    for lemma in lemmas:
+        key = lemma.lower().strip()
         if key and key not in seen:
             seen.add(key)
-            unique_lemmas.append(l)
+            unique_lemmas.append(lemma)
     if len(unique_lemmas) < len(lemmas):
         logger.info(
             "Removed %d duplicate lemmas before fetching.",
