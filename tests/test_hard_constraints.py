@@ -623,6 +623,32 @@ class TestEnvironmentKeysAreDeclared:
             + "\n  ".join(unread)
         )
 
+    def test_the_example_file_documents_every_live_setting(self):
+        # The reverse direction, and the one that was missing. The three
+        # checks around this one all ask whether what is written down is
+        # real; none asked whether what is real is written down.
+        #
+        # Measured 8 September 2026: eight live settings had never reached
+        # the file a user copies, among them IMAGES_ENABLED, which is the
+        # headline setting of the release published that morning. A user
+        # reading .env.example would not have known the feature had a
+        # per-install switch at all.
+        from pipeline.config import KNOWN_ENV_KEYS, UNREAD_BY_DESIGN
+
+        root = Path(__file__).resolve().parent.parent
+        text = (root / ".env.example").read_text(encoding="utf-8")
+        documented = {
+            line.split("=", 1)[0].strip()
+            for line in text.splitlines()
+            if line.strip() and not line.strip().startswith("#") and "=" in line
+        }
+        missing = sorted(set(KNOWN_ENV_KEYS) - UNREAD_BY_DESIGN - documented)
+        assert not missing, (
+            "These are settings the code reads, so a user can set them, but "
+            "they are absent from the file a user copies:\n  "
+            + "\n  ".join(missing)
+        )
+
     def test_the_example_file_documents_the_real_names(self):
         # .env.example is what a user copies. A name in it that nothing
         # reads teaches the wrong setting; this repository shipped
