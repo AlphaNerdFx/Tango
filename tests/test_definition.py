@@ -494,6 +494,28 @@ class TestParseWiktionaryExamples:
         assert def_module._parse_wiktionary_examples(data) == ["Le chat dort."]
 
 
+@pytest.fixture(autouse=True)
+def _wiktionary_rest_api_is_not_a_unit_test_dependency(request, monkeypatch):
+    """
+    Stop `fetch_definition` reaching en.wiktionary.org in the default run.
+
+    It calls `_fetch_from_wiktionary` whenever nothing better supplied an
+    example, which is most of the paths tested here. That source was added
+    after these tests were written, so twelve of them quietly became
+    integration tests that passed while the network was up. The socket guard
+    in conftest.py found them on 8 September 2026.
+
+    Exempt: the class that tests the function itself, which mocks
+    `requests.get` and needs the real body underneath it. Renaming that class
+    does not fail silently, its tests start failing against a stub.
+    """
+    cls = getattr(request.node, "cls", None)
+    if cls is not None and cls.__name__ == "TestFetchFromWiktionary":
+        return
+    monkeypatch.setattr(definition_module, "_fetch_from_wiktionary",
+                        lambda *a, **k: None)
+
+
 class TestFetchFromWiktionary:
 
     def test_returns_language_section_on_success(self, monkeypatch):
@@ -1016,10 +1038,15 @@ class TestFetchDefinitionOrFallbackExample:
         assert extras.example == "Some native sentence."
         mock_wikt.assert_called_once_with("word", language)
 
+    # English resolves pronunciation through dictionaryapi when the index
+    # has no entry, which is a live request and nothing to do with the
+    # fallback example this test is about.
+    @patch("pipeline.definition._resolve_pronunciation", return_value=(None, None))
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
-    def test_wiktionary_attempted_for_english_too(self, mock_fetch, mock_wikt, mock_wn):
+    def test_wiktionary_attempted_for_english_too(self, mock_fetch, mock_wikt, mock_wn,
+                                                  mock_pron):
         """
         This path builds a fallback card for a lemma no source defined. It
         skipped English entirely, so an English fallback card carried the
@@ -1527,11 +1554,14 @@ class TestFetchDefinitions:
         assert result.not_found == ["content"]
         assert result.not_found_synonyms == {"content": ["contenu", "satisfait"]}
 
+    # Same reason as above: pronunciation is not what this test is about,
+    # and for English it reaches the network.
+    @patch("pipeline.definition._resolve_pronunciation", return_value=(None, None))
     @patch("pipeline.definition._wordnet_synonyms_antonyms")
     @patch("pipeline.definition._fetch_from_wiktionary")
     @patch("pipeline.definition.fetch_definition")
     def test_not_found_antonyms_populated_from_wordnet_english(
-        self, mock_fetch, mock_wikt, mock_wn
+        self, mock_fetch, mock_wikt, mock_wn, mock_pron
     ):
         mock_fetch.return_value = None
         mock_wn.return_value = ([], ["discontented"])
