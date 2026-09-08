@@ -33,7 +33,7 @@ import logging
 import os
 import re
 import shutil
-import subprocess
+import subprocess  # nosec B404 - one call, list form, see _run_install_model
 import sys
 import time
 from types import SimpleNamespace
@@ -1681,7 +1681,12 @@ def _run_install_model(language: str) -> int:
         return 1
 
     _info(f"Downloading spaCy model: {model}")
-    result = subprocess.run([sys.executable, "-m", "spacy", "download", model])
+    # nosec B603 - list form, so no shell parses this and no argument
+    # boundary can be crossed. `model` is a value from language.SPACY_MODELS,
+    # optionally with its size suffix swapped by the user's own
+    # SPACY_MODEL_SIZE_OVERRIDE. The worst a bad value does is ask spaCy
+    # for a model that does not exist.
+    result = subprocess.run([sys.executable, "-m", "spacy", "download", model])  # nosec B603
     if result.returncode == 0:
         _ok(f"Installed {model}.")
     else:
