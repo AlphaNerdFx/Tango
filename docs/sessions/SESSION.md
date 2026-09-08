@@ -75,8 +75,11 @@ cache repair paths uncovered. The 88% carried here since 18 August was taken
 about 1100 statements ago.
 
 **Overall completion estimate:** roughly 90 percent toward a v1.0.0 CLI
-tool. What is left is v0.12.0 (runs on modest hardware) and v0.13.0 (the
-freeze candidate); ROADMAP §2 has both.
+tool. What is left is one rung, v0.12.0, which runs on modest hardware and
+carries the 1.0 freeze work: the compatibility document, the deprecation
+policy and the coverage sweep. That was a separate v0.13.0 until 8 September
+2026, when the README was read against ROADMAP and did not have one. ROADMAP
+§2 has the detail.
 
 The pipeline works end to end for English with no setup beyond the spaCy
 model, and for any language with a built dictionary index. Cross-language
