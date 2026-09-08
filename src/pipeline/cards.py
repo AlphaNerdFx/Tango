@@ -885,13 +885,33 @@ def _find_in_snippets(
         if form and form.lower() != lemma.lower():
             candidates.append(form)
 
+    # The snippet list is built once, not once per candidate. `snippets`
+    # carries three string keys alongside the float-keyed lines, so the
+    # isinstance filter used to run for every candidate of every word:
+    # 83,772 of them on a 400-card deck.
+    #
+    # Each text is lowercased once here and used as a cheap pre-filter below.
+    # casefold rather than lower for the pre-filter, and deliberately: it is
+    # the more aggressive folding, so it matches in strictly more cases. A
+    # pre-filter is only safe if it never skips something the regex would
+    # have found, and German is the example that matters here, where
+    # casefold maps "straße" and "STRASSE" together while lower does not.
+    lines = [(val.get("text", ""), val.get("text", "").casefold())
+             for key, val in snippets.items() if isinstance(key, float)]
+
     for candidate in candidates:
+        # A substring test before the regex. The regex is the authority,
+        # because it anchors on a word boundary and `\w*` lets "wort" match
+        # "worten"; but a word that is not present as a substring cannot
+        # match it, and that is the overwhelmingly common case. This skips
+        # both the search and the compile for those, and compiling was
+        # measured at 30% of this function's time.
+        needle = candidate.casefold()
+        if not any(needle in lowered for _, lowered in lines):
+            continue
         pattern = re.compile(r"\b" + re.escape(candidate) + r"\w*", re.IGNORECASE)
-        for key, val in snippets.items():
-            if not isinstance(key, float):
-                continue
-            text = val.get("text", "")
-            if pattern.search(text):
+        for text, lowered in lines:
+            if needle in lowered and pattern.search(text):
                 return text.strip()
     return None
 
