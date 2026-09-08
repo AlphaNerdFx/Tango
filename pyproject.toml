@@ -100,9 +100,25 @@ wordnet = [
     "nltk>=3.8",
 ]
 translation = [
-    # Required for DEF_LANG translation mode.
+    # Required for --def-lang translation mode.
     # Install via: make translate-setup
     "argostranslate>=1.9",
+]
+
+# The local LibreTranslate *server*, separate since 8 September 2026 and
+# separate on purpose.
+#
+# Translation itself does not need it. `translation.py` tries community
+# mirrors first and falls back to a local server only if one is running, so
+# the common case never touches this. What it costs is not small:
+# libretranslate pulls argos-translate-files, which pulls PyMuPDF at 63 MB,
+# plus lxml and beautifulsoup4, none of which this project imports. Anyone
+# translating through a mirror or through argostranslate directly was paying
+# for a document-conversion stack they never called.
+#
+# `make translate-setup` still installs it, so nothing about the guided path
+# changes for someone who wants a server of their own.
+translation-server = [
     "libretranslate>=1.6",
 ]
 dev = [
