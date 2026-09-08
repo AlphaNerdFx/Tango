@@ -3045,6 +3045,64 @@ migration path and the risk attached to a file format that v1.0.0 freezes.
 That is a decision, not a measurement, and it is recorded here so that it is
 taken with the numbers in view.
 
+### 8.51 The transcript search folded the whole transcript once per word
+
+Measured 9 September 2026, profiling `cards.build_package` on 400 cards over
+a 300-line transcript, because the v0.12.0 rung asks what a run costs on a
+modest machine and nobody had profiled the build.
+
+`_find_in_snippets` was 66% of it. The function takes the `snippets` dict,
+which mixes float-keyed transcript lines with three string-keyed metadata
+entries, so it has to filter before it can search. It did that filtering
+inside the candidate loop, and it compiled a regex for every candidate
+before knowing whether the word was in the transcript at all.
+
+That gave three costs, each multiplying the one above it:
+
+| | per build |
+|---|---|
+| `isinstance` filter runs | once per candidate per word |
+| casefolds of the transcript | 400 words x 300 lines = 120,000 |
+| regex compiles | 984, most for words that were not there |
+
+Three changes, in the order they were made:
+
+1. The filter moved out of the candidate loop, so it runs once per word
+   rather than once per candidate.
+2. A substring test before the compile. The regex stays the authority,
+   because it anchors on a word boundary and `\w*` lets "wort" match
+   "worten", but a word that is not present as a substring cannot match it,
+   and that is the common case. Compiles fell from 984 to 108.
+3. The folding moved out of the function entirely, into `_fold_snippets`,
+   which `build_package` calls once and passes down. Folding is proportional
+   to transcript length, so doing it per word made it length times
+   vocabulary. 120,000 casefolds became 300.
+
+Measured on the search alone, seven runs, median, 400 words over 300 lines:
+
+| | before | after |
+|---|---|---|
+| every word present | 85.6 ms | **10.1 ms** |
+| no word present | 131.4 ms | **9.9 ms** |
+
+The miss case was the worse of the two before, because a word that is absent
+compiles its regex and scans every line without ever returning early. It is
+now the same price as a hit. A whole package build is 28% faster rather than
+8x, because genanki's own SQLite write is a fixed 100 ms floor underneath
+it, and that is third-party.
+
+**One detail is load-bearing and was nearly wrong.** The pre-filter is only
+safe if it never skips a line the regex would have matched, and
+`re.IGNORECASE` folds a few characters that `str.lower()` leaves alone. The
+first comment written here claimed German eszett as the example. Checked
+against `re` directly, that is false: `re.IGNORECASE` does not match
+"strasse" against "straße" either, so there is no match to lose. The real
+case is the long s, U+017F: `re.IGNORECASE` does match it against "s",
+`"\u017f".lower()` is unchanged, and `"\u017f".casefold()` is "s". So the fold is
+`casefold`, and the test asserts both premises before asserting the
+behaviour, because the reasoning that picked the wrong example would have
+been just as confident about the wrong fold.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
