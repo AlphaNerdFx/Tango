@@ -12,7 +12,6 @@ will show the wrong version on that release's page forever.
 import importlib.util
 from pathlib import Path
 
-import pytest
 
 _ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location(

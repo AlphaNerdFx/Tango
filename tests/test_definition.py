@@ -12,8 +12,6 @@ import json
 import logging
 import sqlite3
 import threading
-import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from types import SimpleNamespace
@@ -1134,7 +1132,7 @@ class TestPronunciationResolution:
         monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
         monkeypatch.setattr(
             def_module.wiktdata, "lookup",
-            lambda w, l, pos=None: seen.update(word=w, lang=l) or self._entry(),
+            lambda w, lang, pos=None: seen.update(word=w, lang=lang) or self._entry(),
         )
         ipa, audio = def_module._resolve_pronunciation("haus", "de")
         assert seen == {"word": "haus", "lang": "de"}
@@ -1269,7 +1267,7 @@ class TestOfflineDictionaryIntegration:
         monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
         monkeypatch.setattr(
             def_module.wiktdata, "lookup",
-            lambda w, l, pos=None: called.append(w) or self._entry(),
+            lambda w, lang, pos=None: called.append(w) or self._entry(),
         )
         result = fetch_definition("contaminate", None, use_cache=False, language="en")
         assert result.source == "merriam-webster"
@@ -2179,7 +2177,7 @@ class TestCacheKeyCarriesPartOfSpeech:
         monkeypatch.setattr(def_module.wiktdata, "is_available", lambda _l: True)
         monkeypatch.setattr(
             def_module.wiktdata, "lookup",
-            lambda w, l, pos=None: seen.setdefault(w, pos),
+            lambda w, lang, pos=None: seen.setdefault(w, pos),
         )
         with patch("pipeline.definition._fetch_from_mw", return_value=None), \
              patch("pipeline.definition._fetch_from_dictapi", return_value=None), \

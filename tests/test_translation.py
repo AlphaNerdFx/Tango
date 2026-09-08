@@ -10,7 +10,7 @@ Run: pytest tests/test_translation.py -m "not integration"
 """
 
 import os
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 import pytest
 
 import pipeline.translation as trans_module
@@ -29,7 +29,6 @@ from pipeline.translation import (
     translate_local,
     translate_word,
     try_community_mirror,
-    LIBRETRANSLATE_MIRRORS,
 )
 
 
@@ -310,7 +309,6 @@ class TestDownloadModel:
 
     def test_shows_progress_bar_during_download(self, capsys):
         """Verify progress bar format is correct by testing the rendering logic directly."""
-        import sys
         bar_width = 40
         received  = 524288   # 0.5MB
         total     = 1048576  # 1MB

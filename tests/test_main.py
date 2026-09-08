@@ -7,11 +7,10 @@ No real pipeline modules are called, all are mocked.
 Run: pytest tests/test_main.py -m "not integration"
 """
 
-import json
 import logging
 import time
 from pathlib import Path, PurePosixPath
-from unittest.mock import DEFAULT, MagicMock, patch, call
+from unittest.mock import DEFAULT, MagicMock, patch
 
 import re
 import pytest

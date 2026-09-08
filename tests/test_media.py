@@ -9,7 +9,6 @@ depend on what a previous run left there.
 """
 
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest

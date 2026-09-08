@@ -7,7 +7,7 @@ Run unit tests only:    pytest tests/test_transcript.py -m "not integration"
 Run all including live: pytest tests/test_transcript.py
 """
 
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
 import pytest
 
 import pipeline.transcript as transcript

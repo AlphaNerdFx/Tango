@@ -11,8 +11,7 @@ Run all (Anki needed):  pytest tests/test_deck.py
 import json
 import logging
 import sqlite3
-from pathlib import Path
-from unittest.mock import MagicMock, patch, mock_open
+from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
@@ -63,7 +62,6 @@ def sample_vocabulary() -> dict[str, int]:
 @pytest.fixture(autouse=True)
 def tmp_db(tmp_path, monkeypatch):
     """Redirect SQLite DB to a temp path for every test."""
-    import pipeline.deck as deck_module
     db_file = tmp_path / "test_pipeline.db"
     monkeypatch.setattr("pipeline.config.DB_PATH", db_file)
     monkeypatch.setattr("pipeline.deck.DB_PATH", db_file)

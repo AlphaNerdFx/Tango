@@ -5,14 +5,13 @@ and transcript selection preference (manual over auto-generated).
 Run: pytest tests/test_language.py -m "not integration"
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 import pipeline.language as language_module
 from pipeline.language import (
     LANGUAGE_MAP,
-    SPACY_MODELS,
     LanguageResolutionError,
     SpacyModelUnavailableError,
     _infer_from_deck_name,
