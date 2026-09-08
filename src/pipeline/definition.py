@@ -41,13 +41,11 @@ from __future__ import annotations
 from pipeline import TangoError
 
 import logging
-import os
 import re
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Callable, Optional
 
 import requests
@@ -550,21 +548,35 @@ def _create_definitions_table(conn: sqlite3.Connection) -> None:
     """)
 
 
+def _add_column_if_missing(conn: sqlite3.Connection, column: str) -> None:
+    """
+    Add one column to `definitions`, ignoring only "it is already there".
+
+    SQLite has no ADD COLUMN IF NOT EXISTS, so the idiom is to try it and
+    swallow the error. The trap is swallowing *every* error: this ran under
+    `except Exception: pass`, which also hid a locked database, a corrupt
+    file and a read-only disk, and then reported nothing. A migration that
+    silently does not happen is exactly the failure v0.9.0 set out to
+    remove, and it would surface much later as a missing column.
+
+    So only the duplicate-column case is ignored. Anything else is raised.
+    """
+    try:
+        conn.execute(f"ALTER TABLE definitions ADD COLUMN {column} TEXT")
+    except sqlite3.OperationalError as exc:
+        if "duplicate column" not in str(exc).lower():
+            raise
+
+
 def _init_schema(conn: sqlite3.Connection) -> None:
     _create_definitions_table(conn)
     # Migrate existing databases that predate the example_dict2 column
-    try:
-        conn.execute("ALTER TABLE definitions ADD COLUMN example_dict2 TEXT")
-    except Exception:
-        pass  # Column already exists, safe to ignore
+    _add_column_if_missing(conn, "example_dict2")
     # Same pattern for the ADR-009 phase 1 columns. The cache stores
     # assembled card fields (8.27), so pronunciation has to live here too or
     # every cache hit would ship a card with the section missing.
     for column in ("ipa", "audio_url"):
-        try:
-            conn.execute(f"ALTER TABLE definitions ADD COLUMN {column} TEXT")
-        except Exception:
-            pass  # Column already exists, safe to ignore
+        _add_column_if_missing(conn, column)
     _migrate_cache_keys(conn)
     conn.commit()
 

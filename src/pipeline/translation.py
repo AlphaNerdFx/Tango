@@ -381,7 +381,10 @@ def install_translation(from_code: str, to_code: str) -> bool:
     try:
         from argostranslate import translate
         translate.get_installed_languages.cache_clear()
-    except Exception:  # pragma: no cover, cache is an implementation detail
+    except (ImportError, AttributeError):  # pragma: no cover
+        # Only two things can go wrong here and both are upstream shape:
+        # argostranslate absent, or a version whose accessor is not cached.
+        # Catching Exception would also have hidden a real failure in it.
         pass
 
     return is_translation_available(from_code, to_code)

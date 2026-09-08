@@ -716,6 +716,13 @@ def build_index(
     if archive is None:
         archive = DICT_DIR / f"{language}-extract.jsonl.gz"
         url = download_url(language)
+        # The URL is built from a constant template with a language code in
+        # a path segment, so it is always https. Checking it makes that an
+        # enforced invariant instead of one a reader has to reconstruct, and
+        # urlretrieve will happily open file:// or ftp:// if ever handed one.
+        if not url.startswith("https://"):
+            raise DictionaryDownloadError(
+                f"Refusing to download '{language}' from a non-HTTPS URL: {url}")
         _say(f"Downloading {url} (this is a large one-time download)...")
         try:
             urllib.request.urlretrieve(url, archive)
