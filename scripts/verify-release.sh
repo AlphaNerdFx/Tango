@@ -86,6 +86,14 @@ if [ -n "$DL" ] && [ "$DL" != "$LC" ]; then
 fi
 
 echo
+echo "Card images: off by default, and this is the only step that exercises"
+echo "  them. A picture roughly doubles the package and the run makes about"
+echo "  one extra request per 50 words. Step 4 reads the two fields back."
+read -rp "Include images? [y/N]: " IMG
+IMG_ARGS=""
+case "$IMG" in [Yy]*) IMG_ARGS="IMAGES=1";; esac
+
+echo
 echo "Decks in your collection:"
 mapfile -t DECKS < <(ank deckNames '{}' | jq -r '.result[]' | sort)
 for i in "${!DECKS[@]}"; do printf "  %3d. %s\n" "$((i+1))" "${DECKS[$i]}"; done
@@ -104,6 +112,7 @@ echo
 echo "  video      : $VID"
 echo "  language   : $LC"
 echo "  definitions: ${DL:-native ($LC)}"
+echo "  images     : $([ -n "$IMG_ARGS" ] && echo on || echo off)"
 echo "  deck       : $DECK"
 echo
 
@@ -128,7 +137,7 @@ echo; echo "=== 1. first run into the empty deck, expect all NEW ==="
 # thing from the deck-level duplicate check this script is testing, and it
 # would otherwise exit before doing any work on any video you have run before.
 RUN1=$(mktemp)
-printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" $DEF_ARGS FORCE=1 > "$RUN1" 2>&1
+printf 'n\nn\n' | make run VIDEO_ID="$VID" DECK="$DECK" LANGUAGE="$LC" $DEF_ARGS $IMG_ARGS FORCE=1 > "$RUN1" 2>&1
 grep -E "Target language|Deck check|Definitions:|Cards:|Package:" "$RUN1"
 
 echo; echo "=== 2. import the .apkg ==="
@@ -157,7 +166,8 @@ IDS=$(find_in_deck | jq -c .result)
 ank notesInfo "$(jq -nc --argjson n "$IDS" '{notes:$n}')" | jq -r '
   .result as $n | ($n|length) as $t |
   ["Definition","1st Example Sentence","2nd Example Sentence",
-   "Example from Youtube Video","Synonyms","Antonyms"][] as $f |
+   "Example from Youtube Video","Synonyms","Antonyms",
+   "Image","Attribution"][] as $f |
   ($n | map(select(.fields[$f].value != ""
                    and .fields[$f].value != "No definition found")) | length) as $c |
   "  \($f): \($c)/\($t) (\((100*$c/$t)|floor)%)"'
