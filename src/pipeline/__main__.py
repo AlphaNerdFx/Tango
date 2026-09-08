@@ -187,7 +187,7 @@ def _prompt_import(apkg_path: Path) -> None:
     answer = _ask(f"  Import {apkg_path.name} into Anki now? [y/N]: ", default="n")
 
     if answer != "y":
-        _info(f"Skipped. Import manually: File → Import in Anki.")
+        _info("Skipped. Import manually: File → Import in Anki.")
         return
 
     # Align the collection's notetype with cards.FIELDS BEFORE importing.
@@ -353,8 +353,8 @@ def _print_summary(
         label = _SOURCE_LABELS.get(source, source)
         print(f"  {YELLOW}Stopped:  {label} stopped answering partway through this "
               f"run and was skipped for the rest of it.{RESET}")
-        print(f"            That is why cards above are missing content, rather "
-              f"than the words being unknown.")
+        print("            That is why cards above are missing content, rather "
+              "than the words being unknown.")
         if source == "mw":
             print(f"            {DIM}-> Retry later; whatever already worked is "
                   f"cached and will not be refetched.{RESET}")
@@ -1528,8 +1528,8 @@ def _run_doctor() -> int:
     if stray:
         print(f"    .env           {len(stray)} setting(s) that nothing reads: "
               f"{', '.join(stray)}")
-        print(f"                   these have no effect. See .env.example for "
-              f"the names that do.")
+        print("                   these have no effect. See .env.example for "
+              "the names that do.")
     print()
 
     # ── spaCy models: without one, a language cannot be processed at all ──
