@@ -182,7 +182,7 @@ def media_filename(lemma: str, language: str, url: str) -> str:
     # protected by it. Saying so lets a reader, and a scanner, tell this
     # apart from a real cryptographic use. Changing the algorithm would
     # rename every cached file and re-download them all, for nothing.
-    digest = hashlib.sha1(f"{language}:{lemma}".encode("utf-8"),
+    digest = hashlib.sha1(f"{language}:{lemma}".encode(),
                           usedforsecurity=False).hexdigest()[:8]
     readable = _UNSAFE.sub("-", lemma.lower()).strip("-")
     stem = "-".join(part for part in (_PREFIX, language, readable, digest) if part)
