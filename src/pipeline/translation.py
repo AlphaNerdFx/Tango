@@ -196,56 +196,19 @@ def _repair_packages_dir() -> Optional[str]:
 
 
 # Runs at import, before any argostranslate import can read the variable.
+# The result of the repair, kept so callers can explain what happened rather
+# than re-deriving it. This replaced `check_packages_dir()`, a diagnostic that
+# asked the same question and, after this repair started running at import,
+# could never answer yes: the repair pops the variable, so the diagnostic saw
+# nothing set and returned None every time. Verified 8 September 2026 by
+# importing with a misconfigured environment and calling it. Two callers were
+# receiving None and reporting nothing.
 _packages_dir_note = _repair_packages_dir()
 if _packages_dir_note:
     logger.warning("%s", _packages_dir_note)
 
 
 _warned_packages_dir: set[str] = set()
-
-
-def check_packages_dir() -> Optional[str]:
-    """
-    Return a warning when ARGOS_PACKAGES_DIR hides the installed models.
-
-    argostranslate reads ARGOS_PACKAGES_DIR itself, and config.py's
-    load_dotenv() puts whatever .env holds into the environment. So a value
-    pointing at an empty directory makes argostranslate report zero installed
-    packages, translation silently falls back to native definitions, and the
-    same machine translates fine from a shell where .env was never loaded.
-    That is exactly the failure this function exists to name: it cost a full
-    debugging session precisely because nothing said anything.
-
-    Returns:
-        A human-readable explanation, or None when the setting is fine.
-    """
-    configured = os.getenv("ARGOS_PACKAGES_DIR")
-    if not configured:
-        return None
-
-    try:
-        from argostranslate import package as pkg
-        visible = pkg.get_installed_packages()
-    except Exception:
-        return None
-
-    if visible:
-        return None
-
-    default_dir = Path.home() / ".local" / "share" / "argos-translate" / "packages"
-    elsewhere = default_dir.exists() and any(default_dir.iterdir())
-    if not elsewhere:
-        # Nothing installed anywhere -- an ordinary "no models yet" state,
-        # not a misconfiguration.
-        return None
-
-    return (
-        f"ARGOS_PACKAGES_DIR is set to '{configured}', which contains no "
-        f"translation models, but models are installed in '{default_dir}'. "
-        f"argostranslate reads that variable directly, so translation will "
-        f"silently fall back to native definitions. Either unset it in .env "
-        f"or move the packages there."
-    )
 
 
 def is_model_installed(from_code: str, to_code: str) -> bool:
@@ -646,9 +609,8 @@ def translate_word(
         # German "je" matched the English letter J. Say so, once per pair.
         if pair not in _warned_packages_dir:
             _warned_packages_dir.add(pair)
-            hint = check_packages_dir()
-            if hint:
-                logger.warning("%s", hint)
+            if _packages_dir_note:
+                logger.warning("%s", _packages_dir_note)
             else:
                 logger.warning(
                     "No translation model for %s. Install it with "

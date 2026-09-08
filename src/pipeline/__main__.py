@@ -1617,10 +1617,13 @@ def _run_doctor() -> int:
     # ── Translation: only needed for --def-lang ──
     print("  Translation models (only needed for --def-lang)")
     try:
-        from pipeline.translation import check_packages_dir
+        # What the import-time repair actually did, if anything. This read
+        # `check_packages_dir()` until 8 September 2026, which could not fire
+        # once the repair started popping the variable, so doctor stayed
+        # silent about a misconfiguration that had just been worked around.
+        from pipeline.translation import _packages_dir_note as note
         from argostranslate import package as argos_pkg
 
-        note = check_packages_dir()
         if note:
             missing += 1
             print(f"    WARNING {note}")
