@@ -651,18 +651,24 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1204 passing, 33 deselected. The count drifts as tests are added,
+Expected: 1290 passing, 33 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
 make coverage      # unit tests plus a per-module line-coverage report
 ```
 
-Measured 18 August 2026: 88% overall, 2549 statements, 308 missed. The
-weakest modules are `translation.py` at 71%, `__main__.py` and
-`transcript.py` at 82%. Every bug found by coverage work so far has been
-wiring between modules rather than logic inside one. See ARCHITECTURE.md
-section 10.
+Measured 9 September 2026: 89% overall, 3623 statements, 397 missed. The
+weakest modules are `translation.py` at 76%, `__main__.py` and
+`antonyms.py` at 84%, and `transcript.py` at 87%. Every bug found by
+coverage work so far has been wiring between modules rather than logic
+inside one. See ARCHITECTURE.md section 10.
+
+The audit that took that number also ran `bandit` and `pip-audit`, both in
+the `dev` extra and reachable as `make audit`. Both are clean as of that
+date: no bandit findings at any severity, and the eleven remaining
+dependency advisories all sit in the local translation server, which is its
+own extra and is not part of any install a normal user performs.
 
 Re-measure before quoting it. This file has carried a stale coverage number
 four separate times, and the 87% sitting here until today was stale again:
