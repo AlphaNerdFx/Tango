@@ -17,6 +17,7 @@
 #                       optional LANGUAGE, DEF_LANG, IMAGES=1, FORCE=1)
 #   make review      : process the review.json file (optional LANGUAGE, DEF_LANG)
 #   make backlog     : process the Anki backlog for a deck (optional LANGUAGE, DEF_LANG)
+#   make audit       : security audit of the source and the dependency tree
 #   make dist        : build the PyPI distribution with pinned README badges
 #   make clean       : remove venv, output, cache files
 #   make check-os    : warn if running on Windows without a compatible shell
@@ -70,7 +71,7 @@ CYAN   := \033[36m
 
 .PHONY: all venv install setup spacy-model dictionary antonyms translate-setup translate-stop \
         test test-all coverage format lint typecheck translate-model doctor \
-        run review backlog dist clean check-os help
+        run review backlog dist audit clean check-os help
 
 .DEFAULT_GOAL := help
 
@@ -371,6 +372,25 @@ typecheck: check-os
 	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Running mypy...\n"
 	@$(VENV_PYTHON) -m mypy src/pipeline/ --ignore-missing-imports
 	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Type check passed.\n"
+
+# -- audit --------------------------------------------------------------------
+
+# Security audit: the source, then the installed dependency tree.
+#
+# Advisory rather than gating, like ruff and mypy in `check`, because a new
+# CVE published overnight is not a reason for today's commit to fail. It is
+# a reason to know. First run, 8 September 2026: 37 known vulnerabilities in
+# 6 packages and one HIGH in the source.
+audit: check-os
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Source, bandit:\n"
+	@$(VENV_PYTHON) -m bandit -r src/pipeline/ -q 2>/dev/null \
+		| grep -E "Issue|Severity|Location" | head -30 || true
+	@$(VENV_PYTHON) -m bandit -r src/pipeline/ 2>/dev/null \
+		| grep -A 4 "Total issues" || true
+	@printf "$(CYAN)$(BOLD)[info]$(RESET)  Dependencies, pip-audit:\n"
+	@$(VENV_DIR)/bin/pip-audit --progress-spinner off 2>/dev/null \
+		| grep -E "^Found|No known|PYSEC|GHSA" | head -20 || true
+	@printf "$(GREEN)$(BOLD)[ ok ]$(RESET)  Audit complete (advisory, not gating).\n"
 
 # -- dist ---------------------------------------------------------------------
 
