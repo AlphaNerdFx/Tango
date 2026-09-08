@@ -37,7 +37,20 @@ IP someone read as the shipped default lived in an uncommitted `.env`. WSL
 is now detected and handled by retrying rather than by a different default
 (ARCHITECTURE 8.45). The `/mnt/c` path translation in `__main__.py` is
 already conditional on `is_wsl()`.
-**Current tag:** v0.10.0, runs on any operating system, released
+**Current tag:** v0.10.0. **`__version__` is already `0.11.0`**: the bump and
+its documentation landed on 8 September 2026 and the tag is deliberately
+pending, so the two disagree until it is cut. That is a known interim state,
+not the release bug section 15 describes, which is about a mismatch nobody
+noticed.
+
+**v0.11.0, images on cards gated to concrete nouns, is complete and awaiting
+that tag.** A picture for 45.9% of nouns, chosen by resolving the word
+to a Wikidata concept rather than searching text; refused where the concept
+is abstract; dropped where it describes a different sense than the card's
+definition; and always carrying the credit its licence requires. Off by
+default, asked for with `--images`.
+
+v0.10.0 before it was runs on any operating system, released
 5 September 2026. CI runs the suite on Linux, macOS and Windows, because
 "should work" is not evidence and development happens on WSL2. It found a
 real bug on its first run: an interrupted index build unlinked its
@@ -109,8 +122,8 @@ in the learner's language). Every tag has GitHub release notes.
 longer pulls 4.5 GB of CUDA nobody can call, which took `.tangovenv` from
 5.9 GB to 2.2 GB. It shipped inside v0.6.0 rather than waiting for v0.12.0,
 where the rest of the size work lives.
-**In progress:** v0.11.0, images on cards, gated to concrete nouns. The
-feature is built and off by default (`IMAGES_ENABLED`). ADR-009's phase 3
+**Shipped in v0.11.0:** images on cards, gated to concrete nouns, off unless
+a run asks for them with `--images`. ADR-009's phase 3
 was redesigned on 6 September 2026: it had specified Wikimedia Commons text
 search, which matches a spelling rather than a meaning, and that is why
 `laufen` returned a coin from the town of Laufen. Resolving the lemma to a
@@ -159,6 +172,14 @@ Images are asked for per run with `--images`, and stay off by default.
 `IMAGES_ENABLED` sets the default for every run and the flags override it
 either way. The cost is why: a picture roughly doubles a deck that already
 carries audio, 4.8 MB of 10.1 MB on a real 299-card run.
+
+**Next:** v0.12.0, runs on modest hardware. Three items of that rung were
+found wrong when traced on 8 September 2026 and are corrected in ROADMAP
+before any of it is built: `pymupdf` arrives through libretranslate rather
+than being a stray, `minisbd` cannot replace `stanza` because it depends on
+it, and the spaCy model clutter is a developer cost rather than a user one.
+The real user-facing weights are the base install, one dictionary index per
+language, and torch for anyone who installs translation.
 
 The
 packaging rung moved forward three places on 27 August 2026, from v0.10.0:
