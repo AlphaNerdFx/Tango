@@ -26,6 +26,7 @@ from pipeline.cards import (
     _build_note,
     _build_output_path,
     _find_in_snippets,
+    _fold_snippets,
     _format_pills,
     build_package,
     PackageResult,
@@ -1256,6 +1257,89 @@ class TestSurfaceFormMatching:
         self, french_snippets
     ):
         assert _find_in_snippets("sais", french_snippets, ["sais"]) is not None
+
+    def test_the_fold_keeps_transcript_lines_and_drops_the_metadata_keys(
+        self, sample_snippets
+    ):
+        # `snippets` mixes float-keyed lines with string-keyed metadata.
+        # Folding must carry the three lines and none of the metadata,
+        # or "_language_code" becomes a searchable sentence.
+        folded = _fold_snippets(sample_snippets)
+        assert len(folded) == 3
+        texts = [text for text, _ in folded]
+        assert "So companies had to develop permanent solutions" in texts
+        assert "full text here" not in texts
+        assert all(lowered == text.casefold() for text, lowered in folded)
+
+    def test_a_prefolded_transcript_gives_the_same_answer_as_folding_inside(
+        self, sample_snippets, french_snippets
+    ):
+        # The optimization is only safe if the fast path cannot disagree
+        # with the slow one. Matches in the LAST line matter as much as the
+        # first: a fast path that read only lines[0] agreed with the slow
+        # one on every first-line case, so those alone cannot catch it.
+        cases = [
+            ("develop",      sample_snippets, None),   # first line
+            ("contaminated", sample_snippets, None),   # middle line
+            ("photographic", sample_snippets, None),   # last line
+            ("philosophy",   sample_snippets, None),   # absent
+            ("savoir",       french_snippets, ["sais"]),      # first line
+            ("ecouter",      french_snippets, ["écoutez"]),   # last line
+        ]
+        for lemma, snippets, forms in cases:
+            slow = _find_in_snippets(lemma, snippets, forms)
+            fast = _find_in_snippets(lemma, snippets, forms,
+                                     lines=_fold_snippets(snippets))
+            assert slow == fast, lemma
+
+    def test_a_word_absent_as_a_substring_is_still_reported_absent(
+        self, sample_snippets
+    ):
+        # The substring pre-filter skips the regex entirely for these. If it
+        # ever skipped a word that IS present, this file's other tests would
+        # catch it; this pins the other direction, that skipping still
+        # returns None rather than a stale or wrong line.
+        assert _find_in_snippets("philosophy", sample_snippets) is None
+        assert _find_in_snippets("zzz", sample_snippets, ["qqq"]) is None
+
+    def test_the_pre_filter_folds_the_way_the_regex_does(self):
+        # The pre-filter must never skip a line the regex would have
+        # matched. re.IGNORECASE matches "s" against a long s, and
+        # str.lower() does not fold it, so a lower() pre-filter would skip
+        # this line and the card would silently lose its example.
+        # Checked against re directly rather than assumed: plain "STRASSE"
+        # does not distinguish the two, and German eszett does not either.
+        snippets = {0.0: {"end": 1.0, "text": "der \u017fchnee f\u00e4llt"},
+                    "_full_text": "f", "_snippet_count": 1}
+        assert re.compile(r"\bschnee\w*", re.IGNORECASE).search(
+            "der \u017fchnee f\u00e4llt"), "premise: the regex does match a long s"
+        assert "schnee" not in "der \u017fchnee f\u00e4llt".lower(), (
+            "premise: lower() would skip it")
+        assert _find_in_snippets("schnee", snippets) is not None
+
+    def test_build_package_folds_the_transcript_once_not_once_per_word(
+        self, tmp_path, monkeypatch
+    ):
+        # This is the optimization itself. Folding is proportional to
+        # transcript length, so doing it per word made the cost length
+        # times vocabulary: 120,000 casefolds on a 400-card deck over a
+        # 300-line transcript, against 300.
+        calls = []
+        real = cards_module._fold_snippets
+        monkeypatch.setattr(cards_module, "_fold_snippets",
+                            lambda s: calls.append(1) or real(s))
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        found = [
+            DefinitionResult(f"word{i}", "a definition", "One.", "Two.",
+                             None, [], [], "noun", "test")
+            for i in range(5)
+        ]
+        snippets = {float(i): {"end": i + 1.0, "text": f"line {i} here"}
+                    for i in range(4)}
+        snippets["_full_text"] = "f"
+        cards_module.build_package(VIDEO_ID, DECK_NAME, found, ["gone"],
+                                   language="en", snippets=snippets)
+        assert len(calls) == 1, f"folded {len(calls)} times, expected once"
 
     def test_build_package_uses_surface_forms_for_fallback_cards(
         self, french_snippets, tmp_path
