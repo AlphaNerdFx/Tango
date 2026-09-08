@@ -12,6 +12,30 @@ Entries for v0.4.5 and earlier were reconstructed from tag messages and
 `git log` when this file was created at v0.5.0. They summarise each release
 rather than list every change.
 
+## [Unreleased]
+
+Working towards v0.12.0, runs on modest hardware.
+
+### Changed
+
+- **The local LibreTranslate server is its own extra**,
+  `tango-anki[translation-server]`. Translation itself never needed it:
+  community mirrors and argostranslate cover the feature, while the server
+  pulled **134 MB across 36 packages**, including PyMuPDF at 65 MB and lxml,
+  for document conversion this project does not do. `make translate-setup`
+  installs both, so the guided path is unchanged.
+
+### Fixed
+
+- **Thirteen unit tests were making real network requests**, which breaks
+  CLAUDE.md 3.5. Twelve reached en.wiktionary.org or dictionaryapi.dev and
+  one reached Wikidata. None was written that way: each mocked every source
+  its function had at the time and stopped being complete when another was
+  added, silently. `conftest.py` now fails any default-run test that opens an
+  outbound connection. ARCHITECTURE 8.49.
+- A 35 MB measurement intermediate was living in `dictionaries/`, whose size
+  is one of v0.12.0's acceptance targets.
+
 ## [0.11.0] - 2026-09-08
 
 Images on cards, gated to concrete nouns. ADR-009 phase 3. Off by default and

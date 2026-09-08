@@ -244,6 +244,18 @@ pip install "tango-anki[translation]"
 tango install-translation de:en
 ```
 
+That is enough to translate: Tango uses community mirrors, and argostranslate
+locally. Only add the server if you want to run LibreTranslate yourself:
+
+```bash
+pip install "tango-anki[translation,translation-server]"
+```
+
+It is a separate extra because it is not free. Measured 8 September 2026,
+the server pulls **134 MB across 36 packages** that translation itself never
+touches, PyMuPDF and lxml among them, for converting documents Tango does
+not convert.
+
 ### Definition coverage
 
 English is covered by Merriam-Webster and dictionaryapi.dev out of the box, at around 98%.
