@@ -9,6 +9,7 @@ No real translation models or internet access required for unit tests.
 Run: pytest tests/test_translation.py -m "not integration"
 """
 
+import os
 from unittest.mock import MagicMock, patch, call
 import pytest
 
@@ -652,3 +653,73 @@ class TestErrorMessagesNameTheFix:
         # Installing is not the only fix, and for a user who does not want
         # cross-language definitions it is the wrong one.
         assert "--def-lang" in str(ModelNotInstalledError("de", "en"))
+
+
+class TestTheMisconfigurationThatCostASession:
+    """
+    `_repair_packages_dir` exists because of a specific, expensive failure:
+    `ARGOS_PACKAGES_DIR` in `.env` pointed at an empty directory,
+    argostranslate read that variable itself and reported zero installed
+    packages, translation fell back to native definitions without a word,
+    and the same machine translated fine from a shell where `.env` was never
+    loaded. SESSION.md records it as one of four simultaneous causes, each
+    hiding the next.
+
+    It runs at import and was never tested. Added 8 September 2026 during a
+    coverage audit, which found it among the largest uncovered blocks in the
+    module, and which then found that the diagnostic beside it,
+    `check_packages_dir`, could no longer fire at all: this repair pops the
+    variable, so the diagnostic saw nothing set and returned None every time.
+    That function is gone and its two callers now read the note this one
+    leaves.
+    """
+
+    def test_no_setting_is_nothing_to_repair(self, monkeypatch):
+        monkeypatch.delenv("ARGOS_PACKAGES_DIR", raising=False)
+        assert trans_module._repair_packages_dir() is None
+
+    def test_a_directory_holding_models_is_left_alone(self, monkeypatch, tmp_path):
+        configured = tmp_path / "packages"
+        (configured / "translate-de_en").mkdir(parents=True)
+        monkeypatch.setenv("ARGOS_PACKAGES_DIR", str(configured))
+        assert trans_module._repair_packages_dir() is None
+        assert os.getenv("ARGOS_PACKAGES_DIR") == str(configured), (
+            "a working setting must survive")
+
+    def test_nothing_installed_anywhere_is_a_fresh_install_not_a_fault(
+            self, monkeypatch, tmp_path):
+        # The distinction that keeps this from being noise: no models at all
+        # is an ordinary state for someone who has not installed one yet.
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        home = tmp_path / "home"
+        (home / ".local" / "share" / "argos-translate" / "packages").mkdir(parents=True)
+        monkeypatch.setenv("ARGOS_PACKAGES_DIR", str(empty))
+        monkeypatch.setattr(trans_module.Path, "home", staticmethod(lambda: home))
+        assert trans_module._repair_packages_dir() is None
+        assert os.getenv("ARGOS_PACKAGES_DIR") == str(empty)
+
+    def test_models_elsewhere_means_the_setting_is_dropped_for_this_run(
+            self, monkeypatch, tmp_path):
+        # The actual failure, and the repair: the variable is ignored for
+        # this process so translation works, and .env is left untouched.
+        empty = tmp_path / "empty"
+        empty.mkdir()
+        home = tmp_path / "home"
+        real = home / ".local" / "share" / "argos-translate" / "packages"
+        (real / "translate-de_en").mkdir(parents=True)
+        monkeypatch.setenv("ARGOS_PACKAGES_DIR", str(empty))
+        monkeypatch.setattr(trans_module.Path, "home", staticmethod(lambda: home))
+
+        message = trans_module._repair_packages_dir()
+
+        assert message is not None
+        assert str(empty) in message, "the message must name the wrong setting"
+        assert "argos-translate" in message, "and where the models really are"
+        assert os.getenv("ARGOS_PACKAGES_DIR") is None, (
+            "the variable must be dropped, or argostranslate reads it anyway")
+
+    def test_the_note_is_what_callers_read(self):
+        # doctor and the missing-model warning both report this rather than
+        # re-deriving it, which is what the deleted diagnostic did wrongly.
+        assert hasattr(trans_module, "_packages_dir_note")
