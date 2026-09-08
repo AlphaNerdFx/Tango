@@ -209,13 +209,23 @@ class TestUnknownEnvKeys:
         env = self._env(tmp_path, "# SPACY_MODEL=commented out\n\n  \nANKI_TIMEOUT=5\n")
         assert unknown_env_keys(env) == []
 
-    def test_the_publishing_keys_are_known(self, tmp_path):
-        # Read by twine through the shell, never by this package. Reporting
-        # them would be wrong: they do something, just not here.
+    def test_a_publishing_credential_in_env_is_reported(self, tmp_path):
+        # Reversed on 8 September 2026, and the reversal is the point.
+        #
+        # These used to be declared known so that doctor would stay quiet
+        # about them. That was the wrong side: `config.py` calls
+        # `load_dotenv()` at import, so anything in `.env` is loaded into the
+        # environment of every `tango run`. A publish credential does not
+        # belong in a file with that property, and the same argument applies
+        # to the Docker Hub token that turned up there the same day.
+        #
+        # So doctor reports them now, which is the nudge to move them.
+        # CONTRIBUTING.md says where they should live instead.
         from pipeline.config import unknown_env_keys
 
-        env = self._env(tmp_path, "PYPI_USER=__token__\nPYPI_API=pypi-abc\n")
-        assert unknown_env_keys(env) == []
+        env = self._env(tmp_path, "PYPI_USER=__token__\nPYPI_API=pypi-abc\n"
+                                  "DOCKER_ACCESS_TOKEN=dckr-abc\n")
+        assert unknown_env_keys(env) == ["DOCKER_ACCESS_TOKEN", "PYPI_API", "PYPI_USER"]
 
     def test_a_missing_file_is_not_an_error(self, tmp_path):
         # This is a diagnostic. It must never be the thing that fails.
