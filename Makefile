@@ -14,7 +14,7 @@
 #   make lint        : check code style with ruff
 #   make typecheck   : static type checking with mypy
 #   make run         : run the pipeline (VIDEO_ID and DECK required;
-#                       optional LANGUAGE, DEF_LANG, FORCE=1)
+#                       optional LANGUAGE, DEF_LANG, IMAGES=1, FORCE=1)
 #   make review      : process the review.json file (optional LANGUAGE, DEF_LANG)
 #   make backlog     : process the Anki backlog for a deck (optional LANGUAGE, DEF_LANG)
 #   make dist        : build the PyPI distribution with pinned README badges
@@ -414,6 +414,7 @@ run: check-os
 		--deck="$(DECK)" \
 		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
 		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",) \
+		$(if $(IMAGES),--images,) \
 		$(if $(FORCE),--force,)
 
 # -- review -------------------------------------------------------------------
@@ -428,7 +429,8 @@ review: check-os
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline review \
 		--deck="$(DECK)" \
 		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
-		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",)
+		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",) \
+		$(if $(IMAGES),--images,)
 
 # -- backlog ------------------------------------------------------------------
 
@@ -442,7 +444,8 @@ backlog: check-os
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline backlog \
 		--deck="$(DECK)" \
 		$(if $(LANGUAGE),--language="$(LANGUAGE)",) \
-		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",)
+		$(if $(DEF_LANG),--def-lang="$(DEF_LANG)",) \
+		$(if $(IMAGES),--images,)
 
 # -- clean --------------------------------------------------------------------
 
