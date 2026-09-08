@@ -727,7 +727,7 @@ def prompt_queue(queue: list[MatchResult]) -> tuple[list[str], list[str]]:
 
     print(f"\n{'─' * 60}")
     print(f"  {len(queue)} word(s) need your review")
-    print(f"  [y] add card  [n] skip  [s] defer all remaining to review file")
+    print("  [y] add card  [n] skip  [s] defer all remaining to review file")
     print(f"{'─' * 60}\n")
 
     for i, match in enumerate(queue, start=1):
