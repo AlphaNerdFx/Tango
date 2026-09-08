@@ -2879,6 +2879,29 @@ The rule is inert under `--def-lang`, knowingly. The definition then comes
 from the target-language index under a translated lemma, which `cards.py`
 does not have, so the lookup finds no rows and the picture stays.
 
+**It was also wrong for a whole class of cards, and only a real run showed
+it.** Measured 8 September 2026 on a 637-card English video, the rule dropped
+**29 pictures of 159**, among them basket, bell, birth, egg, gift, paper and
+watch, every one of which had a correct photograph. All 29 carried a
+Merriam-Webster definition.
+
+The cause is that the second clause was being asked an impossible question.
+MW words a sense differently from Wiktionary, so the card's text agreed with
+no Wikidata description, while some Wiktionary row for a common English noun
+nearly always agreed with something. That is a disagreement about phrasing,
+not about sense, and the rule read it as the latter.
+
+So the comparison now runs only when the card is showing a row from this
+index, recognised by prefix because a card holds at most 256 characters of
+it. English cards are therefore mostly unjudged, which is correct: nothing in
+this index can say which sense Merriam-Webster chose. After the fix, the same
+video drops 0 of 159 and French still drops its 4 of 214.
+
+The general lesson is the one in CLAUDE.md 18.3, and it cost a released
+number: the rule was measured only against a corpus whose definitions all
+came from the index it was comparing against, so the population that breaks
+it could not appear.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
