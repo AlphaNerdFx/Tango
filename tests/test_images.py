@@ -591,10 +591,41 @@ class TestAttribution:
                 LicenseShortName="CC BY 4.0")):
             assert images.attribution("d.jpg") == "Jane, CC BY 4.0"
 
-    def test_html_entities_are_unescaped(self):
+    def test_an_escaped_tag_cannot_become_live_markup_on_the_card(self):
+        # Commons metadata is wiki content anybody can edit, and an Anki card
+        # is HTML rendered in a webview with JavaScript. Stripping tags
+        # before unescaping let an escaped payload through: it carries no
+        # literal "<", so nothing was stripped, and unescaping then produced
+        # a working tag in field 13.
+        credit = images._credit_line({
+            "Artist": {"value": "&lt;img src=x onerror=alert(document.domain)&gt;"},
+            "LicenseShortName": {"value": "CC BY 4.0"},
+        })
+        assert "<img" not in credit
+        assert "onerror" not in credit
+
+    def test_a_double_encoded_payload_stays_text(self):
+        # The pair: one unescape must not become two. A credit reading
+        # "&lt;b&gt;" should show those characters, not embolden the card.
+        credit = images._credit_line({
+            "Artist": {"value": "&amp;lt;script&amp;gt;"},
+            "LicenseShortName": {"value": "CC0"},
+        })
+        assert "<script" not in credit
+
+    def test_an_entity_reaches_the_card_as_its_character(self):
+        # Commons writes "Bob &amp; Alice" and the card must read
+        # "Bob & Alice". The stored field is escaped, because the field is
+        # rendered as HTML and the same path carries text anyone can edit,
+        # so what is pinned here is what a reader sees rather than the bytes.
+        # This assertion read `== "Bob & Alice, CC0"` until 8 September 2026,
+        # when escaping was added to close a script injection.
         with patch.object(images, "_get", return_value=self._meta(
                 Artist="Bob &amp; Alice", LicenseShortName="CC0")):
-            assert images.attribution("d.jpg") == "Bob & Alice, CC0"
+            credit = images.attribution("d.jpg")
+        assert credit == "Bob &amp; Alice, CC0"
+        import html as html_module
+        assert html_module.unescape(credit) == "Bob & Alice, CC0"
 
     def test_a_licence_with_no_artist_still_credits_the_licence(self):
         with patch.object(images, "_get", return_value=self._meta(
