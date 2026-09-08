@@ -87,7 +87,7 @@ def _sense(gloss, form_of=None, tags=(), examples=()):
     return s
 
 
-def _archive(tmp_path, records) -> "object":
+def _archive(tmp_path, records) -> object:
     path = tmp_path / "extract.jsonl.gz"
     with gzip.open(path, "wt", encoding="utf-8") as fh:
         for r in records:
