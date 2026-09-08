@@ -1910,7 +1910,9 @@ class TestOmwSynonymsAntonyms:
         )
         # Same word must give the same answer regardless of thread timing.
         per_word: dict = {}
-        for word, syns in zip(words, results):
+        # strict=True: a thread that dropped a result would otherwise shorten
+        # the pairing silently and this test would still pass on the rest.
+        for word, syns in zip(words, results, strict=True):
             per_word.setdefault(word, set()).add(tuple(syns))
         for word, variants in per_word.items():
             assert len(variants) == 1, f"{word} returned varying results: {variants}"
