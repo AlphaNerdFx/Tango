@@ -25,6 +25,8 @@ from pipeline import cards
 from pipeline.config import DECK_ID, MODEL_ID
 from pipeline.definition import DefinitionResult
 
+_ROOT = Path(__file__).resolve().parent.parent
+
 
 def _code_only(fn) -> str:
     """
@@ -643,6 +645,84 @@ class TestEnvironmentKeysAreDeclared:
 
 
 # -- The capability table matches the real mappings ---------------------------
+
+class TestMessagesNameACommandTheUserHas:
+    """
+    A user-facing message may not tell somebody to run `make` or to install
+    from a checkout, because most users have neither.
+
+    Found 8 September 2026 by running the Docker image, which is the purest
+    form of the case: the container fetched a transcript, wrote 185 words to
+    the backlog, and said "Run 'make backlog' when Anki is available" to a
+    user with no Makefile and no repository. Ten messages across four modules
+    said something of that shape.
+
+    This is the same defect as v0.8.1, which spent a whole release correcting
+    a README that told pip users to run `make`, and the reason it recurred is
+    that the fix was applied to the README rather than to the class. So this
+    scans the package, per CLAUDE.md 18.5, and the target list is read from
+    the Makefile rather than typed here, so a new target is covered the day
+    it is added.
+
+    Docstrings and comments are exempt: they are read by contributors, who do
+    have a clone.
+    """
+
+    @staticmethod
+    def _make_targets() -> set:
+        """Every target name the Makefile declares as phony."""
+        text = (_ROOT / "Makefile").read_text(encoding="utf-8")
+        block = text.split(".PHONY:", 1)[1].split("\n\n", 1)[0]
+        return {word for word in block.replace("\\", " ").split() if word}
+
+    @staticmethod
+    def _user_facing_strings(path):
+        """Every string literal in a file that is not a docstring."""
+        import ast
+
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        docstrings = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                 ast.AsyncFunctionDef)):
+                doc = ast.get_docstring(node, clean=False)
+                if doc is not None:
+                    docstrings.add(doc)
+        return [n.value for n in ast.walk(tree)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and n.value not in docstrings]
+
+    def test_no_message_tells_the_user_to_run_make(self):
+        targets = self._make_targets()
+        assert "backlog" in targets, "the Makefile parse broke, not the rule"
+        offenders = []
+        for path in sorted((_ROOT / "src" / "pipeline").glob("*.py")):
+            for text in self._user_facing_strings(path):
+                for target in targets:
+                    if f"make {target}" in text:
+                        offenders.append(f"{path.name}: make {target}")
+        assert not offenders, (
+            "these messages name a Makefile target, which a user who "
+            f"installed from PyPI or ran the image does not have: {offenders}"
+        )
+
+    def test_no_message_tells_the_user_to_install_from_a_checkout(self):
+        # `pip install -e .` needs the source tree. The published name is
+        # what somebody outside the repository can actually type.
+        offenders = []
+        for path in sorted((_ROOT / "src" / "pipeline").glob("*.py")):
+            for text in self._user_facing_strings(path):
+                if "pip install -e" in text:
+                    offenders.append(path.name)
+        assert not offenders, offenders
+
+    def test_the_scan_can_see_a_violation(self):
+        # The pair, and the reason the two above are not vacuous: a scan that
+        # matched nothing would pass them for the wrong reason.
+        targets = self._make_targets()
+        sample = "Anki is not running. Run 'make backlog' when it is."
+        assert any(f"make {t}" in sample for t in targets)
+
 
 class TestDocumentedLanguageCountsAreTrue:
     """
