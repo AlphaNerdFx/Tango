@@ -648,7 +648,8 @@ class TestAttribution:
                     "thumbnail": {"source": "https://x/dog.jpg"}}), \
              patch.object(images, "is_photographable", return_value=True), \
              patch.object(images, "_claims", return_value=[]), \
-             patch.object(images, "attribution", return_value="Jane, CC0"):
+             patch.object(images, "attribution", return_value="Jane, CC0"), \
+             patch.object(images, "_description", return_value="Haustier"):
             assert images.find_image("Hund", "de").attribution == "Jane, CC0"
 
 
