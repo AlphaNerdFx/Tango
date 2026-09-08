@@ -528,24 +528,68 @@ Two things block simply removing it, both verified in the installed source:
   **defined inside a docstring** in `settings.py`, so it is not a setting at
   all. `ARGOS_STANZA_AVAILABLE` does nothing.
 
+**And a third, traced on 8 September 2026, which ends this line of attack:
+`minisbd` itself requires `stanza==1.10.1`.** Swapping to it removes
+nothing. The dependency graph in the installed environment reads:
+
+```
+argostranslate → minisbd → stanza==1.10.1 → torch
+argostranslate → stanza==1.10.1
+```
+
+So step 4 below cannot be done the way it was written. torch leaves only if
+argostranslate stops depending on stanza upstream, or if this project
+vendors a sentence splitter of its own, which is a much larger change than
+the rung describes. **Decided 8 September 2026: torch stays for v0.12.0**,
+and the size goal is met from the other two directions below.
+
 So the reduction is staged, cheapest first:
 
 | step | saves | risk |
 |---|---|---|
 | 1. install the CPU-only torch wheel (`--index-url .../whl/cpu`), **done, 26 August 2026** | 3.7 GB measured: `nvidia` and `triton` gone, torch 1.1 GB to 725 MB | none, no code change, no GPU here to lose |
-| 2. drop `pymupdf` | 63 MB | none, zero references in the repo |
-| 3. install spaCy models on demand, not all nine | ~400 MB (`sudachidict_core` 208 MB + `zh_core_web_sm` 76 MB + others) | none for users who need one language |
-| 4. guard the stanza import upstream, ship minisbd packages | the remaining ~1.1 GB of torch | needs an upstream patch or a vendored shim; verify translation quality is unchanged |
+| 2. ~~drop `pymupdf`~~ **split `libretranslate` out of the translation extra** | 63 MB of pymupdf, plus lxml and bs4 | small: anyone running a local LibreTranslate server installs it explicitly instead |
+| 3. ~~install spaCy models on demand, not all nine~~ **nothing to do for a user; clean the contributor venv instead** | 0 MB for a user, ~450 MB for a developer | none |
+| 4. ~~guard the stanza import upstream, ship minisbd packages~~ **not possible as written, see above** | 0 | `minisbd` requires `stanza` |
+
+**Steps 2, 3 and 4 were all wrong, and were corrected on 8 September 2026 by
+tracing the installed environment rather than reading this table.** Each is
+worth recording, because the same mistake produced all three: this table was
+written from the development venv and read as though it described a user's
+install.
+
+- **`pymupdf` is not a stray with "zero references".** Nothing in `src/`
+  imports it, which is what the old note measured, but it arrives through
+  `argos-translate-files`, which arrives through **`libretranslate`**. It is
+  the cost of running a local translation *server*, and the way to drop it is
+  to stop requiring that server for anyone who translates through
+  argostranslate or a community mirror.
+- **The spaCy models are a developer's cost, not a user's.**
+  `pyproject.toml` declares no model at all and `make all` installs exactly
+  one. The twelve on this machine, including both `sm` and `md` for es and
+  fr, came from testing. A user was never paying for them.
+- **Step 4 cannot work**, because `minisbd` depends on `stanza`.
+
+So the user-facing weights are three, and only three: the base install
+(**334 MB**, measured 3 September 2026 in a clean venv), **one dictionary
+index per language** (125–423 MB), and **torch at 725 MB** for anyone who
+installs translation. The indexes are the largest of the three for anyone
+who is not translating, and are where this rung's remaining effort goes.
 
 **After step 1, measured 26 August 2026, the three biggest things left are
 torch, the indexes and the spaCy models**, in that order:
 
-| | size |
-|---|---|
-| `torch` (CPU build) | 725 MB |
-| `dictionaries/` | 820 MB for three languages: fr 404, de 292, ru 126 |
-| nine spaCy models plus `sudachidict_core` | roughly 400 MB |
-| `.tangovenv` total | 2203 MB |
+| | 26 August 2026 | 8 September 2026 |
+|---|---|---|
+| `torch` (CPU build) | 725 MB | 725 MB |
+| `dictionaries/` | 820 MB, three languages | **1083 MB**, four: fr 423, de 305, en 236, ru 131 |
+| spaCy models plus `sudachidict_core` | roughly 400 MB, nine | roughly 450 MB, **twelve** |
+| `.tangovenv` total | 2203 MB | 2.3 GB |
+
+`dictionaries/` grew because ADR-011 added the English index, and the model
+count grew through testing. Neither is a regression; both are the
+development machine drifting, which is precisely why the row above it about
+a *user's* install has to be measured in a clean venv instead.
 
 So torch is still the largest single package even after losing 3.7 GB, which
 is what step 4 is about. `dictionaries/` is larger than any one of them, but

@@ -2946,6 +2946,44 @@ those fields changes what existing cards display. Recorded here rather than
 folded into a security fix for one field (CLAUDE.md 7.4), and carried on the
 v0.12.0 rung.
 
+### 8.49 Thirteen unit tests were quietly integration tests
+
+Found 8 September 2026, on the v0.12.0 rung, by running the default suite
+with `socket.socket.connect` patched to raise.
+
+CLAUDE.md 3.5 says no test in the default run may require network access.
+The thing standing for that rule was a test asserting that no marker in the
+suite is misspelled, which checks whether integration tests are correctly
+*labelled* and says nothing about whether an unlabelled one reaches the
+network. Thirteen did:
+
+| tests | reaching | added by |
+|---|---|---|
+| 12 in `test_definition.py` | en.wiktionary.org, dictionaryapi.dev | `_fetch_from_wiktionary` and the English pronunciation path, both added after those tests were written |
+| 1 in `test_images.py` | Wikidata | `_description`, added the same morning |
+
+**Not one was written wrong.** Each mocked every source the function had at
+the time, and each stopped being complete when the function gained another,
+without anything failing. A passing suite meant "the network was up", and on
+a machine where it usually is, that reads exactly like "the tests pass".
+
+The guard is an autouse fixture in `conftest.py`. Two carve-outs, both
+deliberate: loopback is allowed, because standing up an `http.server` on a
+spare port is a technique this project uses to reproduce failures (18.7);
+and `@pytest.mark.integration` is exempt, because reaching a real service is
+what those tests are for.
+
+The twelve definition tests were fixed with one fixture rather than twelve
+edits, since they share a cause: the REST source is a *supplement*, like the
+antonym index, and a unit test's result should not depend on whether
+Wikimedia is answering today. The class that tests that function is exempt
+from the fixture, because it mocks `requests.get` and needs the real body
+underneath.
+
+The lesson generalises past this repository. A test that reaches a network
+is not merely slow: it reports on the wrong thing, and it does so most
+convincingly when the network is healthy.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage

@@ -400,6 +400,25 @@ No test in the default run may require network access, a running Anki instance,
 or an installed spaCy or translation model. Tests requiring those use
 `@pytest.mark.integration` and are excluded by default via `pyproject.toml`.
 
+**Enforced by a socket guard since 8 September 2026, and it was needed.**
+`conftest.py` fails any default-run test that opens a connection to another
+machine. Before it existed, **thirteen tests were making real requests**:
+twelve in `test_definition.py` reaching en.wiktionary.org and
+dictionaryapi.dev, and one in `test_images.py` reaching Wikidata because
+`find_image` had grown a third call that same morning while its test still
+mocked the two that came before.
+
+None of them was written that way. Each was correct when written, and each
+stopped being correct when the code under it gained a source, silently,
+because nothing failed. That is the shape this constraint has to be defended
+against, and prose could not do it: the deselection test that used to stand
+for 3.5 checks that markers are spelled correctly, which is a different
+question entirely.
+
+Loopback is allowed, so a test may still stand up its own `http.server` and
+talk to it (18.7). Integration tests are exempt, since reaching a real
+service is their purpose.
+
 ### 3.6 No new heavy runtime dependencies in the base install
 
 New heavy dependencies go in optional groups in `pyproject.toml`, not the
