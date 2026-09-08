@@ -37,14 +37,8 @@ IP someone read as the shipped default lived in an uncommitted `.env`. WSL
 is now detected and handled by retrying rather than by a different default
 (ARCHITECTURE 8.45). The `/mnt/c` path translation in `__main__.py` is
 already conditional on `is_wsl()`.
-**Current tag:** v0.10.0. **`__version__` is already `0.11.0`**: the bump and
-its documentation landed on 8 September 2026 and the tag is deliberately
-pending, so the two disagree until it is cut. That is a known interim state,
-not the release bug section 15 describes, which is about a mismatch nobody
-noticed.
-
-**v0.11.0, images on cards gated to concrete nouns, is complete and awaiting
-that tag.** A picture for 45.9% of nouns, chosen by resolving the word
+**Current tag:** v0.11.0, images on cards gated to concrete nouns, released
+8 September 2026 and published to PyPI. A picture for 45.9% of nouns, chosen by resolving the word
 to a Wikidata concept rather than searching text; refused where the concept
 is abstract; dropped where it describes a different sense than the card's
 definition; and always carrying the credit its licence requires. Off by

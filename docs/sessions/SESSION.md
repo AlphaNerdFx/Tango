@@ -16,10 +16,9 @@ installed environment at the time of writing, not recalled from memory. See
 
 ## 1. Where the project is
 
-**Tagged release:** v0.10.0, runs on any operating system, 5 September 2026.
-Twenty tags, twenty sets of GitHub release notes. **v0.11.0, images on cards,
-is complete and its version is bumped, but the tag is not cut yet**, so this
-tree is ahead of its newest tag by design. The
+**Tagged release:** v0.11.0, images on cards, released 8 September 2026 and
+published to PyPI. Twenty-one tags. v0.10.0 before it was runs on any
+operating system, 5 September 2026. The
 releases between this and v0.6.0, which the rest of this file still
 describes as current: v0.7.0 the command line as a product, v0.8.0 packaged
 and on PyPI, v0.8.1 documentation for the people who can now install it,

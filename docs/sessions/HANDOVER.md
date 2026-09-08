@@ -7,15 +7,16 @@ Written 8 September 2026.
 | | |
 |---|---|
 | branch | `main`, remote is `origin` |
-| last tag | **`v0.10.0`**. v0.11.0 is complete and documented, **tag pending** |
-| `__version__` | `0.11.0`, bumped ahead of the tag on purpose |
+| last tag | **`v0.11.0`**, tagged and pushed 8 September 2026 |
+| `__version__` | `0.11.0` |
 | `make check` | exit 0 |
 | tests | **1230 unit, 33 integration deselected** |
-| PyPI | `pip install tango-anki`. **0.10.0 is the latest published; 0.11.0 is tagged but not uploaded** |
+| PyPI | **0.11.0 published**, `pip install tango-anki` |
+| Docker | image built and verified against the published package, **not yet pushed** |
 
-The v0.11.0 rung is done and tagged. What is left of the release is the PyPI
-upload, which needs the user's credentials, and the Docker image, which can
-only be built once the package is on PyPI.
+The v0.11.0 rung is released. The tag names `9cb0866`, which is the exact
+commit the PyPI artefacts were built from, so a checkout of the tag rebuilds
+what people downloaded. What is left is pushing the image to Docker Hub.
 
 **Working autonomously**, under two standing decisions taken 5 September
 2026: commit and push freely, but **ask before any tag or PyPI upload**,
