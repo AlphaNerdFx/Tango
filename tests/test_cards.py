@@ -797,10 +797,19 @@ class TestCardLayout:
         assert "min-height: 16vh" in block
         assert "max-height: 45vh" in block
 
-    def test_the_image_is_bounded_by_its_box(self):
-        # The pair to the two above: the box is sized by the layout, and the
-        # picture follows the box rather than the viewport.
-        assert "max-height: 100%" in self._rules(".card-image img")
+    def test_the_image_is_bounded_by_its_box_and_by_the_viewport(self):
+        # The pair to the two above, and it needs both halves. The percentage
+        # tracks the box, which is what makes the picture yield to the text.
+        # The viewport half is what survives when the box has no definite
+        # height: a percentage against one computes to `none`, and an
+        # unbounded photograph is the overflow this set out to remove.
+        assert "max-height: min(100%, 45vh)" in self._rules(".card-image img")
+
+    def test_the_flex_chain_survives_ankis_own_wrapper(self):
+        # Anki renders the template inside `<div id="qa">` while `.card` is
+        # the body, so without a rule for the wrapper the picture is a
+        # grandchild of the column and `flex` on it does nothing.
+        assert "flex: 1 1 auto" in self._rules("#qa")
 
     def test_the_image_is_not_a_fixed_pixel_box(self):
         # The pair to the test above, and a deliberate reversal: a fixed
@@ -1075,8 +1084,18 @@ class TestImagesAreOffByDefault:
     """
 
     def test_it_is_off_unless_asked_for(self):
+        # Read from the source, not from the resolved value, and for the
+        # reason CLAUDE.md 3.1 records about MODEL_ID: conftest now forces
+        # IMAGES_ENABLED to False for every test, so asserting the resolved
+        # value would pass whatever the shipped default became. What must
+        # hold is that an unset environment means off, which is the empty
+        # second argument to getenv.
+        import inspect
         import pipeline.config
-        assert pipeline.config.IMAGES_ENABLED is False
+
+        source = inspect.getsource(pipeline.config)
+        assert 'os.getenv("IMAGES_ENABLED", "")' in source, (
+            "the shipped default for IMAGES_ENABLED is no longer 'unset means off'")
 
     def test_asking_for_them_on_one_run_overrides_the_environment(self, sample_result):
         # What `--images` does. The default stays off, so a user turns them
@@ -1104,6 +1123,22 @@ class TestImagesAreOffByDefault:
             build_package("vidimg0007", "German", [sample_result], [], language="de",
                           images_enabled=None)
         find.assert_called_once()
+
+    def test_a_fallback_card_can_get_a_picture(self, sample_result, tmp_path):
+        # A word with no definition still becomes a card, and a picture is
+        # worth more there than anywhere: the card has nothing else on it.
+        # The candidate list read `not_found_audio`, the Commons recording
+        # map, so a fallback word without a recording was never offered one.
+        img = tmp_path / "Q144.jpg"
+        img.write_bytes(b"x")
+        with patch("pipeline.config.IMAGES_ENABLED", True), \
+             patch.object(cards_module.images, "find_images") as find, \
+             patch.object(cards_module.images, "fetch_image", return_value=img):
+            find.return_value = {}
+            build_package("vidimg0008", "German", [], ["hund"], language="de",
+                          snippets={"hund": "Der Hund bellt."})
+        assert "hund" in find.call_args[0][0], (
+            "a fallback lemma was never offered to the image resolver")
 
     def test_no_network_when_disabled(self, sample_result):
         with patch("pipeline.config.IMAGES_ENABLED", False), \

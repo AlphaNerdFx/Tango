@@ -225,6 +225,71 @@ class TestTheBatchedGateAgreesWithTheSingleOne:
                                "description": "Heißgetränk aus Kaffeebohnen"})
         assert found["kaffee"].description == "Heißgetränk aus Kaffeebohnen"
 
+    def test_two_words_for_one_concept_both_get_the_picture(self):
+        # `auto` and `voiture` are both Q1420. Keeping one lemma per item
+        # shipped the other with an empty Image field, even though the file
+        # was resolved, admitted and about to be downloaded anyway.
+        page = {"pageprops": {"wikibase_item": "Q1420"},
+                "thumbnail": {"source": "https://x/wikipedia/commons/Car.jpg"}}
+        with patch.object(images, "_articles",
+                          return_value={"auto": page, "voiture": page}), \
+             patch.object(images, "_entities",
+                          return_value={"Q1420": {"P31": ["Q42889"], "P279": [],
+                                                  "P18": ["Car.jpg"],
+                                                  "description": "vehicule"}}), \
+             patch.object(images, "_attributions", return_value={"Car.jpg": "Jane, CC0"}):
+            found = images.find_images(["auto", "voiture"], "fr")
+        assert set(found) == {"auto", "voiture"}
+        assert found["auto"].qid == found["voiture"].qid == "Q1420"
+        assert found["voiture"].attribution == "Jane, CC0"
+
+    def test_two_concepts_sharing_a_file_both_survive(self):
+        # Related articles often carry the same lead image. Keying the
+        # pending map by filename dropped whichever concept came second.
+        pages = {"hund": {"pageprops": {"wikibase_item": "Q144"},
+                          "thumbnail": {"source": "https://x/Shared.jpg"}},
+                 "welpe": {"pageprops": {"wikibase_item": "Q39267"},
+                           "thumbnail": {"source": "https://x/Shared.jpg"}}}
+        claims = {"P31": ["Q55983715"], "P279": [], "P18": [], "description": ""}
+        with patch.object(images, "_articles", return_value=pages), \
+             patch.object(images, "_entities",
+                          return_value={"Q144": claims, "Q39267": claims}), \
+             patch.object(images, "_attributions", return_value={"Shared.jpg": "Jo, CC0"}):
+            found = images.find_images(["hund", "welpe"], "de")
+        assert set(found) == {"hund", "welpe"}
+        assert found["hund"].attribution == found["welpe"].attribution == "Jo, CC0"
+
+    def test_a_lead_image_with_no_licence_is_refused(self):
+        # Wikipedia allows local uploads, and on the English one those are
+        # mostly non-free logos and cover art. Commons knows nothing about
+        # such a file, so the credit is empty and the terms are unknown.
+        # Shipping it would redistribute work this never read the licence of.
+        page = {"pageprops": {"wikibase_item": "Q1"},
+                "thumbnail": {"source": "https://x/wikipedia/en/Logo.png"}}
+        with patch.object(images, "_articles", return_value={"windows": page}), \
+             patch.object(images, "_entities",
+                          return_value={"Q1": {"P31": ["Q811102"], "P279": [],
+                                               "P18": [], "description": ""}}), \
+             patch.object(images, "_attributions", return_value={}):
+            found = images.find_images(["windows"], "en")
+        assert found == {}
+
+    def test_a_wikidata_image_with_no_credit_is_still_shipped(self):
+        # The pair, and the reason this is not simply "drop anything
+        # uncredited". A P18 value is always a Commons file, so an empty
+        # credit there means Commons genuinely holds none, which is the
+        # normal shape of an old public-domain upload.
+        page = {"pageprops": {"wikibase_item": "Q144"}}
+        with patch.object(images, "_articles", return_value={"hund": page}), \
+             patch.object(images, "_entities",
+                          return_value={"Q144": {"P31": ["Q55983715"], "P279": [],
+                                                 "P18": ["Old_Dog.jpg"],
+                                                 "description": ""}}), \
+             patch.object(images, "_attributions", return_value={}):
+            found = images.find_images(["hund"], "de")
+        assert found["hund"].filename == "Old_Dog.jpg"
+        assert found["hund"].attribution == ""
+
     def test_the_description_is_read_in_the_language_asked_for(self):
         # Under --def-lang the card's definition is not in the transcript's
         # language, and comparing a French definition against a German
@@ -363,6 +428,14 @@ class TestTheCreditAsksForTheFileNotTheRendition:
         assert images._commons_filename(
             "https://upload.wikimedia.org/wikipedia/commons/c/c8/Plain_File.jpg"
         ) == "Plain_File.jpg"
+
+    def test_a_question_mark_in_a_filename_survives_the_round_trip(self):
+        # MediaWiki's legal title characters include `?`. Unescaped, the URL
+        # ends at the question mark: the download 404s and the credit lookup
+        # asks Commons about "Why_Not", which is a different file or none.
+        url = images._commons_url(["Why Not?.jpg"])
+        assert "Why_Not%3F.jpg" in url
+        assert images._commons_filename(url) == "Why_Not?.jpg"
 
     def test_percent_escapes_are_decoded(self):
         # The API wants a title, not a URL path, and a Chinese file name is

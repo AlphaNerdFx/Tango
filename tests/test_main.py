@@ -909,7 +909,14 @@ class TestSetupCommands:
             with patch("sys.argv", ["tango", "doctor"]):
                 with pytest.raises(SystemExit):
                     main()
-        assert "make antonyms" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        # The intent, not the spelling. This assertion read "make antonyms"
+        # until 8 September 2026, which is how it kept passing while doctor
+        # told a pip user to run a Makefile target they do not have. Same
+        # failure as the "--doctor" assertion in test_deck.py, and the reason
+        # test_hard_constraints.py now scans the whole package for the class.
+        assert "tango build-antonyms" in out
+        assert "make antonyms" not in out
 
     def test_doctor_reports_images_as_disabled_without_counting_them_missing(
             self, capsys):
