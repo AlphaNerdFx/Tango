@@ -50,6 +50,36 @@ Then import the generated .apkg from `output/` into Anki, or say yes when it
 offers to import for you.
 
 <details>
+<summary>Prefer not to install Python? There is an image.</summary>
+
+```bash
+docker pull yousseflarbi/tango:0.11.0
+docker run --rm -v "$PWD/data:/data" yousseflarbi/tango run <video-id> --deck "MyDeck"
+```
+
+English is baked in, so that works with no setup at all. Everything the run
+produces or caches lives in the mounted `data/` directory: the package, the
+definition cache, any dictionary index you build, and the images.
+
+One thing the image cannot do on its own is talk to Anki. AnkiConnect binds
+to `127.0.0.1` on your machine, which a container cannot reach, so a plain
+`docker run` writes every word to the backlog and still writes a package for
+you to import by hand. To let it check your deck for duplicates first, set
+AnkiConnect's bind address to `0.0.0.0` and point the container at the host:
+
+```bash
+docker run --rm -v "$PWD/data:/data" \
+  -e ANKI_HOST=http://host.docker.internal:8765 \
+  --add-host host.docker.internal:host-gateway \
+  yousseflarbi/tango run <video-id> --deck "MyDeck"
+```
+
+If you already have Python and Anki on the same machine, `pip install` is the
+simpler path and stays the primary one.
+
+</details>
+
+<details>
 <summary>Working on Tango itself?</summary>
 
 ```bash
