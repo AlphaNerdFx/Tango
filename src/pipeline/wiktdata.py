@@ -42,7 +42,8 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 from pipeline.config import DICT_DIR
 
@@ -725,7 +726,7 @@ def build_index(
                 f"Refusing to download '{language}' from a non-HTTPS URL: {url}")
         _say(f"Downloading {url} (this is a large one-time download)...")
         try:
-            urllib.request.urlretrieve(url, archive)
+            urllib.request.urlretrieve(url, archive)  # nosec B310 - https checked above
             downloaded = True
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as exc:
             # A partial download is worthless and can be hundreds of MB.
