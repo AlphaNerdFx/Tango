@@ -2902,6 +2902,50 @@ number: the rule was measured only against a corpus whose definitions all
 came from the index it was comparing against, so the population that breaks
 it could not appear.
 
+### 8.48 A credit line is third-party text rendered as HTML
+
+Found 8 September 2026 during the pre-release audit, and it is the only
+security finding of the v0.11.0 work.
+
+`Attribution` carries what Commons says about a file's author, and Commons
+is a wiki: anyone can edit that metadata. An Anki card is HTML rendered in a
+webview with JavaScript enabled. So the credit line is untrusted text on a
+path to an execution context, and `_credit_line` was handling it in the
+wrong order:
+
+```python
+text = html.unescape(_TAG_RE.sub("", raw))     # strip, then unescape
+```
+
+An `Artist` value of `&lt;img src=x onerror=...&gt;` carries no literal `<`,
+so the tag stripper found nothing to remove, and `unescape` then turned it
+into live markup in field 13. Verified by calling the function with exactly
+that value.
+
+The order that is safe is the reverse, plus an escape at the end, because
+the destination is HTML:
+
+```python
+text = html.escape(_TAG_RE.sub("", html.unescape(raw)))
+```
+
+Unescape to see the real text, strip whatever markup that reveals, escape
+what is left. A double-encoded payload then survives as visible characters
+rather than becoming a tag. The card still reads "Bob & Alice"; the field
+now stores `Bob &amp; Alice`, which is what makes it safe, and one test had
+to be re-pointed from the stored bytes to what a reader sees.
+
+**The same shape exists for definitions and examples, and is not fixed.**
+Those fields are also inserted unescaped, and they also come from a wiki by
+way of the kaikki dumps. Measured across the built indexes: 11 rows of
+2,108,227 in French and 4 of 993,774 in German contain `<`, and the German
+ones are typographic rather than hostile ("letters such as `<b>`, `<d>`"),
+which Anki renders as a bold tag and silently eats the letters. Cosmetic
+today, the same class in principle, and a wider change because escaping
+those fields changes what existing cards display. Recorded here rather than
+folded into a security fix for one field (CLAUDE.md 7.4), and carried on the
+v0.12.0 rung.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage

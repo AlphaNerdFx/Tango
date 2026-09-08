@@ -90,6 +90,11 @@ by default** pending a look at real cards in Anki.
   returned nothing, which is indistinguishable from a file that genuinely
   has no credit. Found by counting credits in a real deck: 4 of 15 pictures
   had none and all four came from that route, two of them CC BY.
+- **A Commons credit could put live markup on a card.** `Artist` metadata is
+  wiki text anyone can edit and a card is HTML in a webview, but tags were
+  stripped before entities were decoded, so `&lt;img src=x onerror=...&gt;`
+  passed the stripper untouched and became a working tag. Now decoded,
+  stripped, then escaped. ARCHITECTURE 8.48.
 - A multi-line Commons credit no longer breaks the card layout.
 
 
