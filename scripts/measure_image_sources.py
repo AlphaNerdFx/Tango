@@ -5,7 +5,7 @@ Measure what card images would actually add to real decks.
     python scripts/measure_image_sources.py                      # every default deck
     python scripts/measure_image_sources.py --decks de:703B19Uz7Fk
     python scripts/measure_image_sources.py --limit 60           # fewer lookups per language
-    python scripts/measure_image_sources.py --icons              # also size the icon fallback
+    python scripts/measure_image_sources.py --wordnet            # cross-check refusals against WordNet
 
 This exists for the same reason measure_antonym_sources.py does: ADR-009
 phase 3 needs a number before images become a default, and the last two
@@ -241,8 +241,13 @@ def main() -> int:
                         help="nouns sampled per language (0 for all)")
     parser.add_argument("--senses", action="store_true",
                         help="measure image/definition sense agreement instead")
-    parser.add_argument("--icons", action="store_true",
-                        help="also size the icon fallback over refused nouns")
+    # Named for what it does. It was called --icons and described as sizing
+    # the icon fallback, which it never did: the branch below asks WordNet
+    # whether it agrees with the gate's refusals. Anyone running --icons to
+    # reproduce the icon rejection in ADR-009 got an unrelated number, and
+    # the icon measurement it claimed to run lives in that ADR's amendment.
+    parser.add_argument("--wordnet", action="store_true",
+                        help="cross-check refused nouns against WordNet's concreteness")
     args = parser.parse_args()
 
     languages = DEFAULT_LANGUAGES
@@ -270,7 +275,7 @@ def main() -> int:
         totals["nouns"] += result["counts"]["nouns"]
         totals["with_image"] += result["counts"]["with_image"]
 
-        if args.icons:
+        if args.wordnet:
             judged, agreed = wordnet_agreement(language, result["refused"])
             if judged:
                 print(f"    WordNet could judge {judged} of the refused, "
