@@ -32,7 +32,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import genanki
 
@@ -861,10 +862,32 @@ def _build_output_path(video_id: str) -> Path:
 
 # -- Snippet sentence finder --------------------------------------------------
 
+def _fold_snippets(snippets: dict) -> list[tuple[str, str]]:
+    """
+    Pair every transcript line with a casefolded copy of itself.
+
+    `snippets` carries a few string keys alongside the float-keyed lines, so
+    the isinstance filter has to run somewhere. Doing it here means it runs
+    once for a package instead of once for every word in it: on a 400-card
+    deck over a 300-line transcript that is 300 folds rather than 120,000.
+
+    casefold rather than lower, and the difference is load-bearing. The
+    pre-filter in _find_in_snippets is only safe if it never skips a line the
+    regex would have matched, and re.IGNORECASE folds a few characters that
+    str.lower() leaves alone. The long s is the one that turns up in real
+    subtitles: re.IGNORECASE matches "s" against "\u017f", "\u017f".lower() is
+    still "\u017f", and "\u017f".casefold() is "s". Under lower() that line would be
+    skipped and the card would lose an example it should have had.
+    """
+    return [(val.get("text", ""), val.get("text", "").casefold())
+            for key, val in snippets.items() if isinstance(key, float)]
+
+
 def _find_in_snippets(
     lemma: str,
     snippets: dict,
     surface_forms: Optional[list] = None,
+    lines: Optional[list[tuple[str, str]]] = None,
 ) -> Optional[str]:
     """
     Return the first transcript line containing this word, or None.
@@ -885,19 +908,10 @@ def _find_in_snippets(
         if form and form.lower() != lemma.lower():
             candidates.append(form)
 
-    # The snippet list is built once, not once per candidate. `snippets`
-    # carries three string keys alongside the float-keyed lines, so the
-    # isinstance filter used to run for every candidate of every word:
-    # 83,772 of them on a 400-card deck.
-    #
-    # Each text is lowercased once here and used as a cheap pre-filter below.
-    # casefold rather than lower for the pre-filter, and deliberately: it is
-    # the more aggressive folding, so it matches in strictly more cases. A
-    # pre-filter is only safe if it never skips something the regex would
-    # have found, and German is the example that matters here, where
-    # casefold maps "straße" and "STRASSE" together while lower does not.
-    lines = [(val.get("text", ""), val.get("text", "").casefold())
-             for key, val in snippets.items() if isinstance(key, float)]
+    # A caller looping over words folds the transcript once and hands it in.
+    # Folding here as well would be the same work repeated per word.
+    if lines is None:
+        lines = _fold_snippets(snippets)
 
     for candidate in candidates:
         # A substring test before the regex. The regex is the authority,
@@ -1086,6 +1100,11 @@ def build_package(
     # that first layer must still not reach the user's Anki deck as two cards.
     added_lemmas: set[str] = set()
 
+    # Fold the transcript once for the whole package. Both card loops search
+    # it, and the folding is proportional to transcript length, so doing it
+    # per word made it proportional to length times vocabulary.
+    folded_snippets = _fold_snippets(snippets) if snippets else []
+
     # Standard cards
     for result in found:
         key = result.lemma.lower()
@@ -1097,7 +1116,8 @@ def build_package(
             # fetch_definitions() searched the lemma alone; retry with the
             # forms the word actually took before giving up on the field.
             result.example_transcript = _find_in_snippets(
-                result.lemma, snippets, (surface_forms or {}).get(key)
+                result.lemma, snippets, (surface_forms or {}).get(key),
+                lines=folded_snippets,
             )
         deck.add_note(_build_note(
             result, model, video_id, language,
@@ -1117,7 +1137,8 @@ def build_package(
             logger.debug("Skipping duplicate fallback note for '%s'.", lemma)
             continue
         transcript_example = (
-            _find_in_snippets(lemma, snippets, (surface_forms or {}).get(key))
+            _find_in_snippets(lemma, snippets, (surface_forms or {}).get(key),
+                              lines=folded_snippets)
             if snippets else None
         )
         dict_example = (not_found_examples or {}).get(lemma)
