@@ -662,7 +662,7 @@ def translate_word(
             if success:
                 result = translate_local(word, from_code, to_code)
                 return result
-            print(f"  Download failed. Continuing without translation for this run.")
+            print("  Download failed. Continuing without translation for this run.")
             _user_choice[pair] = "continue"
             return None
 
@@ -717,7 +717,7 @@ def _warn_translation_unavailable(pair: str) -> None:
     from_code, to_code = pair.split("->")
     print(f"\n  {'─' * 56}")
     print(f"  [warn]  Translation mode: {from_code} -> {to_code}")
-    print(f"          Community mirrors are unavailable.")
+    print("          Community mirrors are unavailable.")
     print(f"          No local model installed for {pair}.")
     print(f"  {'─' * 56}\n")
 
@@ -735,7 +735,7 @@ def _prompt_translation_options(from_code: str, to_code: str) -> str:
     print("  Options:")
     print(f"    [d] Download translation model now ({pair}, ~{_MODEL_SIZE_HINT_MB}MB, one-time)")
     print(f"    [f] Continue without translation (native {from_code} definitions instead)")
-    print(f"    [x] Exit\n")
+    print("    [x] Exit\n")
 
     while True:
         try:
