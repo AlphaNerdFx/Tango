@@ -46,7 +46,8 @@ import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from typing import Callable, Optional
+from collections.abc import Callable
+from typing import Optional
 
 import requests
 

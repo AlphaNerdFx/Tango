@@ -44,7 +44,8 @@ import logging
 import sqlite3
 import threading
 from pathlib import Path
-from typing import Callable, Iterable, Optional
+from collections.abc import Callable, Iterable
+from typing import Optional
 
 import requests
 
