@@ -456,6 +456,30 @@ def _shares_a_word(text: str, stems: set[str]) -> bool:
     return any(stem in folded for stem in stems)
 
 
+def _is_one_of(definition: str, rows) -> bool:
+    """
+    Whether the definition on the card is one of these index rows.
+
+    The comparison in `describes_other_sense` only means anything when the
+    card is showing a row from this index. Measured 8 September 2026 on a
+    637-card English run: without this check the rule dropped 29 pictures of
+    159, among them basket, bell, egg, gift and paper, every one of which had
+    a correct photograph. All 29 carried a Merriam-Webster definition, which
+    words a sense differently from Wiktionary, so the card's text matched
+    nothing while some Wiktionary row matched something. That is not a
+    disagreement about sense; it is a disagreement about phrasing.
+
+    The card can hold a truncated row, since definitions are capped at 256
+    characters at a sentence boundary, so this compares the first 100 folded
+    characters rather than the whole string.
+    """
+    head = " ".join(_fold(definition).split())[:100]
+    if not head:
+        return False
+    return any(" ".join(_fold(row["definition"] or "").split()).startswith(head)
+               for row in rows)
+
+
 def describes_other_sense(
     word: str,
     language: str,
@@ -520,6 +544,13 @@ def describes_other_sense(
             ).fetchall()
             if not rows:
                 continue
+            # The card may be showing Merriam-Webster, dictionaryapi, or a
+            # translated lemma's entry from another index. In none of those
+            # does this index's wording tell us anything about the sense the
+            # card chose, and treating it as if it did threw away correct
+            # pictures wholesale.
+            if not _is_one_of(definition, rows):
+                return False
             for row in rows:
                 # An inflection pointer is not a sense, and a row of another
                 # part of speech is not one this card could have shown. Both
