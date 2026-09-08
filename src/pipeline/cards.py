@@ -63,6 +63,24 @@ CARD_CSS = """
 
    vh rather than vw, because the thing running out is height, and because a
    narrow phone would otherwise shrink text that had room to be larger. */
+/* Anki renders the template inside its own wrapper, `<div id="qa">`, while
+   `.card` lands on the body. So the picture is a grandchild of the flex
+   column, not a child of it, and `flex` on it would do nothing at all.
+   Making the wrapper a flex item too restores the chain. The rule is inert
+   where the wrapper does not exist, which is the case in the card layout
+   preview and in this project's own preview page.
+
+   This was missed until a review pointed at it on 8 September 2026, and it
+   is not verifiable from here: no test can see it, because a stylesheet
+   assertion cannot tell whether a rule had an effect. It needs the person
+   looking at a deck in Anki that CLAUDE.md §1 already asks for. */
+#qa {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
 .card {
     font-family: 'Segoe UI', Arial, sans-serif;
     font-size: clamp(14px, 2.1vh, 17px);
@@ -177,7 +195,13 @@ hr {
    survives. cover would fill it by cropping, and cropping a photograph
    chosen to show one thing can cut that thing out of frame. */
 .card-image img {
-    max-height: 100%;
+    /* Two bounds in one, and both are needed. The percentage tracks the box
+       when the box has a definite height, which is what makes the picture
+       yield to the text. The viewport half is what survives when it does
+       not: a percentage against an indefinite height computes to `none`, and
+       an unbounded 480px photograph is exactly the overflow this was meant
+       to remove. */
+    max-height: min(100%, 45vh);
     max-width: 100%;
     width: auto;
     height: auto;
@@ -1020,7 +1044,12 @@ def build_package(
 
     if use_images:
         candidates = [r.lemma.lower() for r in found]
-        candidates += [lem.lower() for lem in (not_found_audio or {})]
+        # `not_found`, the lemmas that get a fallback card, and not
+        # `not_found_audio`, which is the Commons recording map. Copying the
+        # audio block above cost every fallback card without a recording its
+        # chance at a picture, silently, since a missing image and a refused
+        # one look identical from outside.
+        candidates += [lem.lower() for lem in not_found]
         # What each card will actually say, so a picture of another sense can
         # be dropped before it is downloaded. A fallback card has no
         # definition to disagree with and so is not listed here.
