@@ -164,6 +164,21 @@ class TestBuildIndex:
             build_index("fr", archive=path)
         assert not index_path("fr").exists()
 
+    def test_a_non_https_download_is_refused_before_it_starts(self, monkeypatch):
+        # `urlretrieve` will happily open file:// or ftp://. The URL is built
+        # from a constant template, so this can only fire if that template or
+        # an override changes, which is exactly when a check is worth having.
+        # Added 8 September 2026 with the check itself, after a security
+        # audit flagged the unvalidated open.
+        monkeypatch.setattr(wiktdata, "download_url",
+                            lambda language: "file:///etc/passwd")
+        called = []
+        monkeypatch.setattr(wiktdata.urllib.request, "urlretrieve",
+                            lambda *a, **k: called.append(a))
+        with pytest.raises(DictionaryDownloadError, match="non-HTTPS"):
+            build_index("fr")
+        assert called == [], "it must refuse before opening anything"
+
     def test_download_failure_is_a_typed_error(self, monkeypatch):
         def _boom(*_a, **_k):
             raise OSError("network down")
