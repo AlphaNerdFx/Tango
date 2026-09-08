@@ -41,6 +41,10 @@ review.json
 # with `make dictionary LANGUAGE=<code>`. Never commit these.
 dictionaries/
 
+# Intermediates from scripts/measure_*.py. Kept out of dictionaries/ on
+# purpose: that directory's size is a release metric.
+measurements/
+
 # Logs
 logs/
 *.log

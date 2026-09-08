@@ -55,7 +55,12 @@ DUMP_URL = (
 # assumed, and is excluded from every count below.
 RELATIONS = ("/r/Antonym", "/r/DistinctFrom")
 
-DEFAULT_EDGES = Path("dictionaries/conceptnet_antonym_edges.tsv")
+# Not under dictionaries/. That directory holds what a *user* installs, and
+# its size is a v0.12.0 acceptance target, so a 35 MB measurement
+# intermediate living there inflates the number the rung is judged by. It
+# did: `dictionaries/` read 1083 MB on 8 September 2026 and 35 MB of that
+# was this file, left behind by a script nobody runs twice.
+DEFAULT_EDGES = Path("measurements/conceptnet_antonym_edges.tsv")
 
 # The decks ADR-010's numbers came from. One per language, each the largest
 # real run in `pipeline.db` for that language, so a rerun is comparable.
