@@ -21,11 +21,12 @@ import pytest
 import pipeline.antonyms as antonyms
 import pipeline.config as config
 import pipeline.deck as deck
+import pipeline.images as images
 import pipeline.wiktdata as wiktdata
 
 
 @pytest.fixture(autouse=True)
-def isolated_environment(monkeypatch):
+def isolated_environment(tmp_path, monkeypatch):
     """
     Keep the developer's `.env` out of every test.
 
@@ -62,6 +63,21 @@ def isolated_environment(monkeypatch):
     # The WSL fallback latches per run; a test must not inherit the last
     # test's decision about it.
     monkeypatch.setattr(deck, "_wsl_fallback_tried", False, raising=False)
+
+    # Images, for the same reason and with a sharper edge. `IMAGES_ENABLED`
+    # is read at import, so a developer with it set in `.env` runs a suite
+    # where `build_package` resolves images for real: every test that does
+    # not patch `find_images` makes live Wikimedia requests, which is the
+    # CLAUDE.md 3.5 breakage this whole file exists to prevent. Verified
+    # 8 September 2026 by running the suite with IMAGES_ENABLED=true.
+    #
+    # cards.py imports the flag inside the function, so patching it on
+    # `config` reaches it. IMAGE_DIR is bound into images.py at import, so
+    # that one has to be patched where it landed, or a test that does
+    # download writes into the developer's real cache.
+    monkeypatch.setattr(config, "IMAGES_ENABLED", False, raising=False)
+    monkeypatch.setattr(images, "IMAGE_DIR", tmp_path / "no-image-cache",
+                        raising=False)
 
 
 @pytest.fixture(autouse=True)
