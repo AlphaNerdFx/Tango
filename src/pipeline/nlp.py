@@ -59,7 +59,10 @@ import spacy  # noqa: E402,I001
 from spacy.language import Language  # noqa: E402
 from pipeline import wiktdata
 from pipeline.language import (  # noqa: E402
-    SpacyModelUnavailableError,
+    # Re-exported on purpose: `get_spacy_model` raises it, and a caller of
+    # nlp should not have to know it is defined in language.py. ruff sees
+    # no use in this file and is wrong about it.
+    SpacyModelUnavailableError,  # noqa: F401
     get_spacy_model,
     is_filler,
 )

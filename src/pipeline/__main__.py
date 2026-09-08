@@ -58,7 +58,6 @@ from pipeline.config import is_wsl as config_is_wsl
 from pipeline.definition import reset_circuit_breaker
 from pipeline.language import (
     LanguageResolutionError,
-    list_supported_languages,
     resolve_language_code,
 )
 from pipeline.deck import (

@@ -22,7 +22,6 @@ from __future__ import annotations
 from pipeline import TangoError
 
 import logging
-import os
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path

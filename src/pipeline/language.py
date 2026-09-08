@@ -381,7 +381,6 @@ def list_supported_languages() -> list[tuple[str, str]]:
 
     Used by the `tango languages` command.
     """
-    seen_codes: set[str] = set()
     result: list[tuple[str, str]] = []
 
     # Canonical English names are the first key added per code

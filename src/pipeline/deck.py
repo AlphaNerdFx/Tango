@@ -30,13 +30,11 @@ from pipeline import TangoError
 import html
 import json
 import logging
-import os
 import re
 import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from pathlib import Path
 from typing import Optional
 from urllib.parse import urlsplit
 
