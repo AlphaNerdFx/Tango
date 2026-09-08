@@ -836,6 +836,38 @@ class TestDescribesOtherSense:
         assert wiktdata.describes_other_sense(
             "palais", "fr", self.ROOF, "edifice religieux", None) is True
 
+    def test_a_definition_from_another_source_is_not_judged(self, tmp_path):
+        # The failure this rule shipped with, found on a real 637-card English
+        # run: it dropped 29 pictures of 159, including basket, bell, egg,
+        # gift and paper, all of which had a correct photograph. Every one
+        # carried a Merriam-Webster definition. MW words a sense differently
+        # from Wiktionary, so the card's text agreed with nothing while some
+        # Wiktionary row agreed with something, and that is a disagreement
+        # about phrasing rather than about sense.
+        self._palais(tmp_path)
+        mw = "a large and impressive residence, especially an official one."
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", mw, self.DESCRIPTION, "noun") is False
+
+    def test_a_definition_this_index_gave_is_still_judged(self, tmp_path):
+        # The pair. Without it, refusing to judge anything at all would pass
+        # the test above, and the rule would never fire again.
+        self._palais(tmp_path)
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", self.ROOF, self.DESCRIPTION, "noun") is True
+
+    def test_a_truncated_definition_is_still_recognised(self, tmp_path):
+        # A card holds at most 256 characters, cut at a sentence boundary, so
+        # the definition it shows can be a prefix of the row it came from.
+        # Comparing whole strings would make the rule inert on long entries.
+        long_roof = self.ROOF + (" " + "Elle est tapissee d'une muqueuse." * 8)
+        build_index("fr", archive=_archive(tmp_path, [
+            _record("palais", gloss=long_roof, pos="noun"),
+            _record("palais", gloss=self.BUILDING, pos="noun"),
+        ]))
+        assert wiktdata.describes_other_sense(
+            "palais", "fr", long_roof[:200], self.DESCRIPTION, "noun") is True
+
     def test_a_word_the_index_does_not_have_keeps_its_picture(self, tmp_path):
         self._palais(tmp_path)
         assert wiktdata.describes_other_sense(
