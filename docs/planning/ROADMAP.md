@@ -579,13 +579,30 @@ High-end hardware should be able to spend more, not merely avoid crashing:
 worker counts, batch sizes and cache behaviour should scale to what the
 machine has rather than being fixed at defaults chosen on one laptop.
 
-### v0.13.0: Freeze candidate
+#### The freeze work, folded in here on 8 September 2026
 
-- Write the compatibility document: every item in §3 below, pinned
-- Deprecation policy, what a `0.9 → 1.0` break costs a user
-- Backfill GitHub release notes for v0.4.1–v0.4.5
-- Coverage sweep green across all 16 language pairs, including the new
-  pronunciation columns
+This was a rung of its own, v0.13.0, until the README was read against this
+file and did not have one: it went v0.12.0, v1.0.0. Rather than add a tag to
+the README, the tag was removed from here, because none of what it held is a
+capability. It is a document, a policy and a sweep, and a release exists to
+deliver something a user can run.
+
+- **The compatibility document**: every item in §3 below, pinned and tested.
+  It gains `--images/--no-images`, added to §3 on 8 September 2026.
+- **A deprecation policy**: what a `0.x` to `1.0` break costs a user.
+- **The coverage sweep**, across the languages a user can actually have an
+  index for, de/fr/ru/en, twelve pairs, including the pronunciation and image
+  columns. es/ja/ko/pt/zh are reported honestly as usable for cards but
+  sparse until the user builds an index, which is what `tango doctor` and
+  `tango languages` already say. Decided 8 September 2026, against building
+  five more indexes at roughly 1.5 GB, which would have fought this rung's
+  own goal.
+- **The transcript single point of failure, documented** rather than fixed.
+  `youtube-transcript-api` is the only extraction path and stays that way for
+  1.0, decided 8 September 2026.
+
+Dropped from the old rung: backfilling GitHub release notes for v0.4.1 to
+v0.4.5, which was done on 3 September 2026. All twenty-one tags have notes.
 
 ### v1.0.0: A finished CLI
 
