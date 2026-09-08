@@ -252,7 +252,7 @@ def resolve_language_code(
         f"Could not detect a language from deck name{deck_hint}.\n"
         f"  Either rename your deck to a language name (e.g. 'French', 'Deutsch'),\n"
         f"  or pass the language code explicitly:\n"
-        f"    make run VIDEO_ID=<id> DECK=\"{deck_name or 'MyDeck'}\" LANGUAGE=fr\n"
+        f"    tango run <id> --deck \"{deck_name or 'MyDeck'}\" --language fr\n"
         f"  Supported codes: fr, es, de, ja, zh-CN, ar, and more (see docs/languages.txt)"
     )
 

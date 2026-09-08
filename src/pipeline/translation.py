@@ -649,7 +649,7 @@ def translate_word(
             else:
                 logger.warning(
                     "No translation model for %s. Install it with "
-                    "`make translate-model LANGUAGE=%s DEF_LANG=%s`; "
+                    "`tango install-translation %s:%s`; "
                     "definitions stay in %s until then.",
                     pair, from_code, to_code, from_code,
                 )

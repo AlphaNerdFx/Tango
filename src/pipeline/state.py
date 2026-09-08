@@ -52,7 +52,7 @@ class VideoAlreadyProcessedError(TangoError):
             f"Video '{video_id}' was already processed on {processed_at} "
             f"for deck '{deck_name}'. No new cards will be created.\n"
             f"  Pass --force to process it again "
-            f"(make run VIDEO_ID={video_id} DECK=\"{deck_name}\" FORCE=1)."
+            f"(tango run {video_id} --deck \"{deck_name}\" --force)."
         )
 
 

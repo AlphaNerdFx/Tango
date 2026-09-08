@@ -685,7 +685,7 @@ def _run_pipeline(args: SimpleNamespace, session: Session) -> None:
     if not check_result.anki_available:
         _warn(
             "Anki is not running. All words written to backlog. "
-            "Run 'make backlog' when Anki is available."
+            f"Run 'tango backlog --deck \"{deck_name}\"' when Anki is available."
         )
         sys.exit(0)
 
@@ -1034,7 +1034,7 @@ def _run_setup_wizard() -> None:
 
     if not key or any(ch.isspace() for ch in key):
         _err("That doesn't look like a valid key (empty, or contains whitespace).")
-        _info("Run 'make setup' again once you have it, or edit .env directly.")
+        _info("Run 'tango setup' again once you have it, or edit .env directly.")
         sys.exit(1)
 
     set_key(str(_ENV_PATH), "MW_API_KEY", key)
@@ -1560,7 +1560,7 @@ def _run_doctor() -> int:
     for code in present:
         if code not in built and code != "en":
             missing += 1
-            print(f"    {code:<6} missing  -> make dictionary LANGUAGE={code}")
+            print(f"    {code:<6} missing  -> tango build-dictionary {code}")
     print()
 
     # ── Antonym index: optional everywhere, and absent is a normal state ──
@@ -1573,7 +1573,7 @@ def _run_doctor() -> int:
     else:
         # Not counted as missing. A run without it produces the same cards
         # it produced before the index existed, so this is a suggestion.
-        print("    absent   -> make antonyms")
+        print("    absent   -> tango build-antonyms")
         print("             Antonyms are the weakest card field: 19.7% on a")
         print("             real French deck. This takes it to 34.8%.")
     print()
@@ -1628,10 +1628,10 @@ def _run_doctor() -> int:
         pairs = [(p.from_code, p.to_code) for p in argos_pkg.get_installed_packages()]
         print(f"    installed      {', '.join(f'{a}->{b}' for a, b in pairs) if pairs else 'none'}")
         if not pairs:
-            print("    -> make translate-model LANGUAGE=de DEF_LANG=en")
+            print("    -> tango install-translation de:en")
     except ImportError:
         print("    argostranslate not installed (optional)")
-        print("    -> pip install -e '.[translation]'")
+        print("    -> pip install 'tango-anki[translation]'")
     missing += _report_torch_build()
     print()
 
@@ -1712,7 +1712,7 @@ def _run_install_translation(pair: str) -> int:
         from pipeline.translation import install_translation
     except ImportError:
         _err("argostranslate is not installed.")
-        _info("Install it with: pip install -e '.[translation]'")
+        _info("Install it with: pip install 'tango-anki[translation]'")
         return 1
 
     _info(f"Installing translation for {from_code} -> {to_code}...")
