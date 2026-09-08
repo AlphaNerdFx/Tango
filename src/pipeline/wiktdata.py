@@ -525,6 +525,19 @@ def describes_other_sense(
     Inert under --def-lang, knowingly. The definition then comes from the
     target-language index under a *translated* lemma, which this function is
     not given, so it finds no rows and answers False.
+
+    **Inert for any language not written in the Latin alphabet**, which is a
+    limitation rather than a decision. `_CONTENT_WORD` matches `[a-z]{4,}`
+    after folding, and folding lowercases and strips combining marks without
+    transliterating, so a Russian or Chinese description yields no stems at
+    all and this answers False before consulting the index. Russian ships an
+    index and is a supported deck language, so the protection is simply
+    unavailable there. Widening the pattern to Unicode letters is not a free
+    change: it would also stop German's `ss` ligature from splitting a
+    compound, which is what lets "Hei(ss)getraenk" meet "Aufgussgetraenk"
+    today, so it needs re-measuring against German before it moves. The
+    failure direction is safe meanwhile: no stems means no drop, and the
+    picture stays.
     """
     if not definition or not description:
         return False
