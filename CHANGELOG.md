@@ -12,10 +12,18 @@ Entries for v0.4.5 and earlier were reconstructed from tag messages and
 `git log` when this file was created at v0.5.0. They summarise each release
 rather than list every change.
 
-## [Unreleased]
+## [0.11.0] - 2026-09-08
 
-Images on cards, gated to concrete nouns. ADR-009 phase 3, built but **off
-by default** pending a look at real cards in Anki.
+Images on cards, gated to concrete nouns. ADR-009 phase 3. Off by default and
+asked for per run with `--images`, because a picture roughly doubles a deck
+that already carries audio.
+
+**Migration.** `Image` and `Attribution` are appended as fields 12 and 13.
+`tango run` aligns the notetype before importing, so an existing collection
+gains two empty fields and keeps every note, its content and its scheduling;
+verified against a live 5,311-note collection, which merged without forking.
+Anki will ask for a full sync afterwards, which is what a schema change
+always costs.
 
 ### Added
 
