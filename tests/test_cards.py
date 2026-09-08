@@ -235,8 +235,12 @@ class TestBuildNote:
         assert "purify" in note.fields[7]
 
     def test_empty_synonyms_give_empty_string(self, no_synonym_result):
+        # Vacuous until 8 September 2026: it built the note and asserted
+        # nothing, so it passed whatever went into field 6. The name says
+        # what it should check, so it now checks it.
         note = _build_note(no_synonym_result, _build_model(), VIDEO_ID)
-        # FallbackNote removed, no assertion needed
+        assert note.fields[6] == "", "no synonyms must render as empty, not 'None'"
+        assert note.fields[7] == ""
 
     def test_guid_is_stable(self, sample_result):
         model = _build_model()
@@ -271,11 +275,19 @@ class TestBuildNote:
         assert "yt-anki" in _build_note(sample_result, _build_model(), VIDEO_ID).tags
 
     def test_none_example_dict_becomes_empty_string(self, no_synonym_result):
+        # Also vacuous. A None example reaching the card as the four
+        # characters "None" is the failure this name describes.
         note = _build_note(no_synonym_result, _build_model(), VIDEO_ID)
+        assert note.fields[3] == ""
+        assert note.fields[4] == ""
 
-    def test_fallback_field_empty_on_standard_note(self, sample_result):
+    def test_a_standard_note_is_not_marked_as_a_fallback(self, sample_result):
+        # The old name referred to a field removed with FallbackNote, and the
+        # body asserted nothing. What still matters is that a note built from
+        # a real definition names its real source rather than "not_found".
         note = _build_note(sample_result, _build_model(), VIDEO_ID)
-        # FallbackNote removed, no assertion needed
+        assert note.fields[9] == "merriam-webster"
+        assert note.fields[9] != "not_found"
 
 
 # -- _build_fallback_note -----------------------------------------------------
@@ -329,7 +341,12 @@ class TestBuildFallbackNote:
         assert note.fields[9] == "not_found"
 
     def test_none_transcript_becomes_empty_string(self):
+        # Vacuous until 8 September 2026. A fallback card exists to carry the
+        # transcript sentence, so "None" appearing there would be visible on
+        # every card built for a word the video never clearly said.
         note = _build_fallback_note("obscure", None, _build_model(), VIDEO_ID)
+        assert note.fields[5] == ""
+        assert "None" not in note.fields[5]
 
 
 # -- _build_output_path -------------------------------------------------------

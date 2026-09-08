@@ -1597,6 +1597,10 @@ class TestFetchDefinitions:
         mock_fetch.return_value = sample_definition_result
         result = fetch_definitions(["contaminate", "water", "develop"])
         assert mock_fetch.call_count == 3
+        # The result was assigned and never checked, so this passed equally
+        # for a function that made three calls and returned nothing.
+        assert len(result.found) == 3
+        assert result.not_found == []
 
     def test_cache_hit_skips_fetch_definition_call(
         self, sample_definition_result

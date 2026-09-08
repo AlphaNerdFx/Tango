@@ -411,10 +411,9 @@ class TestCheckSingle:
         assert result.decision == Decision.SKIP
 
     def test_high_fuzzy_match_returns_skip(self):
-        # "run" vs "run" is exact, use a pair that scores just above 90
-        fronts = ["running"]
-        # "runs" vs "running", WRatio ~90, but short word rule applies for len<4
-        # Use longer words to test HIGH band
+        # A pair long enough to escape the short-word exact-match rule and
+        # close enough to score in the HIGH band. The earlier "running"
+        # example was left behind by an edit and scored nothing here.
         result = _check_single("develop", ["developer"])
         assert result.decision in (Decision.SKIP, Decision.QUEUE)
 
@@ -506,17 +505,36 @@ class TestCheckVocabulary:
         assert result.new == []
 
     @patch("pipeline.deck.get_card_fronts")
-    def test_queue_written_to_db(self, mock_fronts):
+    def test_a_queued_word_is_persisted_so_an_interrupted_run_keeps_it(self, mock_fronts):
+        # Rewritten 8 September 2026. It read `assert conn is not None`,
+        # which sqlite3.connect guarantees, and threw away the rows it had
+        # just queried, so it could not fail.
+        #
+        # Its comment then sent the rewrite the wrong way: it said the
+        # backlog is written "only when Anki is down" and that the queue
+        # "uses separate table". Neither is true. `check_vocabulary` persists
+        # the queue to `anki_backlog` immediately, on purpose, so a run
+        # interrupted at the y/n/s prompt does not lose the words it had
+        # already judged uncertain. And there is exactly one table.
         mock_fronts.return_value = ["contamination"]
-        check_vocabulary({"contaminate": 1}, "English")
-        # Queue written to DB, verify via SQLite directly
+        result = check_vocabulary({"contaminate": 1}, "English")
+        assert result.anki_available is True
+        assert [m.lemma for m in result.queue] == ["contaminate"]
+
         import pipeline.deck as deck_module
         conn = sqlite3.connect(deck_module.DB_PATH)
-        rows = conn.execute("SELECT * FROM anki_backlog").fetchall()
-        conn.close()
-        # Backlog only written when Anki is down, queue uses separate table
-        # This confirms the DB was created and accessible
-        assert conn is not None
+        try:
+            rows = conn.execute(
+                "SELECT lemma, deck_name FROM anki_backlog").fetchall()
+            tables = [r[0] for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'")]
+        finally:
+            conn.close()
+
+        assert rows == [("contaminate", "English")], (
+            "an uncertain word must survive an interrupted run")
+        assert tables == ["anki_backlog"], (
+            "one table, despite the comment this test used to carry")
 
 
 # ── prompt_queue ──────────────────────────────────────────────────────────────
