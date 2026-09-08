@@ -453,14 +453,19 @@ KNOWN_ENV_KEYS: frozenset[str] = frozenset({
     "IMAGES_ENABLED", "IMAGE_TIMEOUT", "IMAGE_DIR",
     # Debugging
     "TANGO_DEBUG",
-    # Publishing. Read by twine through the shell, never by this package,
-    # so they are known-but-unread and exempt from the "is it read" half of
-    # the test.
-    "PYPI_USER", "PYPI_API",
 })
 
-# The publishing keys above, kept separate so the test can exempt them.
-UNREAD_BY_DESIGN: frozenset[str] = frozenset({"PYPI_USER", "PYPI_API"})
+# Keys this project documents but never reads, exempt from the "is it read"
+# half of the test.
+#
+# Empty since 8 September 2026. It held PYPI_USER and PYPI_API, which are a
+# maintainer's publishing credentials rather than settings: nothing here
+# reads them, twine does, and `.env` is the wrong home for them because
+# `load_dotenv()` above puts everything in that file into the environment of
+# every run. They now live in CONTRIBUTING.md, where the person who needs
+# them is already reading. The set stays as the seam for the next key that
+# genuinely is documented-but-unread.
+UNREAD_BY_DESIGN: frozenset[str] = frozenset()
 
 
 def unknown_env_keys(env_path: Path | None = None) -> list[str]:
