@@ -172,13 +172,30 @@ def is_concrete_noun(word: str, language: str = "en") -> bool:
 
 def images_supported(language: str) -> bool:
     """
-    Whether the concreteness gate can judge this language at all.
+    Whether the WordNet concreteness gate can judge this language at all.
 
-    Reported by `tango doctor`, so a German user is told images are
-    unavailable rather than left wondering why the field is always empty.
-    German is not one of OMW's 32 languages: `wn.synsets("Hund", lang="deu")`
-    raises "Language deu is not supported". It is 39.5% of this project's
-    own cached definitions, so this is the common case, not an edge.
+    **Nothing calls this any more, and the behaviour it describes is gone.**
+    It said "Reported by `tango doctor`", and that was true of the WordNet
+    gate: German is not one of OMW's 32 languages, `wn.synsets("Hund",
+    lang="deu")` raises "Language deu is not supported", and German is 39.5%
+    of this project's cached definitions, so a German user needed telling
+    that images could not work for them.
+
+    v0.11.0 replaced that gate. Images now resolve the lemma to a Wikidata
+    concept, which judges the meaning rather than the word, so `Hund` and
+    `chien` both reach Q144 and one judgement serves every language a
+    Wikipedia exists in. `tango doctor` says exactly that now, and stopped
+    calling this. ARCHITECTURE 8.46.
+
+    Kept rather than deleted because it is still the honest answer to "can
+    WordNet judge this language", which the synonym and antonym fields still
+    depend on. Delete it if that stops being true.
+
+    Args:
+        language: BCP-47 code.
+
+    Returns:
+        True if OMW covers this language and loaded successfully.
     """
     omw_lang = "eng" if language == "en" else _OMW_LANGUAGE_CODES.get(language)
     if not omw_lang:
