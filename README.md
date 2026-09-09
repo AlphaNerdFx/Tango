@@ -137,7 +137,7 @@ run the pipeline:
 | PROXY_HTTP_URL, PROXY_HTTPS_URL | No | Your own proxy, only needed if YouTube starts rate-limiting your IP. See Proxy notes below before using one |
 | WEBSHARE_USERNAME, WEBSHARE_PASSWORD | No | Alternative to the above if you specifically use Webshare |
 | ANKI_HOST | No | AnkiConnect URL. Defaults to `http://localhost:8765`, which is right everywhere except WSL, and WSL is detected and handled without setting this |
-| LIBRETRANSLATE_URL | No | Local LibreTranslate server URL for translation mode |
+| LIBRETRANSLATE_MIRRORS | No | Comma-separated LibreTranslate servers to try first, your own local one included |
 
 ### Proxy notes
 
