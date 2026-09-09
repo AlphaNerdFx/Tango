@@ -15,7 +15,7 @@ to 8.52.
 | | before | after |
 |---|---|---|
 | coverage | 86%, 3627 statements, 494 missed | **89%, 3654 statements, 401 missed** |
-| unit tests | 1204 | **1301** across 16 files, 33 integration deselected |
+| unit tests | 1204 | **1306** across 16 files, 33 integration deselected |
 | ruff | 267 | **202**, every actionable category cleared |
 | mypy | 26 | 25 |
 | bandit | 1 HIGH, 1 MEDIUM, 2 LOW | **0 at every severity** |
@@ -140,7 +140,7 @@ wrong fold. ARCHITECTURE 8.51.
 
 ## Part 4: tests
 
-97 added, 1204 to 1301, across 16 files.
+102 added, 1204 to 1306, across 16 files.
 
 - **The socket guard**, which is the highest-value change here. CLAUDE.md
   3.5 forbids network access in the default run and had been prose only.
@@ -193,8 +193,8 @@ serve.
 | `TASKS.md` | "Migrate CLI from argparse to Typer" open | shipped in v0.7.0 |
 | `TASKS.md` | "Dockerfile" open, base `python:3.11-slim` | shipped in v0.8.2, published 8 September, base is `python:3.10-slim` |
 | `TASKS.md` | "Phase 3, images, is deliberately not built" | shipped in v0.11.0 |
-| `ARCHITECTURE.md` §10 | "734 unit tests", "88% overall, 1963 statements", per-module table | 1301, 89%, 3654, and eleven of the fifteen module figures wrong |
-| `SESSION.md`, `HANDOVER.md` | 1230 passing, 86%, 1237 collected | 1301, 89%, 1334 |
+| `ARCHITECTURE.md` §10 | "734 unit tests", "88% overall, 1963 statements", per-module table | 1306, 89%, 3654, and eleven of the fifteen module figures wrong |
+| `SESSION.md`, `HANDOVER.md` | 1230 passing, 86%, 1237 collected | 1306, 89%, 1339 |
 | `README.md` | `pip install "tango-anki[translation,translation-server]"` | that extra does not exist in the published 0.11.0. Verified against the PyPI JSON API |
 | Docker Hub | nothing | the page had no description at all, short or full |
 
