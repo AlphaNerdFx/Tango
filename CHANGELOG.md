@@ -14,7 +14,31 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working towards v0.12.0, runs on modest hardware.
+Working towards v0.12.0, runs on modest hardware. Everything below is on
+`main` and unreleased: the published 0.11.0 has none of it.
+
+Most of this came out of a code and documentation audit run on 8 and 9
+September 2026. The full account, with the numbers each conclusion rests on,
+is in `docs/history/CODE_AUDIT_2026-09.md`. The decisions it produced are
+ADR-012, ADR-013 and ADR-014.
+
+### Added
+
+- **The Docker image is published**, as `yousseflarbi/tango`, tags `latest`
+  and `0.11.0`. It installs the wheel from PyPI on purpose, so building it
+  tests the artefact users actually install. AnkiConnect is not reachable
+  from inside a container and the image says so when a run needs it.
+- **`make audit`**, running `bandit` and `pip-audit` together. Both are in
+  the `dev` extra.
+- **`tango doctor` reports a setting whose value is not a number**, naming
+  the setting, the value written, and the fact that the default was used
+  instead. It already reported settings that nothing reads.
+- **`tango doctor` reports a publishing credential left in `.env`.** A token
+  is not a setting, and `load_dotenv()` puts everything in that file into
+  the environment of every run.
+- `scripts/measure_footprint.py`, which measures the v0.12.0 memory targets
+  per stage in separate interpreters. None of those targets had ever been
+  measured.
 
 ### Changed
 
@@ -23,18 +47,103 @@ Working towards v0.12.0, runs on modest hardware.
   community mirrors and argostranslate cover the feature, while the server
   pulled **134 MB across 36 packages**, including PyMuPDF at 65 MB and lxml,
   for document conversion this project does not do. `make translate-setup`
-  installs both, so the guided path is unchanged.
+  installs both, so the guided path is unchanged. ADR-014.
+- **`.env.example` now ships the code defaults.** It had `MW_RATE_LIMIT=2`
+  and `MW_BURST=5` against code defaults of 4.0 and 8, so copying the
+  documented template halved the throughput the project had deliberately
+  settled on, and nothing said so.
+- **`LIBRETRANSLATE_URL` is removed.** It was documented in `.env.example`
+  and in a code comment as "set this to your own instance and it is used
+  first", and the constant it filled was read and never used, from the day
+  it was added on 10 July 2026. A local server has always gone in
+  `LIBRETRANSLATE_MIRRORS`, which is consumed, so the setting was removed
+  rather than wired up. Anyone who still has the key set is now told by
+  `tango doctor` that it has no effect. ADR-012.
+- The transcript search is **8.5x faster on a hit and 13.3x on a miss**, and
+  a whole package build 28% faster. It was 66% of the build. ARCHITECTURE
+  8.51.
+- `typing.Callable` moved to `collections.abc` in four modules, where it has
+  lived since Python 3.9.
+- Security floors raised for `requests` and `nltk`. Dependency advisories
+  went from 37 to 11, and all eleven that remain are inside the translation
+  server extra, which no normal install pulls.
 
 ### Fixed
 
+- **A blank setting no longer stops the program.** `KEY=` in a `.env` loads
+  as an empty string rather than leaving the name unset, so eighteen numeric
+  settings raised `ValueError` during `import config`, which happens before
+  `main()` exists to turn it into a message, and nine text settings silently
+  lost their defaults. A blank value now means unset everywhere, as it
+  already did for paths. `.env.example` ships ten keys with blank values, so
+  this was reachable by following the documented setup. ADR-012,
+  ARCHITECTURE 8.52.
 - **Thirteen unit tests were making real network requests**, which breaks
   CLAUDE.md 3.5. Twelve reached en.wiktionary.org or dictionaryapi.dev and
   one reached Wikidata. None was written that way: each mocked every source
   its function had at the time and stopped being complete when another was
-  added, silently. `conftest.py` now fails any default-run test that opens an
-  outbound connection. ARCHITECTURE 8.49.
+  added, silently. `conftest.py` now fails any default-run test that opens
+  an outbound connection. ADR-013, ARCHITECTURE 8.49.
+- **A schema migration could swallow a locked or corrupt database.** Two
+  `except Exception: pass` blocks around `ALTER TABLE` made an unwritable
+  database look exactly like a column that already existed.
+- **A mutable default argument** in `transcript.fetch_transcript`, and six
+  re-raises that dropped the original traceback for want of `from exc`.
+- **An unvalidated URL scheme** before `urlretrieve`. The URL is always
+  https because it is built from a constant template, but `urlretrieve`
+  opens `file://` and `ftp://` too, so the invariant is now enforced rather
+  than reconstructed by the reader.
 - A 35 MB measurement intermediate was living in `dictionaries/`, whose size
   is one of v0.12.0's acceptance targets.
+- Eight live settings had never reached `.env.example`, among them
+  `IMAGES_ENABLED`, the headline setting of the release published that
+  morning.
+
+### Removed
+
+- `translation.check_packages_dir()`, 44 lines. Unreachable:
+  `_repair_packages_dir()` runs at import and pops the environment variable,
+  so the diagnostic could never find the problem it was written to report.
+- Six dead declarations across five modules, sixteen unused test imports,
+  and `translation.LIBRETRANSLATE_LOCAL`.
+
+### Documentation
+
+A full audit on 9 September 2026, checking every claim against the thing it
+describes: code comments against code, markdown against code, `.env.example`
+against `config.py`, and the repository against what PyPI and Docker Hub
+actually serve.
+
+- **`ARCHITECTURE.md` section 10 was wrong in every figure.** It claimed 734
+  unit tests across eleven files at 88% over 1963 statements. Measured: 1301
+  tests across 16 files, 89% over 3654. Eleven of its fifteen per-module
+  numbers were stale, and three modules recorded at 100% were not. This is
+  the fourth stale coverage figure this repository has carried.
+- **`TASKS.md` listed three shipped things as open**: the Typer migration
+  (v0.7.0), the Dockerfile (v0.8.2, published 8 September), and phase 3
+  images, whose entry read "deliberately not built" after v0.11.0 shipped
+  it. The Dockerfile entry also named a `python:3.11-slim` base against the
+  real `python:3.10-slim`.
+- **Two dangling cross-references.** `tests/conftest.py` and `ARCHITECTURE.md`
+  both cited section 18.7 as an ARCHITECTURE section. It is a CLAUDE.md
+  section and ARCHITECTURE has no section 18. Every other `ARCHITECTURE n.n`
+  citation in the repository was checked and resolves.
+- **The README advertised an extra the published package does not have.**
+  `pip install "tango-anki[translation,translation-server]"` fails on 0.11.0,
+  verified against the PyPI JSON API. The README now says so and names the
+  release it arrives in.
+- **Docker Hub had no description**, short or full. One is now written,
+  kept in the repository, and pushed.
+- Stale test and coverage figures corrected in `CLAUDE.md`, `SESSION.md` and
+  `HANDOVER.md`, and the "`make check` takes about ten minutes" claim that
+  every handover carried replaced with the measured 145 seconds.
+- New: ADR-012, ADR-013, ADR-014, ARCHITECTURE 8.49 to 8.52, and
+  `docs/history/CODE_AUDIT_2026-09.md`.
+
+Checks that came back clean are recorded too, in the audit document: version
+agreement across six places, every documented `make` target existing, and
+the PyPI badge pinning confirmed working on the published 0.11.0 page rather
+than only in `make dist`.
 
 ## [0.11.0] - 2026-09-08
 
