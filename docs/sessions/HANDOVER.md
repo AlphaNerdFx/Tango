@@ -7,10 +7,10 @@ Written 9 September 2026.
 | | |
 |---|---|
 | branch | `main`, remote is `origin` |
-| last tag | **`v0.11.0`**, tagged and pushed 8 September 2026 |
-| `__version__` | `0.11.0` |
+| last tag | **`v0.12.0`**, tagged 10 September 2026 |
+| `__version__` | `0.12.0` |
 | `make check` | exit 0 |
-| tests | **1330 unit, 33 integration deselected** |
+| tests | **1346 unit, 33 integration deselected** |
 | coverage | **89%**, 3710 statements, 400 missed, measured 9 September |
 | PyPI | **0.11.0 published**, `pip install tango-anki` |
 | Docker | **published as `yousseflarbi/tango`** |
@@ -226,7 +226,7 @@ Environmental notes, not this repository's bugs:
 - **There is no `pip` script in `.tangovenv/bin`.** Use
   `.tangovenv/bin/python -m pip`.
 - **pytest's summary line is suppressed here** for the full suite. Per-file
-  runs do print it, so count that way: 1363 collected, 33 integration.
+  runs do print it, so count that way: 1379 collected, 33 integration.
 - **The pre-commit hook matches the literal text "git commit" in a command**,
   so writing a file whose contents mention it is blocked. Use the editor tool,
   not a shell heredoc.

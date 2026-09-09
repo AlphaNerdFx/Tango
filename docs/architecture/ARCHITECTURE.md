@@ -3492,7 +3492,7 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-**1330 unit tests across 16 test files, 33 more marked integration and
+**1346 unit tests across 17 test files, 33 more marked integration and
 deselected by default**, measured 9 September 2026. All run without network,
 Anki, or installed models, and since 8 September that is enforced rather
 than asked for: an autouse fixture in `conftest.py` fails any default-run
