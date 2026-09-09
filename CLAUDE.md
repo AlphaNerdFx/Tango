@@ -660,16 +660,16 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1325 passing, 33 deselected. The count drifts as tests are added,
+Expected: 1330 passing, 33 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
 make coverage      # unit tests plus a per-module line-coverage report
 ```
 
-Measured 9 September 2026: 89% overall, 3654 statements, 401 missed. The
-weakest modules are `translation.py` at 76%, `__main__.py` at 83%,
-`antonyms.py` at 84%, and `transcript.py` at 87%. Every bug found by
+Measured 9 September 2026: 89% overall, 3710 statements, 400 missed. The
+weakest modules are `translation.py` at 76%, `__main__.py` and
+`antonyms.py` at 84%, and `transcript.py` at 89%. Every bug found by
 coverage work so far has been wiring between modules rather than logic
 inside one. See ARCHITECTURE.md section 10.
 

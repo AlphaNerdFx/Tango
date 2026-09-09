@@ -64,10 +64,10 @@ behind that. With one remote named `origin`, that command resolves and
 answers honestly. `git status -sb` still names the upstream and is still the
 better habit.
 
-**Test state, measured 9 September 2026:** 1325 passing, 0 failing, 33
+**Test state, measured 9 September 2026:** 1330 passing, 0 failing, 33
 integration deselected (`make check`, exit 0). It was 972 at v0.6.0 and 1204
-before the September audit, which added 121.
-**Coverage, measured 9 September 2026:** 89% overall, 3654 statements, 401
+before the September audit, which added 126.
+**Coverage, measured 9 September 2026:** 89% overall, 3710 statements, 400
 missed. Weakest now: `translation.py` at 76%, most of it the interactive
 download prompt, then `__main__.py` at 83% and `antonyms.py` at 84%.
 `images.py` was the floor at 65% and is now 93%: the tests patched at the
