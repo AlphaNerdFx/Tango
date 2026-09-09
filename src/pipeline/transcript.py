@@ -193,7 +193,13 @@ def get_transcript(video_id: str,
     except AgeRestricted as exc:
         raise AgeRestricted(video_id) from exc
     except VideoUnplayable as exc:
-        raise VideoUnplayable(video_id, exc.reason) from exc
+        # sub_reasons is required, not optional. Leaving it off raised
+        # TypeError from inside the handler, so a video YouTube reports as
+        # unplayable produced "VideoUnplayable.__init__() missing 1 required
+        # positional argument" instead of a message about the video. Found by
+        # mypy on 9 September 2026 and reproduced before it was fixed:
+        # a handled failure was degrading into an unexpected one.
+        raise VideoUnplayable(video_id, exc.reason, exc.sub_reasons) from exc
     except TranscriptsDisabled as exc:
         raise TranscriptsDisabled(video_id) from exc
     except (IpBlocked, RequestBlocked) as exc:
@@ -218,6 +224,31 @@ def get_transcript(video_id: str,
 
 
 # ── 2. get_properties ─────────────────────────────────────────────────────────
+
+def _translation_code(lang: object) -> str:
+    """
+    Read a translation language's code, whichever shape the library returns.
+
+    youtube-transcript-api returns `_TranslationLanguage` objects, which are
+    not subscriptable, and this module indexed them like dicts. That is a
+    `TypeError` on any translatable transcript. It never fired in the suite
+    because the fixture used plain dicts, so the bug could not be written as
+    a failing test (CLAUDE.md 5). Found by mypy on 9 September 2026.
+
+    Both shapes are handled rather than only the current one: the dependency
+    is pinned to a range, `>=1.2.4,<2.0`, and this attribute is exactly the
+    kind of detail a minor release moves.
+
+    Args:
+        lang: One entry from `transcript.translation_languages`.
+
+    Returns:
+        The BCP-47 code.
+    """
+    if isinstance(lang, dict):
+        return str(lang["language_code"])
+    return str(lang.language_code)      # type: ignore[attr-defined]
+
 
 def get_properties(transcript: Transcript) -> dict:
     """
@@ -254,7 +285,8 @@ def get_properties(transcript: Transcript) -> dict:
         "is_generated":          transcript.is_generated,
         "is_translatable":       transcript.is_translatable,
         "translation_languages": (
-            [lang["language_code"] for lang in transcript.translation_languages]
+            [_translation_code(lang)
+             for lang in transcript.translation_languages]
             if transcript.is_translatable else None
         ),
         "snippet_count":         len(fetched),
