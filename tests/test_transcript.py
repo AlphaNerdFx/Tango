@@ -10,6 +10,8 @@ Run all including live: pytest tests/test_transcript.py
 from unittest.mock import MagicMock, patch
 import pytest
 
+from youtube_transcript_api._transcripts import _TranslationLanguage
+
 import pipeline.transcript as transcript
 from pipeline.transcript import get_transcript, get_properties, get_snippets
 
@@ -44,7 +46,15 @@ def _make_transcript(fetched, video_id="LV_NoD2M54w", language="English",
     t.language_code        = language_code
     t.is_generated         = is_generated
     t.is_translatable      = is_translatable
-    t.translation_languages = [{"language_code": "de"}, {"language_code": "fr"}]
+    # The real objects the library returns, not dicts. They were dicts here
+    # until 9 September 2026, which is why `lang["language_code"]` in
+    # get_properties passed every test and would have raised TypeError on
+    # any real translatable transcript. A fixture that cannot express the
+    # bug is worse than no fixture (CLAUDE.md 5).
+    t.translation_languages = [
+        _TranslationLanguage(language="German", language_code="de"),
+        _TranslationLanguage(language="French", language_code="fr"),
+    ]
     t.fetch.return_value   = fetched
     return t
 
@@ -352,3 +362,97 @@ class TestBlockedMessageKnowsAboutTheProxy:
                 transcript.get_transcript("abc12345678")
         assert "No proxy is configured" not in exc.value.cause
         assert "even through the configured proxy" in exc.value.cause
+
+
+class TestReRaisedLibraryExceptionsAreConstructedCorrectly:
+    """
+    Re-raising a library exception with the wrong arity is a handled failure
+    turning into an unexpected one.
+
+    `get_transcript` catches eight exceptions from youtube-transcript-api and
+    re-raises each with the video id attached, so the message names the video
+    rather than a URL the user did not type. Every one of those constructor
+    calls has to match a signature this project does not own and does not
+    pin, and nothing was checking that.
+
+    `VideoUnplayable` needs three arguments and was given two, so a video
+    YouTube reports as unplayable raised
+    `TypeError: __init__() missing 1 required positional argument` from
+    inside the handler. Found by mypy on 9 September 2026.
+    """
+
+    def test_an_unplayable_video_reports_the_video_not_a_type_error(self):
+        from youtube_transcript_api._errors import VideoUnplayable
+
+        upstream = VideoUnplayable("vid123", "Video unavailable", ["It is private"])
+        fake = MagicMock()
+        fake.list.side_effect = upstream
+
+        with patch.object(transcript, "YouTubeTranscriptApi",
+                          return_value=fake):
+            with pytest.raises(VideoUnplayable) as caught:
+                transcript.get_transcript("vid123")
+
+        assert not isinstance(caught.value, TypeError)
+        assert "vid123" in str(caught.value)
+
+    def test_every_reraise_matches_the_librarys_signature(self):
+        """
+        The general form, so the next signature change fails here.
+
+        Reads the constructor calls out of `get_transcript`'s source and
+        checks each against the real signature. A library bump that adds a
+        required argument breaks this test rather than a user's run.
+        """
+        import inspect
+        import re
+
+        from youtube_transcript_api import _errors
+
+        source = inspect.getsource(transcript.get_transcript)
+        calls = re.findall(r"raise (\w+)\(([^)]*)\) from exc", source)
+        assert len(calls) >= 6, "the scan stopped finding the re-raises"
+
+        wrong = []
+        for name, args in calls:
+            cls = getattr(_errors, name, None)
+            if cls is None:
+                continue          # a type this project defines itself
+            required = [
+                p.name for p in list(
+                    inspect.signature(cls.__init__).parameters.values())[1:]
+                if p.default is inspect.Parameter.empty
+                and p.kind is not inspect.Parameter.VAR_KEYWORD
+            ]
+            given = len([a for a in args.split(",") if a.strip()])
+            if given != len(required):
+                wrong.append(
+                    f"{name}: given {given}, needs {len(required)} {required}")
+
+        assert not wrong, (
+            "These re-raises would throw TypeError from inside the handler, "
+            "turning a handled failure into an unexpected one:\n  "
+            + "\n  ".join(wrong))
+
+
+class TestTranslationLanguagesAreReadNotIndexed:
+    """
+    The library returns objects, and this module indexed them like dicts.
+
+    `_TranslationLanguage` is not subscriptable, so `lang["language_code"]`
+    is a TypeError on any translatable transcript. Every test passed because
+    the fixture used plain dicts. Found by mypy on 9 September 2026.
+    """
+
+    def test_the_object_shape_the_library_actually_returns(self):
+        lang = _TranslationLanguage(language="French", language_code="fr")
+        assert transcript._translation_code(lang) == "fr"
+
+    def test_the_dict_shape_older_versions_returned(self):
+        # The dependency is pinned to a range, so both shapes are handled.
+        assert transcript._translation_code({"language_code": "de"}) == "de"
+
+    def test_get_properties_survives_a_real_translatable_transcript(self):
+        # The end-to-end version. This is the call that would have raised.
+        props = get_properties(SAMPLE_TRANSCRIPT)
+        assert props["translation_languages"] == ["de", "fr"]
