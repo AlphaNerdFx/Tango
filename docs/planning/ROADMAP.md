@@ -673,9 +673,12 @@ deliver something a user can run.
 - ~~**A deprecation policy**: what a `0.x` to `1.0` break costs a user.~~
   **Done**, section 8 of the same document, written from what this project
   actually broke rather than from a template.
-- **The coverage sweep**, across the languages a user can actually have an
-  index for, de/fr/ru/en, twelve pairs, including the pronunciation and image
-  columns. es/ja/ko/pt/zh are reported honestly as usable for cards but
+- ~~**The coverage sweep**, across the languages a user can actually have an
+  index for, de/fr/ru/en, twelve pairs.~~ **Done**, 10 September 2026, all
+  sixteen combinations. ARCHITECTURE 8.55. It could not have been run before:
+  the sweep script had invoked the flag surface v0.7.0 deleted since
+  3 September, so every combination failed and the only tool that would have
+  noticed was the broken one. es/ja/ko/pt/zh are reported honestly as usable for cards but
   sparse until the user builds an index, which is what `tango doctor` and
   `tango languages` already say. Decided 8 September 2026, against building
   five more indexes at roughly 1.5 GB, which would have fought this rung's
