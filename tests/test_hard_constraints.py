@@ -1080,6 +1080,33 @@ class TestTheDocumentationAgreesWithTheCode:
             "These are resolved from a setting and then used nowhere, so the "
             "setting silently does nothing:\n  " + "\n  ".join(sorted(dead)))
 
+    def test_the_field_table_in_claude_md_matches_cards_fields(self):
+        # Found 9 September 2026: CLAUDE.md 3.2's table listed indices 0 to
+        # 11, five weeks after Image and Attribution were appended for
+        # v0.11.0, and the paragraph under it said "a new field is index 12"
+        # while index 12 was taken.
+        #
+        # That table is the thing someone reads before adding a field, and
+        # 3.2 is the constraint about writing content into the wrong card
+        # section. A stale table there is worse than no table.
+        from pipeline.cards import FIELDS
+
+        claude = (self.ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        block = re.search(r"```\n(0  Word.*?)```", claude, re.S)
+        assert block, "CLAUDE.md 3.2 no longer has a field table where expected"
+
+        # Two columns per line, and two names start with a digit ("1st
+        # Example Sentence"), so the name runs until the next index, an
+        # "(ADR-...)" note, or end of line.
+        pattern = re.compile(
+            r"(\d+)\s\s+([A-Za-z0-9][A-Za-z0-9' ]*?)(?=\s\s+\d+\s|\s+\(|\s*$)", re.M)
+        listed = {int(i): name.strip() for i, name in pattern.findall(block.group(1))}
+        expected = dict(enumerate(FIELDS))
+        assert listed == expected, (
+            "CLAUDE.md 3.2's field table disagrees with cards.FIELDS.\n"
+            f"  table lists: {listed}\n"
+            f"  FIELDS is:   {expected}")
+
     # -- helpers --
 
     def _documents(self):
