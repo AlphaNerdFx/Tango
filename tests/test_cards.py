@@ -1103,17 +1103,32 @@ class TestImagesAreOffByDefault:
 
     def test_it_is_off_unless_asked_for(self):
         # Read from the source, not from the resolved value, and for the
-        # reason CLAUDE.md 3.1 records about MODEL_ID: conftest now forces
+        # reason CLAUDE.md 3.1 records about MODEL_ID: conftest forces
         # IMAGES_ENABLED to False for every test, so asserting the resolved
-        # value would pass whatever the shipped default became. What must
-        # hold is that an unset environment means off, which is the empty
-        # second argument to getenv.
+        # value would pass whatever the shipped default became.
+        #
+        # What must hold is that an unset environment means off. This used
+        # to assert the literal `os.getenv("IMAGES_ENABLED", "")`, which
+        # pinned the spelling rather than the intent (CLAUDE.md 18.5): the
+        # test broke when config moved to a helper on 9 September 2026 while
+        # the behaviour it names was byte-for-byte unchanged. It now reads
+        # whatever default the assignment carries, through any helper.
         import inspect
+        import re
+
         import pipeline.config
 
         source = inspect.getsource(pipeline.config)
-        assert 'os.getenv("IMAGES_ENABLED", "")' in source, (
-            "the shipped default for IMAGES_ENABLED is no longer 'unset means off'")
+        line = next((ln for ln in source.splitlines()
+                     if ln.startswith("IMAGES_ENABLED")), None)
+        assert line, "IMAGES_ENABLED is no longer assigned at config module level"
+
+        match = re.search(r'\(\s*"IMAGES_ENABLED"\s*(?:,\s*"([^"]*)")?\s*\)', line)
+        assert match, f"cannot read the default out of: {line}"
+        default = match.group(1) or ""
+        assert default.strip().lower() not in {"1", "true", "yes"}, (
+            f"the shipped default for IMAGES_ENABLED is {default!r}, which is "
+            "on. Unset must mean off: a picture roughly doubles a deck.")
 
     def test_asking_for_them_on_one_run_overrides_the_environment(self, sample_result):
         # What `--images` does. The default stays off, so a user turns them
