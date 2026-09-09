@@ -966,3 +966,128 @@ class TestLanguageCapabilitiesAreDerived:
 
         assert get_spacy_model("zh-TW") == "zh_core_web_sm"
         assert "Simplified" in (language_caveat("zh-TW") or "")
+
+
+class TestTheDocumentationAgreesWithTheCode:
+    """
+    Checks the September 2026 audit had to do by hand, made repeatable.
+
+    Every one of these found something real on 9 September, and every one of
+    them is the same shape: a claim that was true when it was written and
+    quietly stopped being true, with nothing watching the gap. Prose cannot
+    hold a claim in place. See docs/history/CODE_AUDIT_2026-09.md.
+    """
+
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def test_every_architecture_citation_resolves(self):
+        # Found: tests/conftest.py and ARCHITECTURE.md both cited "18.7" as
+        # an ARCHITECTURE section. It is a CLAUDE.md section, and
+        # ARCHITECTURE has no section 18 at all.
+        arch = (self.ROOT / "docs" / "architecture" / "ARCHITECTURE.md")
+        text = arch.read_text(encoding="utf-8")
+        defined = set(re.findall(r"^### (\d+\.\d+)", text, re.M))
+        assert len(defined) > 40, "the section scan stopped matching"
+
+        cited = set()
+        for path in self._documents() + self._sources():
+            body = path.read_text(encoding="utf-8", errors="ignore")
+            cited |= set(re.findall(
+                r"ARCHITECTURE(?:\.md)? (?:section )?(\d+\.\d+)", body))
+
+        dangling = sorted(cited - defined)
+        assert not dangling, (
+            "These ARCHITECTURE sections are cited but do not exist:\n  "
+            + "\n  ".join(dangling))
+
+    def test_every_documented_make_target_exists(self):
+        makefile = (self.ROOT / "Makefile").read_text(encoding="utf-8")
+        targets = set(re.findall(r"^([a-z][a-z0-9_-]*):", makefile, re.M))
+        assert len(targets) > 10, "the target scan stopped matching"
+
+        # A word after "make" is only a target if it is one; English prose
+        # says "make room" and "make the" constantly.
+        named = set()
+        for path in self._documents():
+            body = path.read_text(encoding="utf-8", errors="ignore")
+            named |= set(re.findall(r"`make ([a-z][a-z0-9_-]*)", body))
+
+        missing = sorted(named - targets)
+        assert not missing, (
+            "Documents tell a reader to run these, and the Makefile has no "
+            "such target:\n  " + "\n  ".join(missing))
+
+    def test_the_last_released_version_is_the_same_everywhere(self):
+        # Three files each state which release is current. They agreed on
+        # 9 September; nothing had been checking that they did.
+        claude = (self.ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        changelog = (self.ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        dockerfile = (self.ROOT / "Dockerfile").read_text(encoding="utf-8")
+
+        stated = {
+            "CLAUDE.md": re.search(r"\*\*Current tag:\*\* v(\d+\.\d+\.\d+)", claude),
+            "CHANGELOG.md": re.search(r"^## \[(\d+\.\d+\.\d+)\]", changelog, re.M),
+            "Dockerfile": re.search(r"TANGO_VERSION=(\d+\.\d+\.\d+)", dockerfile),
+        }
+        for where, match in stated.items():
+            assert match, f"{where} no longer states a version where expected"
+
+        found = {where: m.group(1) for where, m in stated.items()}
+        assert len(set(found.values())) == 1, (
+            "These disagree about which release is current: " + str(found))
+
+    def test_the_package_version_is_not_behind_the_changelog(self):
+        from pipeline import __version__
+
+        changelog = (self.ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+        released = re.search(r"^## \[(\d+\.\d+\.\d+)\]", changelog, re.M).group(1)
+        as_tuple = lambda v: tuple(int(p) for p in v.split("."))  # noqa: E731
+        assert as_tuple(__version__) >= as_tuple(released), (
+            f"__version__ is {__version__} but CHANGELOG already documents "
+            f"{released} as released")
+
+    def test_no_setting_is_read_into_a_constant_nothing_uses(self):
+        # Found: LIBRETRANSLATE_LOCAL, filled from a documented setting and
+        # referenced nowhere but the line defining it, since 10 July 2026.
+        #
+        # This is worse than a stray key. `tango doctor` reports names that
+        # nothing reads, and this name WAS read, so doctor called it healthy
+        # while setting it did nothing at all.
+        src = self.ROOT / "src" / "pipeline"
+        files = {p.name: p.read_text(encoding="utf-8") for p in src.glob("*.py")}
+
+        assigned = {}
+        for fname, text in files.items():
+            for m in re.finditer(
+                r"^([A-Z_0-9]+)\s*(?::[^=]+)?=\s*_?(?:env|env_int|env_float|"
+                r"resolve_path|os\.getenv)", text, re.M
+            ):
+                assigned[m.group(1)] = fname
+        assert len(assigned) > 20, "the constant scan stopped matching"
+
+        dead = []
+        for name, fname in assigned.items():
+            uses = 0
+            for other, text in files.items():
+                body = text
+                if other == fname:
+                    body = re.sub(rf"^{name}\s*(?::[^=]+)?=.*$", "", body, flags=re.M)
+                uses += len(re.findall(rf"\b{name}\b", body))
+            if uses == 0:
+                dead.append(f"{name} ({fname})")
+
+        assert not dead, (
+            "These are resolved from a setting and then used nowhere, so the "
+            "setting silently does nothing:\n  " + "\n  ".join(sorted(dead)))
+
+    # -- helpers --
+
+    def _documents(self):
+        paths = list(self.ROOT.glob("*.md"))
+        for sub in ("architecture", "planning", "sessions", "adr"):
+            paths += list((self.ROOT / "docs" / sub).glob("*.md"))
+        return paths
+
+    def _sources(self):
+        return (list((self.ROOT / "src" / "pipeline").glob("*.py"))
+                + list((self.ROOT / "tests").glob("*.py")))
