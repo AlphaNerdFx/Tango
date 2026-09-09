@@ -256,6 +256,12 @@ the server pulls **134 MB across 36 packages** that translation itself never
 touches, PyMuPDF and lxml among them, for converting documents Tango does
 not convert.
 
+The split landed after v0.11.0 was published, so `translation-server` is not
+an extra the released package has: on 0.11.0 that command fails with an
+unknown extra, and `tango-anki[translation]` still installs the server as it
+always did. It arrives in v0.12.0. Until then, install from a clone if you
+want the split.
+
 ### Definition coverage
 
 English is covered by Merriam-Webster and dictionaryapi.dev out of the box, at around 98%.
