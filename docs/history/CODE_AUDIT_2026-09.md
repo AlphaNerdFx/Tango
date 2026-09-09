@@ -235,6 +235,56 @@ Coverage's weakest modules are `translation.py` at 76%, `__main__.py` at
 83%, `antonyms.py` at 84% and `transcript.py` at 87%. Most of what is
 uncovered in `translation.py` is the interactive download prompt.
 
+## Second pass, after the launch blockers were fixed
+
+The whole audit was re-run on 9 September 2026 once the three launch
+blockers were closed, to check that the fixes had introduced nothing and
+that nothing else was outstanding.
+
+### What was unchanged
+
+| | before the blocker fixes | after |
+|---|---|---|
+| coverage | 89%, 3654 statements, 401 missed | 89%, 3710 statements, 400 missed |
+| bandit | 0 at every severity | 0 at every severity |
+| dependency advisories | 11, all in the server extra | 11, all in the server extra |
+| ruff | 203, all cosmetic | 203, all cosmetic |
+
+56 statements were added and no new misses came with them, so the blocker
+work is covered by the tests written alongside it.
+
+### What it found
+
+**mypy's advisory list held two real bugs.** It was the one tool whose
+output nobody had read line by line, because `make check` prints it under
+"Advisory (not gating)".
+
+- `VideoUnplayable(video_id, exc.reason)` was missing a required third
+  argument, so a video YouTube reports as unplayable raised `TypeError` from
+  inside the handler written to give it a clean message.
+- `get_properties` indexed `_TranslationLanguage` objects as dicts, which is
+  a `TypeError` on any translatable transcript. Ten tests passed over it
+  because the fixture used dicts, so the code was tested against a shape the
+  library does not produce.
+
+Both are in error-handling and metadata paths, which is why neither had been
+seen. mypy fell from 25 findings to 23 when they were fixed.
+
+**Two follow-ons from the blocker fixes themselves.** `make doctor` still
+ended in `|| true`, which was correct while doctor failed on any absent
+optional index and wrong the moment it started failing only on a real
+blocker. And three test docstrings still described doctor's old exit
+contract, one of them naming `--doctor`, a flag v0.7.0 deleted.
+
+**One obsolete function.** `definition.images_supported` says it is reported
+by `tango doctor`. That was true of the WordNet concreteness gate; v0.11.0
+replaced it with Wikidata and doctor stopped calling it. Nothing calls it.
+Kept rather than deleted, because it is still the honest answer to "can
+WordNet judge this language", which the synonym and antonym fields depend
+on, but its docstring no longer claims otherwise.
+
+ARCHITECTURE 8.53 covers the blockers, 8.54 the two mypy bugs.
+
 ## The pattern underneath all of it
 
 Three of the largest findings here are the same shape, and it is worth
