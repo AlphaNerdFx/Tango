@@ -721,10 +721,14 @@ remaining user-visible value is; the rest is measurement and hygiene.
       and found wrong: audio size by roughly an order of magnitude, and the
       claim that embedding was too heavy. ARCHITECTURE.md 8.30 to 8.35.
 
-      **Phase 3, images, is deliberately not built.** Sampling measured 2 of
-      5 usable, with `laufen` returning a coin from the town of Laufen. It
-      needs a relevance gate before it is worth having. Phase 4 is untouched
-      and still needs the ToS decision below.
+      **Phase 3, images, shipped in v0.11.0 on 8 September 2026.** The note
+      below is kept as written because it was right about the cause: text
+      search matches a spelling rather than a meaning, which is exactly why
+      `laufen` returned a coin from the town of Laufen. The fix was to stop
+      searching text and resolve the lemma to a Wikidata concept instead,
+      which took German from 0% to 38% and the whole corpus to 45.9% of
+      nouns. ARCHITECTURE 8.46 and 8.47. Phase 4 is untouched and still
+      needs the ToS decision below.
 
       Original note follows; see `docs/ADR-009-card-media-enrichment.md`.
       Four phases in dependency order, each independently shippable.
@@ -917,11 +921,12 @@ remaining user-visible value is; the rest is measurement and hygiene.
       language)`. Existing cards keep their current GUIDs; this only
       prevents new collisions going forward.
 
-- [ ] **Migrate CLI from argparse to Typer.**
-      Better help output, automatic type validation, clean subcommands:
-      `tango run`, `tango review`, `tango backlog`, `tango languages`. Do this
-      after the functional fixes so the diff is not mixed with behaviour
-      changes.
+- [x] **Migrate CLI from argparse to Typer.** Shipped in v0.7.0.
+      `__main__.py` builds a `typer.Typer()` app and every mode is a
+      subcommand: `tango run`, `review`, `backlog`, `languages`, `doctor`,
+      `setup`, `install-model`, `install-translation`, `build-dictionary`,
+      `build-antonyms`. The old flag surface was deleted rather than
+      deprecated, while the interface still had no installed users.
 
 - [x] **Additional dictionary source for non-English example sentences.** Closes #1's
       example-sentence gap (partially -- see below), also closed #14 along the way.
@@ -1017,9 +1022,13 @@ remaining user-visible value is; the rest is measurement and hygiene.
       English case is already the best-covered one. See the ConceptNet
       finding under High, which is the generalizable alternative.
 
-- [ ] **Dockerfile.**
-      For cloud deployment and reproducible environments. Base
-      `python:3.11-slim`, layer system deps, pip install, spaCy model download.
+- [x] **Dockerfile.** Shipped in v0.8.2 and published 8 September 2026 as
+      `yousseflarbi/tango`, tags `latest` and `0.11.0`. The base is
+      `python:3.10-slim`, not the 3.11 planned here, matching the project's
+      declared Python floor. It installs the published wheel from PyPI on
+      purpose, so building it tests the artefact users actually install.
+      AnkiConnect is not reachable from inside the container, and the image
+      says so when a run needs it.
 
 - [ ] **Dependency size reduction.** Partly done, 26 August 2026.
       `make translate-setup` installs the CPU-only torch wheel and repairs an
