@@ -142,10 +142,11 @@ setup: venv
 # in this project turned out to be setup rather than logic, and none of it was
 # visible from the failure itself.
 
-# The `-` matters. `--doctor` exits non-zero when something optional is
-# missing, deliberately, so a setup script can branch on it. make treats that
-# as a failed recipe and prints "Error 1" under a report whose own last line
-# says every missing item is optional, which reads as a broken tool.
+# This used to swallow the exit code, and the reason was sound while it held:
+# `tango doctor` returned non-zero for any absent optional index, and make
+# printing "Error 1" under a report whose own last line said everything
+# missing was optional read as a broken tool. Since 9 September 2026 doctor
+# fails only when something stops a run, so the code is worth surfacing.
 # The CLI keeps its exit code; this target does not propagate it.
 # The exit code is propagated, deliberately. It used to be swallowed with
 # `|| true`, and that was right while doctor returned 1 for any absent
@@ -269,7 +270,7 @@ translate-setup: venv
 # The orphans need a second command: pip never removes them, and torch
 # alone leaves 3.4 GB of nvidia and triton with nothing able to call it.
 #
-# The condition is the same one --doctor reports, and deliberately not just
+# The condition is the same one `tango doctor` reports, and deliberately not
 # "is this a CUDA build". A CUDA build on a machine with a working GPU is
 # someone's deliberate choice, and this target must not undo it.
 	@if $(VENV_PYTHON) -c "import torch, sys; sys.exit(0 if torch.version.cuda and not torch.cuda.is_available() else 1)" >/dev/null 2>&1; then \
