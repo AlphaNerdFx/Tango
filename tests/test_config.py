@@ -238,3 +238,95 @@ class TestUnknownEnvKeys:
 
         env = self._env(tmp_path, "ZZZ_LATER=1\nAPI_DELAY=2\nAPI_DELAY=3\n")
         assert unknown_env_keys(env) == ["API_DELAY", "ZZZ_LATER"]
+
+
+class TestABlankValueMeansUnset:
+    """
+    `KEY=` in a .env is not the same as no KEY at all.
+
+    python-dotenv loads a bare `KEY=` into the environment as an empty
+    string, so `os.getenv(name, default)` returns "" and never reaches the
+    default. `_resolve_path` was given this rule and a test for it; the
+    numeric and string settings were not, and .env.example ships ten keys
+    with an empty right-hand side.
+
+    Two different failures came out of that. A string setting lost its
+    default silently. A numeric setting raised ValueError at import, before
+    `main()` existed to turn it into a message.
+    """
+
+    def test_a_blank_numeric_setting_uses_its_default(self, monkeypatch):
+        monkeypatch.setenv("API_TIMEOUT", "")
+        assert config._env_float("API_TIMEOUT", "8") == 8.0
+
+    def test_a_blank_string_setting_uses_its_default(self, monkeypatch):
+        # The one that mattered: Wikimedia rejects an empty User-Agent, and
+        # a blank WIKTIONARY_USER_AGENT would have sent exactly that.
+        monkeypatch.setenv("WIKTIONARY_USER_AGENT", "")
+        assert config._env("WIKTIONARY_USER_AGENT", "Tango/x") == "Tango/x"
+
+    def test_whitespace_only_is_blank_too(self, monkeypatch):
+        monkeypatch.setenv("ANKI_HOST", "   ")
+        assert config._env("ANKI_HOST", "http://localhost:8765") == \
+            "http://localhost:8765"
+
+    def test_a_real_value_is_still_honoured(self, monkeypatch):
+        # The pair to the three above. A test that only proves blanks fall
+        # back is satisfied by a helper that ignores the environment.
+        monkeypatch.setenv("API_TIMEOUT", "22")
+        monkeypatch.setenv("ANKI_HOST", "http://elsewhere:9999")
+        assert config._env_float("API_TIMEOUT", "8") == 22.0
+        assert config._env("ANKI_HOST", "http://localhost:8765") == \
+            "http://elsewhere:9999"
+
+    def test_a_value_is_stripped_before_use(self, monkeypatch):
+        monkeypatch.setenv("ANKI_HOST", "  http://elsewhere:9999  ")
+        assert config._env("ANKI_HOST", "x") == "http://elsewhere:9999"
+
+
+class TestAMalformedValueIsReportedNotRaised:
+    """
+    A value that is present but unparseable is a mistake worth naming.
+
+    It cannot raise where it is read: `config` is imported before `main()`
+    exists to catch anything, so a raise there is a traceback, which
+    CLAUDE.md 4.4 forbids for an expected failure. So the default is used
+    and the name is recorded for `tango doctor`.
+    """
+
+    def setup_method(self):
+        config.MALFORMED_ENV_VALUES.clear()
+
+    def teardown_method(self):
+        config.MALFORMED_ENV_VALUES.clear()
+
+    def test_a_malformed_number_falls_back_to_the_default(self, monkeypatch):
+        monkeypatch.setenv("API_TIMEOUT", "banana")
+        assert config._env_float("API_TIMEOUT", "8") == 8.0
+
+    def test_a_malformed_number_is_recorded_with_what_the_user_wrote(
+        self, monkeypatch
+    ):
+        # Recording the name alone is not enough to fix it. Doctor prints
+        # the offending value back, so the user can see the typo.
+        monkeypatch.setenv("API_TIMEOUT", "banana")
+        config._env_float("API_TIMEOUT", "8")
+        assert config.MALFORMED_ENV_VALUES == {"API_TIMEOUT": "banana"}
+
+    def test_a_float_in_an_integer_setting_is_malformed(self, monkeypatch):
+        # int("3.7") raises, which is the right answer: a burst of 3.7
+        # requests is not a thing, and silently flooring it hides the typo.
+        monkeypatch.setenv("MEDIA_BURST", "3.7")
+        assert config._env_int("MEDIA_BURST", "8") == 8
+        assert "MEDIA_BURST" in config.MALFORMED_ENV_VALUES
+
+    def test_a_good_value_records_nothing(self, monkeypatch):
+        monkeypatch.setenv("API_TIMEOUT", "12")
+        assert config._env_float("API_TIMEOUT", "8") == 12.0
+        assert config.MALFORMED_ENV_VALUES == {}
+
+    def test_a_blank_value_is_not_malformed(self, monkeypatch):
+        # Blank means unset, which is a normal thing to write, not an error.
+        monkeypatch.setenv("API_TIMEOUT", "")
+        assert config._env_float("API_TIMEOUT", "8") == 8.0
+        assert config.MALFORMED_ENV_VALUES == {}
