@@ -77,21 +77,109 @@ from pipeline.state import (
 )
 
 # ── Colour output helpers ─────────────────────────────────────────────────────
+#
+# Colour is decided per stream at import, and the codes are empty strings when
+# it is off. Every call site interpolates these names, so nothing else has to
+# know whether colour is on.
+#
+# It was unconditional until 9 September 2026, which meant `tango run > log.txt`
+# wrote raw escape sequences into the file:
+#
+#     ^[[31m^[[1m[err ]^[[0m  No spaCy model is mapped for 'zz'.
+#
+# The progress reporter had checked `isatty()` since it was written. The five
+# output helpers below, and 39 other call sites, never did.
+#
+# Three inputs, in the order the ecosystem expects them:
+#
+#   NO_COLOR set to anything, even empty   -> off, per https://no-color.org
+#   FORCE_COLOR set to a non-empty value   -> on, for CI that renders colour
+#   otherwise                              -> on only if that stream is a TTY
+#
+# stdout and stderr are decided separately, because they are redirected
+# separately: `tango run > log.txt` should still colour the errors it prints
+# to a terminal.
 
-RESET  = "\033[0m"
-BOLD   = "\033[1m"
-GREEN  = "\033[32m"
-YELLOW = "\033[33m"
-RED    = "\033[31m"
-CYAN   = "\033[36m"
-DIM    = "\033[2m"
+_ANSI = {
+    "RESET": "\033[0m", "BOLD": "\033[1m", "GREEN": "\033[32m",
+    "YELLOW": "\033[33m", "RED": "\033[31m", "CYAN": "\033[36m",
+    "DIM": "\033[2m",
+}
+
+RESET = BOLD = GREEN = YELLOW = RED = CYAN = DIM = ""
+
+
+def _colour_enabled(stream: object) -> bool:
+    """
+    Whether to emit ANSI colour on this stream.
+
+    Args:
+        stream: The stream that will be written to, normally sys.stdout or
+                sys.stderr. Anything without a usable `isatty` counts as not
+                a terminal.
+
+    Returns:
+        True if colour should be written.
+    """
+    # NO_COLOR is honoured when merely present, including when empty. That is
+    # what the convention says, and it is the reason this reads os.environ
+    # rather than calling getenv and testing truthiness.
+    if os.environ.get("NO_COLOR") is not None:
+        return False
+    if os.environ.get("FORCE_COLOR"):
+        return True
+    try:
+        return bool(stream.isatty())        # type: ignore[attr-defined]
+    except Exception:
+        # A stream with no isatty, or one that raises because it is closed,
+        # is not a terminal. Colour is never worth an exception.
+        return False
+
+
+def _apply_palette() -> None:
+    """
+    Set the colour constants from the current environment and streams.
+
+    Called once at import. Tests call it again after changing the
+    environment, because the decision is made once rather than on every
+    print.
+    """
+    global RESET, BOLD, GREEN, YELLOW, RED, CYAN, DIM
+    on = _colour_enabled(sys.stdout)
+    RESET, BOLD, GREEN, YELLOW, RED, CYAN, DIM = (
+        _ANSI[name] if on else ""
+        for name in ("RESET", "BOLD", "GREEN", "YELLOW", "RED", "CYAN", "DIM")
+    )
+
+
+_apply_palette()
+
+
+# Exit codes. 0 and 1 are the usual pair and 2 is Click's usage error, so a
+# run that finished but produced nothing usable needs a number of its own
+# rather than borrowing one that already means something else.
+_EXIT_DEGRADED = 3
 
 
 def _info(msg: str)  -> None: print(f"{CYAN}{BOLD}[info]{RESET}  {msg}")
 def _ok(msg: str)    -> None: print(f"{GREEN}{BOLD}[ ok ]{RESET}  {msg}")
 def _warn(msg: str)  -> None: print(f"{YELLOW}{BOLD}[warn]{RESET}  {msg}")
-def _err(msg: str)   -> None: print(f"{RED}{BOLD}[err ]{RESET}  {msg}", file=sys.stderr)
 def _rule()          -> None: print(f"{DIM}{'─' * 60}{RESET}")
+
+
+def _err(msg: str) -> None:
+    """
+    Print an error to stderr, coloured only if stderr is itself a terminal.
+
+    Decided separately from the palette above: stdout and stderr are
+    redirected independently, so `tango run > log.txt` writes a clean file
+    while the error the user sees on screen keeps its colour.
+    """
+    on = _colour_enabled(sys.stderr)
+    red = _ANSI["RED"] if on else ""
+    bold = _ANSI["BOLD"] if on else ""
+    reset = _ANSI["RESET"] if on else ""
+    print(f"{red}{bold}[err ]{reset}  {msg}", file=sys.stderr)
 
 
 # ── Logging setup ─────────────────────────────────────────────────────────────
@@ -323,7 +411,28 @@ def _print_summary(
     not_found_count: int,
     not_found_words: Optional[list[str]] = None,
     sources_stopped: Optional[list[str]] = None,
-) -> None:
+    language: Optional[str] = None,
+) -> int:
+    """
+    Print what the run produced, and say whether it is worth importing.
+
+    Args:
+        video_id:         The video processed, or "review"/"backlog".
+        deck_name:        The target deck.
+        apkg_path:        Where the package was written.
+        card_count:       Cards that got a definition.
+        fallback_count:   Cards that did not.
+        skipped_count:    Words dropped for having neither.
+        not_found_count:  Words with no definition from any source.
+        not_found_words:  Those words, named rather than counted.
+        sources_stopped:  Sources whose circuit breaker tripped.
+        language:         Transcript language, used to name the offline index
+                          that would prevent a repeat.
+
+    Returns:
+        0 normally. `_EXIT_DEGRADED` when a package was written but not one
+        card got a definition, which is a failed run wearing a success.
+    """
     _rule()
     print(f"  {GREEN}{BOLD}Done.{RESET}")
     print(f"  Video:    {video_id}")
@@ -363,8 +472,33 @@ def _print_summary(
         else:
             print(f"            {DIM}-> Retry later; whatever already worked is "
                   f"cached and will not be refetched.{RESET}")
+            if language:
+                # The durable fix, which "retry later" is not. An offline
+                # index does not care whether a free web service is up. This
+                # advice was missing on 9 September 2026 when dictionaryapi.dev
+                # answered 522 after 19.6s against an 8s timeout and a real
+                # English run produced 97 cards with a definition on none of
+                # them, advising only that the user try again.
+                print(f"            {DIM}-> Or build the offline index, which "
+                      f"cannot go down: tango build-dictionary {language}{RESET}")
     print(f"  Package:  {apkg_path}")
+
+    # A package was written and not one card carries a definition. The run
+    # did not do what it was asked, so it must not look like it did: this is
+    # the difference between a deck someone can study and a list of headwords.
+    hollow = bool(card_count == 0 and (fallback_count or not_found_count))
+    if hollow:
+        print()
+        print(f"  {YELLOW}{BOLD}Not one card got a definition.{RESET}")
+        print("  The package is a list of words with example sentences, which is")
+        print("  not what you asked for. Exiting non-zero so a script can tell.")
+        if not sources_stopped:
+            print(f"  {DIM}-> Check `tango doctor`, then try again.{RESET}")
+        if language:
+            print(f"  {DIM}-> tango build-dictionary {language}  "
+                  f"makes this independent of any web service.{RESET}")
     _rule()
+    return _EXIT_DEGRADED if hollow else 0
 
 
 # ── Progress and timing ───────────────────────────────────────────────────────
@@ -593,7 +727,7 @@ def _normalise_video_id(value: str) -> str:
 
 # ── Mode: default pipeline ────────────────────────────────────────────────────
 
-def _run_pipeline(args: SimpleNamespace, session: Session) -> None:
+def _run_pipeline(args: SimpleNamespace, session: Session) -> int:
     try:
         video_id = _normalise_video_id(args.video_id)
     except ValueError as exc:
@@ -763,7 +897,7 @@ def _run_pipeline(args: SimpleNamespace, session: Session) -> None:
     )
 
     # ── 10. Summary + import prompt ───────────────────────────────────────────
-    _print_summary(
+    exit_code = _print_summary(
         video_id=video_id,
         deck_name=deck_name,
         apkg_path=result.path,
@@ -773,8 +907,10 @@ def _run_pipeline(args: SimpleNamespace, session: Session) -> None:
         not_found_count=len(batch.not_found),
         not_found_words=batch.not_found,
         sources_stopped=batch.sources_stopped,
+        language=language_code,
     )
     _prompt_import(result.path)
+    return exit_code
 
 
 # ── Mode: review ──────────────────────────────────────────────────────────────
@@ -831,7 +967,7 @@ def _resolve_side_mode_language(
     return language_code, def_language
 
 
-def _run_review(args: SimpleNamespace, session: Session) -> None:
+def _run_review(args: SimpleNamespace, session: Session) -> int:
     deck_name = _select_deck(args.deck, session)
     language_code, def_language = _resolve_side_mode_language(args, deck_name)
     reset_circuit_breaker()
@@ -882,7 +1018,7 @@ def _run_review(args: SimpleNamespace, session: Session) -> None:
 
     log_package("review", result.path, deck_name, result.total_cards)
 
-    _print_summary(
+    exit_code = _print_summary(
         video_id="review",
         deck_name=deck_name,
         apkg_path=result.path,
@@ -892,13 +1028,15 @@ def _run_review(args: SimpleNamespace, session: Session) -> None:
         not_found_count=len(batch.not_found),
         not_found_words=batch.not_found,
         sources_stopped=batch.sources_stopped,
+        language=language_code,
     )
     _prompt_import(result.path)
+    return exit_code
 
 
 # ── Mode: backlog ─────────────────────────────────────────────────────────────
 
-def _run_backlog(args: SimpleNamespace, session: Session) -> None:
+def _run_backlog(args: SimpleNamespace, session: Session) -> int:
     deck_name = _select_deck(args.deck, session)
     language_code, def_language = _resolve_side_mode_language(args, deck_name)
     reset_circuit_breaker()
@@ -959,7 +1097,7 @@ def _run_backlog(args: SimpleNamespace, session: Session) -> None:
 
     log_package("backlog", result.path, deck_name, result.total_cards)
 
-    _print_summary(
+    exit_code = _print_summary(
         video_id="backlog",
         deck_name=deck_name,
         apkg_path=result.path,
@@ -969,8 +1107,10 @@ def _run_backlog(args: SimpleNamespace, session: Session) -> None:
         not_found_count=len(batch.not_found),
         not_found_words=batch.not_found,
         sources_stopped=batch.sources_stopped,
+        language=language_code,
     )
     _prompt_import(result.path)
+    return exit_code
 
 
 # ── Mode: setup wizard ────────────────────────────────────────────────────────
@@ -1146,11 +1286,16 @@ def run(
 ) -> None:
     """Turn one YouTube video into an Anki package."""
     _setup_logging(verbose)
-    _run_pipeline(
+    # A package can be written and still be useless, when every source was
+    # unreachable and not one card got a definition. `typer.Exit` carries
+    # that out as an exit code rather than letting the run look successful.
+    code = _run_pipeline(
         _args(video_id=video_id, deck=deck, language=language, def_lang=def_lang,
               force=force, no_cache=no_cache, images=images, verbose=verbose),
         Session(),
     )
+    if code:
+        raise typer.Exit(code)
 
 
 @app.command()
@@ -1163,8 +1308,10 @@ def review(
 ) -> None:
     """Process the words deferred to review.json."""
     _setup_logging(verbose)
-    _run_review(_args(deck=deck, language=language, def_lang=def_lang,
-                      images=images, verbose=verbose), Session())
+    code = _run_review(_args(deck=deck, language=language, def_lang=def_lang,
+                             images=images, verbose=verbose), Session())
+    if code:
+        raise typer.Exit(code)
 
 
 @app.command()
@@ -1177,8 +1324,10 @@ def backlog(
 ) -> None:
     """Process the words queued in SQLite while Anki was unavailable."""
     _setup_logging(verbose)
-    _run_backlog(_args(deck=deck, language=language, def_lang=def_lang,
+    code = _run_backlog(_args(deck=deck, language=language, def_lang=def_lang,
                        images=images, verbose=verbose), Session())
+    if code:
+        raise typer.Exit(code)
 
 
 @app.command()
@@ -1509,12 +1658,23 @@ def _run_doctor() -> int:
     Every missing item is reported with the command that fixes it.
 
     Returns:
-        0 when nothing is missing, 1 when something optional is absent, so
-        the exit code is usable in a setup script.
+        0 when a run can work, even if optional extras are absent. 1 only
+        when something is missing that stops `tango run` entirely.
+
+        The two are counted separately, and that is the point. Until
+        9 September 2026 a single counter covered both, so this returned 1
+        whenever any optional index was absent while printing "Each is
+        optional -- the pipeline runs without them". Both halves were wrong
+        at once: a machine with no spaCy model cannot run at all, and a
+        machine merely lacking a Japanese dictionary is fine. `tango doctor
+        && tango run ...` never proceeded on a normal machine.
     """
     from pipeline.config import DICT_DIR, DB_PATH, MW_API_KEY, PROJECT_ROOT
     from pipeline.language import SPACY_MODELS
 
+    # Blocking: a run cannot produce cards without it. Optional: the cards
+    # are thinner without it.
+    blocking = 0
     missing = 0
     print()
     print("  Tango environment")
@@ -1557,7 +1717,11 @@ def _run_doctor() -> int:
     present = sorted(c for c, m in SPACY_MODELS.items() if m in installed)
     print(f"    installed for  {', '.join(present) if present else 'none'}")
     if not present:
-        missing += 1
+        # The one genuinely blocking gap. Without a model there is nothing
+        # to tokenise with, so `tango run` stops before it reads a
+        # transcript. Counted apart from the optional extras below.
+        blocking += 1
+        print("    none installed. A run cannot extract vocabulary without one.")
         print("    -> tango install-model <code>")
     print()
 
@@ -1571,10 +1735,28 @@ def _run_doctor() -> int:
             print(f"    {code:<6} {size:>7.0f} MB")
     else:
         print("    none")
-    for code in present:
-        if code not in built and code != "en":
-            missing += 1
-            print(f"    {code:<6} missing  -> tango build-dictionary {code}")
+    # Reported once for the whole set rather than per language: the reason
+    # is the same for all of them and repeating it six times buries the list.
+    absent = [c for c in present if c not in built]
+    if absent:
+        missing += len(absent)
+        needed = [c for c in absent if c != "en"]
+        if needed:
+            print(f"    missing   {', '.join(needed)}")
+            print("              No online source covers these, so their cards")
+            print("              would carry no definition at all.")
+            print("              -> tango build-dictionary <code>")
+        if "en" in absent:
+            # English was skipped here entirely until 9 September 2026, left
+            # over from the decision ADR-011 reversed: the index was judged
+            # not worth its download because English is served online. That
+            # holds right up until it does not. Measured that day,
+            # dictionaryapi.dev answered 522 after 19.6 seconds against an 8
+            # second timeout, and a real English run produced 97 cards with a
+            # definition on none of them. Nothing here had ever suggested the
+            # one thing that would have prevented it.
+            print("    en        web only, so an outage means no definitions")
+            print("              -> tango build-dictionary en")
     print()
 
     # ── Antonym index: optional everywhere, and absent is a normal state ──
@@ -1662,13 +1844,19 @@ def _run_doctor() -> int:
         print("    AnkiConnect    could not be checked")
     print()
 
-    if missing:
-        print(f"  {missing} item(s) missing. Each is optional -- the pipeline runs without them,")
-        print("  but the cards it produces will be thinner. Commands are shown above.")
+    if blocking:
+        print(f"  {blocking} item(s) missing that a run needs. `tango run` will not")
+        print("  produce cards until they are installed. Commands are shown above.")
+        if missing:
+            print(f"  A further {missing} optional item(s) would make the cards richer.")
+    elif missing:
+        print(f"  Ready to run. {missing} optional item(s) absent: the pipeline works")
+        print("  without them, but the cards it produces will be thinner.")
+        print("  Commands are shown above.")
     else:
         print("  Everything checked is present.")
     print()
-    return 1 if missing else 0
+    return 1 if blocking else 0
 
 
 # ── Mode: install a spaCy model ───────────────────────────────────────────────
