@@ -38,6 +38,11 @@ import time
 import zipfile
 from pathlib import Path
 
+# Kept in step with pipeline.__main__._EXIT_DEGRADED, which docs/COMPATIBILITY.md
+# freezes. A local copy rather than an import, because this script runs the CLI
+# as a subprocess and should not depend on importing the package it measures.
+_EXIT_DEGRADED = 3
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
@@ -178,6 +183,14 @@ def run_pair(
     result = measure_package(Path(match.group(1)))
     result["seconds"] = round(time.time() - started)
     result["translated"] = not no_model if definition else None
+
+    # Exit code 3 means the run wrote a package and not one card got a
+    # definition, which is a dead source rather than a language with poor
+    # coverage. Without this the two are indistinguishable in the matrix:
+    # both show 0%, and the sweep would report an outage as a finding about
+    # Russian. Added 10 September 2026 alongside the code itself.
+    result["degraded"] = proc.returncode == _EXIT_DEGRADED
+    result["exit_code"] = proc.returncode
     return result
 
 
@@ -287,6 +300,12 @@ def main() -> int:
         if "error" in res:
             print(f"{label:<16}  ERROR: {res['error']}")
             continue
+        if res.get("degraded"):
+            # Loud, and on its own line. A 0% definition row that came from a
+            # dead source is not a fact about the language, and averaging it
+            # into a coverage table would be worse than not measuring at all.
+            print(f"{label:<16}  DEGRADED: the run exited 3, no source answered. "
+                  "Numbers below are not a coverage measurement.")
         print(
             f"{label:<16}{res['cards']:>7}{res['Definition']:>6}%"
             f"{res['native_fallback']:>8}%{res['Class']:>6}%"
