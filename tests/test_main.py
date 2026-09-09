@@ -61,6 +61,9 @@ class TestCommandSurface:
 
     def test_run_takes_the_video_id_as_an_argument(self):
         with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            # The real function returns an exit code, so the double must
+            # too: a MagicMock is truthy and would look like a failed run.
+            run_pipeline.return_value = 0
             result = self.runner.invoke(main_module.app, ["run", VIDEO_ID, "--deck", DECK_NAME])
         assert result.exit_code == 0
         args = run_pipeline.call_args.args[0]
@@ -72,12 +75,18 @@ class TestCommandSurface:
         # main(). It is now the signature's job, which is the point of the
         # migration.
         with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            # The real function returns an exit code, so the double must
+            # too: a MagicMock is truthy and would look like a failed run.
+            run_pipeline.return_value = 0
             result = self.runner.invoke(main_module.app, ["run"])
         assert result.exit_code != 0
         run_pipeline.assert_not_called()
 
     def test_run_carries_the_optional_flags(self):
         with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            # The real function returns an exit code, so the double must
+            # too: a MagicMock is truthy and would look like a failed run.
+            run_pipeline.return_value = 0
             self.runner.invoke(main_module.app, [
                 "run", VIDEO_ID, "--deck", DECK_NAME,
                 "--language", "fr", "--def-lang", "en",
@@ -89,6 +98,9 @@ class TestCommandSurface:
 
     def test_the_flags_default_off(self):
         with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            # The real function returns an exit code, so the double must
+            # too: a MagicMock is truthy and would look like a failed run.
+            run_pipeline.return_value = 0
             self.runner.invoke(main_module.app, ["run", VIDEO_ID])
         args = run_pipeline.call_args.args[0]
         assert args.force is False and args.no_cache is False and args.verbose is False
@@ -102,6 +114,9 @@ class TestCommandSurface:
         seen = {}
         for argv, label in (([], "absent"), (["--images"], "on"), (["--no-images"], "off")):
             with patch.object(main_module, "_run_pipeline") as run_pipeline:
+                # The real function returns an exit code, so the double must
+                # too: a MagicMock is truthy and would look like a failed run.
+                run_pipeline.return_value = 0
                 self.runner.invoke(main_module.app, ["run", VIDEO_ID] + argv)
             seen[label] = run_pipeline.call_args.args[0].images
         assert seen == {"absent": None, "on": True, "off": False}
@@ -111,12 +126,18 @@ class TestCommandSurface:
         # over what goes on the cards.
         for command, target in (("review", "_run_review"), ("backlog", "_run_backlog")):
             with patch.object(main_module, target) as runner:
+                # The real function returns an exit code, so the double must
+                # too: a MagicMock is truthy and would look like a failed run.
+                runner.return_value = 0
                 self.runner.invoke(main_module.app, [command, "--deck", DECK_NAME, "--images"])
             assert runner.call_args.args[0].images is True, command
 
     def test_review_and_backlog_need_no_video_id(self):
         for command, target in (("review", "_run_review"), ("backlog", "_run_backlog")):
             with patch.object(main_module, target) as runner:
+                # The real function returns an exit code, so the double must
+                # too: a MagicMock is truthy and would look like a failed run.
+                runner.return_value = 0
                 result = self.runner.invoke(main_module.app, [command, "--deck", DECK_NAME])
             assert result.exit_code == 0, command
             assert runner.call_args.args[0].video_id is None
@@ -166,6 +187,7 @@ class TestMainDispatch:
 
     @patch("pipeline.__main__._run_pipeline")
     def test_dispatches_to_pipeline(self, mock_run):
+        mock_run.return_value = 0
         # main() always raises SystemExit now, because Typer's app() does
         # even on success. The dispatch is what this asserts, not the exit.
         with patch("sys.argv", ["tango", "run", VIDEO_ID, "--deck", DECK_NAME]):
@@ -176,6 +198,7 @@ class TestMainDispatch:
 
     @patch("pipeline.__main__._run_review")
     def test_dispatches_to_review(self, mock_run):
+        mock_run.return_value = 0
         with patch("sys.argv", ["tango", "review", "--deck", DECK_NAME]):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -184,6 +207,7 @@ class TestMainDispatch:
 
     @patch("pipeline.__main__._run_backlog")
     def test_dispatches_to_backlog(self, mock_run):
+        mock_run.return_value = 0
         with patch("sys.argv", ["tango", "backlog", "--deck", DECK_NAME]):
             with pytest.raises(SystemExit) as exc:
                 main()
@@ -1411,6 +1435,9 @@ class TestVersionFlag:
         # Adding an @app.callback() is the kind of change that can quietly
         # swallow the commands underneath it.
         with patch.object(main_module, "_run_pipeline") as run_pipeline:
+            # The real function returns an exit code, so the double must
+            # too: a MagicMock is truthy and would look like a failed run.
+            run_pipeline.return_value = 0
             result = self.runner.invoke(main_module.app, ["run", VIDEO_ID, "--deck", DECK_NAME])
         assert result.exit_code == 0
         run_pipeline.assert_called_once()
@@ -1793,3 +1820,220 @@ class TestWslInternalPathIsExplained:
             self._deck(deck)
             main_module._prompt_import(Path("/home/you/out/v.apkg"))
         assert post.call_args[1]["json"]["params"]["path"] == "/home/you/out/v.apkg"
+
+
+class TestColourIsDecidedPerStream:
+    """
+    ANSI codes must not reach a file or a pipe.
+
+    They were unconditional until 9 September 2026, so `tango run > log.txt`
+    wrote `^[[31m^[[1m[err ]^[[0m` into the file. The progress reporter had
+    checked `isatty()` since it was written; the five output helpers and 39
+    other call sites never did.
+    """
+
+    @staticmethod
+    def _palette_for(monkeypatch, *, tty: bool, env: dict):
+        for name in ("NO_COLOR", "FORCE_COLOR"):
+            monkeypatch.delenv(name, raising=False)
+        for k, v in env.items():
+            monkeypatch.setenv(k, v)
+
+        class _Stream:
+            def isatty(self):
+                return tty
+
+        monkeypatch.setattr(main_module.sys, "stdout", _Stream())
+        main_module._apply_palette()
+        return main_module.RESET
+
+    def teardown_method(self):
+        # The palette is module state, so it must be put back or every test
+        # after this one inherits whatever the last case set.
+        main_module._apply_palette()
+
+    def test_a_pipe_gets_no_colour(self, monkeypatch):
+        assert self._palette_for(monkeypatch, tty=False, env={}) == ""
+
+    def test_a_terminal_keeps_colour(self, monkeypatch):
+        assert self._palette_for(monkeypatch, tty=True, env={}) == "\033[0m"
+
+    def test_no_color_turns_it_off_on_a_terminal(self, monkeypatch):
+        # The convention is that NO_COLOR counts when merely present, so an
+        # empty value must still disable colour.
+        assert self._palette_for(monkeypatch, tty=True, env={"NO_COLOR": ""}) == ""
+
+    def test_force_color_turns_it_on_off_a_terminal(self, monkeypatch):
+        assert self._palette_for(
+            monkeypatch, tty=False, env={"FORCE_COLOR": "1"}) == "\033[0m"
+
+    def test_no_color_beats_force_color(self, monkeypatch):
+        assert self._palette_for(
+            monkeypatch, tty=False, env={"NO_COLOR": "", "FORCE_COLOR": "1"}) == ""
+
+    def test_a_stream_that_cannot_say_is_not_a_terminal(self, monkeypatch):
+        # Colour is never worth an exception. A closed or exotic stream that
+        # raises on isatty must read as "not a terminal", not crash the run.
+        class _Broken:
+            def isatty(self):
+                raise ValueError("closed")
+
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        monkeypatch.delenv("FORCE_COLOR", raising=False)
+        assert main_module._colour_enabled(_Broken()) is False
+
+    def test_stderr_is_decided_separately_from_stdout(self, monkeypatch, capsys):
+        # `tango run > log.txt` should write a clean file and still colour the
+        # error the user sees on screen. One shared decision cannot do both.
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        monkeypatch.delenv("FORCE_COLOR", raising=False)
+
+        class _Stream:
+            def __init__(self, tty):
+                self._tty = tty
+
+            def isatty(self):
+                return self._tty
+
+        monkeypatch.setattr(main_module.sys, "stdout", _Stream(False))
+        main_module._apply_palette()
+        assert main_module.RESET == "", "stdout is redirected, so no colour there"
+
+        monkeypatch.setattr(main_module.sys, "stderr", _Stream(True))
+        assert main_module._colour_enabled(main_module.sys.stderr) is True
+
+
+class TestAHollowDeckIsNotASuccess:
+    """
+    A package with no definition on any card must not exit 0.
+
+    Measured 9 September 2026 on a clean install: dictionaryapi.dev answered
+    522 after 19.6s against an 8s timeout, the circuit breaker tripped, and a
+    real English run wrote 97 cards with a definition on none of them and
+    exited 0. Nothing scriptable could tell that deck from a good one.
+    """
+
+    def _summary(self, capsys, **kwargs):
+        defaults = dict(
+            video_id="abc", deck_name="English", apkg_path=Path("/tmp/x.apkg"),
+            card_count=0, fallback_count=0, skipped_count=0, not_found_count=0,
+        )
+        defaults.update(kwargs)
+        code = main_module._print_summary(**defaults)
+        return code, capsys.readouterr().out
+
+    def test_no_definitions_at_all_exits_non_zero(self, capsys):
+        code, out = self._summary(capsys, card_count=0, fallback_count=97,
+                                  not_found_count=97)
+        assert code == main_module._EXIT_DEGRADED
+        assert "Not one card got a definition" in out
+
+    def test_a_deck_with_definitions_exits_zero(self, capsys):
+        # The pair. A test that only proves the bad case passes on a function
+        # that always fails.
+        code, _ = self._summary(capsys, card_count=40, fallback_count=57,
+                                not_found_count=57)
+        assert code == 0
+
+    def test_even_one_definition_is_not_hollow(self, capsys):
+        code, _ = self._summary(capsys, card_count=1, fallback_count=96,
+                                not_found_count=96)
+        assert code == 0
+
+    def test_a_run_with_nothing_to_do_is_not_hollow(self, capsys):
+        # Every word was already in the deck. Zero definitions, and correct.
+        # Failing here would make a no-op run look broken.
+        code, _ = self._summary(capsys, card_count=0, fallback_count=0,
+                                not_found_count=0)
+        assert code == 0
+
+    def test_a_dead_source_is_told_how_to_stop_depending_on_it(self, capsys):
+        # "Retry later" was the only advice given, and it does not fix
+        # anything. The offline index cannot go down.
+        #
+        # card_count is deliberately non-zero. With a hollow deck this passed
+        # even when the stopped-source advice was deleted, because the hollow
+        # block prints the same command: the mutation survived until this
+        # case stopped going through that other branch.
+        _, out = self._summary(capsys, card_count=10, fallback_count=87,
+                               not_found_count=87, language="en",
+                               sources_stopped=["dictapi"])
+        assert "Not one card got a definition" not in out, (
+            "this case must not be hollow, or it tests the wrong branch")
+        assert "tango build-dictionary en" in out
+
+    def test_the_advice_names_the_language_that_actually_ran(self, capsys):
+        _, out = self._summary(capsys, card_count=0, fallback_count=5,
+                               not_found_count=5, language="fr",
+                               sources_stopped=["dictapi"])
+        assert "tango build-dictionary fr" in out
+        assert "build-dictionary en" not in out
+
+
+class TestDoctorSeparatesBlockingFromOptional:
+    """
+    `tango doctor` must not call a working machine broken.
+
+    Until 9 September 2026 one counter covered both kinds of gap, so it
+    returned 1 whenever any optional index was absent while printing "Each is
+    optional -- the pipeline runs without them". Both halves were wrong at
+    once: without a spaCy model nothing runs at all, and a machine merely
+    lacking a Japanese dictionary is fine. `tango doctor && tango run` never
+    proceeded on a normal machine.
+    """
+
+    def _doctor(self, capsys, monkeypatch, models):
+        import spacy.util
+        monkeypatch.setattr(spacy.util, "get_installed_models",
+                            lambda: list(models))
+        code = main_module._run_doctor()
+        return code, capsys.readouterr().out
+
+    def test_no_spacy_model_at_all_is_blocking(self, capsys, monkeypatch):
+        code, out = self._doctor(capsys, monkeypatch, [])
+        assert code == 1
+        assert "A run cannot extract vocabulary without one" in out
+
+    def test_a_model_present_is_not_blocking(self, capsys, monkeypatch):
+        # The pair. An optional gap is forced to exist, because the whole
+        # claim is that an optional gap does not make doctor fail. Without
+        # forcing it this passed on a machine that happened to have every
+        # index built, and a mutation folding `missing` back into the exit
+        # code survived.
+        import pipeline.config as cfg
+        monkeypatch.setattr(cfg, "DICT_DIR", Path("/nonexistent-dict-dir"))
+        code, out = self._doctor(capsys, monkeypatch, ["en_core_web_sm"])
+        assert "optional item(s) absent" in out, "no optional gap to test with"
+        assert code == 0
+
+    def test_optional_gaps_say_ready_to_run(self, capsys, monkeypatch):
+        # DICT_DIR is forced somewhere empty so an optional gap definitely
+        # exists. Without that this passed or failed depending on which
+        # indexes the machine running the suite happened to have built.
+        import pipeline.config as cfg
+        monkeypatch.setattr(cfg, "DICT_DIR", Path("/nonexistent-dict-dir"))
+        _, out = self._doctor(capsys, monkeypatch, ["en_core_web_sm"])
+        assert "Ready to run" in out
+        # The sentence that was wrong: it claimed everything missing was
+        # optional even when the blocking model was the missing thing.
+        assert "Each is optional" not in out
+
+    def test_english_is_reported_rather_than_skipped(self, capsys, monkeypatch):
+        # English was excluded from the missing-index report entirely, left
+        # over from the decision ADR-011 reversed. That is why nothing ever
+        # suggested the one thing that survives a dictionaryapi.dev outage.
+        import pipeline.config as cfg
+        monkeypatch.setattr(cfg, "DICT_DIR", Path("/nonexistent-dict-dir"))
+        monkeypatch.setattr(main_module, "DICT_DIR", Path("/nonexistent-dict-dir"),
+                            raising=False)
+        _, out = self._doctor(capsys, monkeypatch, ["en_core_web_sm"])
+        assert "tango build-dictionary en" in out
+
+    def test_the_reason_is_printed_once_not_per_language(self, capsys, monkeypatch):
+        # Six languages each repeating the same three lines buries the list.
+        import pipeline.config as cfg
+        monkeypatch.setattr(cfg, "DICT_DIR", Path("/nonexistent-dict-dir"))
+        _, out = self._doctor(capsys, monkeypatch,
+                              ["fr_core_news_md", "de_core_news_sm",
+                               "es_core_news_sm"])
+        assert out.count("No online source covers these") <= 1
