@@ -289,11 +289,25 @@ English is covered by Merriam-Webster and dictionaryapi.dev out of the box, at a
 
 The offline dictionary is built from Wiktionary data and works with no network access once built. Measured against real generated decks:
 
-| language | definitions | examples | synonyms | antonyms |
-|---|---|---|---|---|
-| French | 95% | 92% | 83% | 20% |
-| German | 91% | 84% | 60% | 51% |
-| Russian | 91% | 72% | 72% | 46% |
+Swept across all four languages that have an index, 10 September 2026, with
+the cache off so every number is a cold fetch:
+
+| language | cards | definitions | examples | video example | synonyms | antonyms |
+|---|---|---|---|---|---|---|
+| English | 269 | 100% | 97% | 100% | 91% | 75% |
+| French | 201 | 99% | 97% | 100% | 86% | 44% |
+| German | 349 | 95% | 95% | 100% | 66% | 66% |
+| Russian | 700 | 95% | 75% | 100% | 73% | 49% |
+
+The sentence from the video is on **every card in every language**, because
+it is the one field that does not depend on a dictionary.
+
+Reading definitions in another language with `--def-lang` keeps definitions
+at 97% to 100%, and costs you dictionary examples: a German transcript with
+English definitions carries an example on 46% of cards rather than 95%.
+Examples, synonyms, pronunciation and antonyms always stay in the language
+of the video, because an example sentence in a language you did not ask for
+is worse than none. The video sentence is still on every card.
 
 Build it for English too, since 27 August 2026. That advice used to be the opposite, and the reversal is worth knowing: Merriam-Webster still writes better definitions and is still tried first, but it is the only source English has, it allows 1000 queries a day per key, and one 1094-word video exceeds that on its own. The index is the floor under it.
 
