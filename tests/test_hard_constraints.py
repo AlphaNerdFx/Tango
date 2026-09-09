@@ -593,14 +593,25 @@ class TestEnvironmentKeysAreDeclared:
             )
             found |= set(re.findall(r'getenv\(\s*["\']([A-Z_][A-Z0-9_]*)["\']', text))
             found |= set(re.findall(r'environ\[\s*["\']([A-Z_][A-Z0-9_]*)["\']', text))
-            found |= set(re.findall(
-                r'_resolve_path\(\s*["\']([A-Z_][A-Z0-9_]*)["\']', text))
+            # Every wrapper config reads a setting through. Adding one and
+            # forgetting it here does not fail: the scan just stops seeing
+            # those settings, and both tests below quietly weaken. That is
+            # what happened when _env, _env_int and _env_float replaced the
+            # bare os.getenv calls on 9 September 2026.
+            for helper in ("_resolve_path", "_env", "_env_int", "_env_float"):
+                found |= set(re.findall(
+                    helper + r'\(\s*["\']([A-Z_][A-Z0-9_]*)["\']', text))
         return found
 
     def test_the_scan_finds_something(self):
-        # Guards the scan itself. If the regexes stop matching, the two
-        # tests below would pass by comparing empty sets.
-        assert len(self._keys_read_in_source()) >= 15
+        # Guards the scan itself. If the regexes stop matching,
+        # test_every_key_the_code_reads_is_declared would pass by comparing
+        # an empty set against the declared list.
+        #
+        # The floor is 30 against 36 declared keys, not 15. At 15 the scan
+        # could lose a third of the package and still look healthy, which is
+        # close to what happened when the config helpers landed.
+        assert len(self._keys_read_in_source()) >= 30
 
     def test_every_key_the_code_reads_is_declared(self):
         from pipeline.config import KNOWN_ENV_KEYS
@@ -647,6 +658,52 @@ class TestEnvironmentKeysAreDeclared:
             "These are settings the code reads, so a user can set them, but "
             "they are absent from the file a user copies:\n  "
             + "\n  ".join(missing)
+        )
+
+    def test_the_example_file_ships_the_code_defaults(self):
+        # The direction none of the other three checks covered. They ask
+        # whether the names are real and complete; this asks whether the
+        # VALUES agree with the code.
+        #
+        # Measured 9 September 2026: MW_RATE_LIMIT shipped here as 2 while
+        # config.py defaulted to 4.0, and MW_BURST as 5 against 8. So
+        # copying the documented template halved the throughput the project
+        # had deliberately settled on, and nothing said so. A value that
+        # disagrees with the code is worse than an absent one, because it
+        # looks authoritative.
+        root = Path(__file__).resolve().parent.parent
+        example = (root / ".env.example").read_text(encoding="utf-8")
+        shipped = {
+            line.split("=", 1)[0].strip(): line.split("=", 1)[1].strip()
+            for line in example.splitlines()
+            if line.strip() and not line.strip().startswith("#") and "=" in line
+        }
+
+        # Defaults as written in the source, so this compares the literal a
+        # maintainer edits rather than a value the environment has already
+        # touched.
+        pattern = re.compile(
+            r'_(?:env|env_int|env_float|resolve_path)\(\s*"([A-Z_0-9]+)"\s*,\s*"([^"]*)"')
+        defaults = {}
+        for path in (root / "src" / "pipeline").glob("*.py"):
+            for name, value in pattern.findall(path.read_text(encoding="utf-8")):
+                defaults[name] = value
+
+        drifted = []
+        for name, ships in shipped.items():
+            if name not in defaults or ships == "":
+                continue          # blank means "use the default", so it agrees
+            code = defaults[name]
+            try:
+                same = float(ships) == float(code)
+            except ValueError:
+                same = ships == code
+            if not same:
+                drifted.append(f"{name}: .env.example ships {ships!r}, "
+                               f"code defaults to {code!r}")
+        assert not drifted, (
+            "The template disagrees with the code it documents:\n  "
+            + "\n  ".join(sorted(drifted))
         )
 
     def test_the_example_file_documents_the_real_names(self):
