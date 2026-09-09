@@ -143,9 +143,16 @@ def run_pair(
     """
     video = VIDEOS[transcript]
     deck = f"CoverageMatrix_{transcript}_{definition or 'native'}"
+    # `run` as a subcommand with the id positional. This read
+    # `--video-id={video}` with no subcommand until 10 September 2026, which
+    # is the argparse surface v0.7.0 deleted on 3 September. Every one of the
+    # 16 combinations failed with "No such option '--video-id'", and nobody
+    # saw it because the sweep was never re-run between the two dates. Same
+    # class as the eight shipped messages naming deleted flags that v0.8.0
+    # found, in a script rather than in output, which is why the scan that
+    # came out of that now covers scripts/ too.
     cmd = [
-        sys.executable, "-u", "-m", "pipeline",
-        f"--video-id={video}",
+        sys.executable, "-u", "-m", "pipeline", "run", video,
         f"--deck={deck}",
         f"--language={transcript}",
         "--force",
