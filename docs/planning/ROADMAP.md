@@ -608,7 +608,16 @@ reach: a translation install is 2.2 GB, nowhere near the 600 MB below, and it
 cannot get there while torch is 725 MB of it. That is step 4, and it needs an
 upstream change:
 
-- base install, no translation, one language: **≤ 300 MB** of code
+- base install, no translation, one language: **≤ 300 MB** of code.
+  **Not met, and the target is wrong rather than the work.** Measured
+  10 September 2026 in a clean virtual environment from the published
+  package: **316 MB across 55 packages**, 16 over. spaCy is 119 MB of it and
+  numpy 41 MB, and CLAUDE.md 3.6 already records the numeric stack as 236 MB
+  and as the floor while spaCy is the NLP engine. That leaves 64 MB for
+  everything else, so the target was set below what the architecture allows.
+  Hitting it means changing NLP engine, which is not a v1.0.0 activity and
+  would cost far more than 16 MB is worth. Carried to a future rung as a
+  question about the engine, not as a size cleanup.
 - with translation: **≤ 600 MB** of code, which step 1 alone does not reach.
   Measured after it: 2203 MB, of which torch is 725 and the nine spaCy models
   are roughly 400. It needs steps 3 and 4 as well
@@ -683,7 +692,9 @@ deliver something a user can run.
   `tango languages` already say. Decided 8 September 2026, against building
   five more indexes at roughly 1.5 GB, which would have fought this rung's
   own goal.
-- **The transcript single point of failure, documented** rather than fixed.
+- ~~**The transcript single point of failure, documented** rather than
+  fixed.~~ **Done**, in the README under "Known limitations", where a user
+  who hits it will look, rather than only in a handover.
   `youtube-transcript-api` is the only extraction path and stays that way for
   1.0, decided 8 September 2026.
 
