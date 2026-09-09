@@ -216,6 +216,25 @@ clone; it is not installed by the package.
 
 </details>
 
+### Exit codes
+
+Scriptable, and worth knowing if you drive Tango from a shell or from CI.
+
+| code | meaning |
+|---|---|
+| 0 | the run did what you asked |
+| 1 | it stopped, and printed a message saying why and what to do |
+| 2 | you typed something the command does not accept |
+| 3 | a package was written, but not one card got a definition |
+
+Code 3 exists because a run can finish and still be useless. If every
+definition source is unreachable, you get a package full of words with no
+definitions, and that used to exit 0 like any other success. It now does not,
+so `tango run ... && anki-import` will not import a hollow deck.
+
+When you see a 3, the message names the durable fix: build the offline index
+for that language and the run stops depending on any web service.
+
 ---
 
 ## Language support
