@@ -45,6 +45,95 @@ load_dotenv()
 # characteristic failure mode; see SESSION.md 6.12.
 
 
+# ── Reading a setting ─────────────────────────────────────────────────────────
+#
+# A blank value means "unset", everywhere, for every setting.
+#
+# `KEY=` in a .env file does not leave the variable unset: python-dotenv puts
+# it in the environment as an empty string, and `os.getenv(name, default)`
+# then returns "" rather than the default. That is the opposite of what
+# anyone writing a blank line in a config file intends, and it failed in two
+# different ways. A string setting lost its default silently, so a blank
+# WIKTIONARY_USER_AGENT would have sent Wikimedia the empty User-Agent its
+# policy rejects. A numeric setting was worse: `float("")` raises, and
+# because config is imported before `main()` exists to catch anything, the
+# user got a ValueError traceback before the program started.
+#
+# `_resolve_path` below already treated unset and empty alike and said so in
+# its docstring. These extend that same rule to every other setting rather
+# than inventing a second convention.
+#
+# A value that is present but malformed is a different case: silently using
+# the default would hide a real mistake. It cannot raise here either, for the
+# import-order reason above, so it is recorded and `tango doctor` reports it.
+
+MALFORMED_ENV_VALUES: dict[str, str] = {}
+
+
+def _env(name: str, default: str = "") -> str:
+    """
+    Read a string setting, treating a blank value as unset.
+
+    Args:
+        name:    Environment variable name.
+        default: Value to use when unset, empty, or whitespace only.
+
+    Returns:
+        The stripped value, or the default.
+    """
+    value = os.getenv(name)
+    return default if value is None or not value.strip() else value.strip()
+
+
+def _env_int(name: str, default: str) -> int:
+    """
+    Read an integer setting without ever raising at import time.
+
+    A blank value is unset and gives the default. A malformed value also
+    gives the default and is recorded in MALFORMED_ENV_VALUES, because
+    raising here happens before the entry point can turn it into a message
+    (CLAUDE.md 4.4), and a traceback is not an error message.
+
+    A float in an integer setting counts as malformed rather than being
+    floored: a burst of 3.7 requests is not a thing, and rounding it hides
+    the typo instead of reporting it.
+
+    Args:
+        name:    Environment variable name.
+        default: Default, written as the string a user would set.
+
+    Returns:
+        The parsed value, or the parsed default.
+    """
+    raw = _env(name, default)
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        MALFORMED_ENV_VALUES[name] = raw
+        return int(default)
+
+
+def _env_float(name: str, default: str) -> float:
+    """
+    Read a float setting without ever raising at import time.
+
+    The pair to `_env_int`; same rules, same reason.
+
+    Args:
+        name:    Environment variable name.
+        default: Default, written as the string a user would set.
+
+    Returns:
+        The parsed value, or the parsed default.
+    """
+    raw = _env(name, default)
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        MALFORMED_ENV_VALUES[name] = raw
+        return float(default)
+
+
 def _project_root(root: Path | None = None) -> Path:
     """
     Absolute path to the repository root, resolved from this file's location.
@@ -133,7 +222,7 @@ MEDIA_DIR: Path = _resolve_path("MEDIA_DIR", "media")
 # files, and the sources do go down -- dictionaryapi.dev's media host was
 # returning 502 for some words while serving others -- so a slow response is
 # more likely a failure than a big file.
-MEDIA_TIMEOUT: int = int(os.getenv("MEDIA_TIMEOUT", "10"))
+MEDIA_TIMEOUT: int = _env_int("MEDIA_TIMEOUT", "10")
 
 # Pacing for audio downloads, in requests per second across all threads.
 #
@@ -150,21 +239,21 @@ MEDIA_TIMEOUT: int = int(os.getenv("MEDIA_TIMEOUT", "10"))
 # embedded 13 recordings and gave the other 364 cards a link instead. Every
 # one of those URLs downloads fine on its own, which is exactly why nothing
 # looked broken -- see ARCHITECTURE.md 8.35.
-MEDIA_RATE_LIMIT: float = float(os.getenv("MEDIA_RATE_LIMIT", "1.25"))
+MEDIA_RATE_LIMIT: float = _env_float("MEDIA_RATE_LIMIT", "1.25")
 
 # How many requests may go out back-to-back before pacing applies. Below the
 # measured ceiling of ~10 on purpose, so a short run of a handful of new
 # words costs nothing while a long one settles to MEDIA_RATE_LIMIT.
-MEDIA_BURST: int = int(os.getenv("MEDIA_BURST", "8"))
+MEDIA_BURST: int = _env_int("MEDIA_BURST", "8")
 
 # Retries for a 429 specifically. The bucket refills, so a rate-limited
 # request is worth repeating -- unlike a 404 or a 502, where the file is
 # simply not there and the card falls back to a link immediately.
-MEDIA_MAX_RETRIES: int = int(os.getenv("MEDIA_MAX_RETRIES", "2"))
+MEDIA_MAX_RETRIES: int = _env_int("MEDIA_MAX_RETRIES", "2")
 
 # Ceiling on one `Retry-After` wait, so a server answering with an hour
 # cannot stall a run that has already done the expensive work.
-MEDIA_MAX_RETRY_WAIT: float = float(os.getenv("MEDIA_MAX_RETRY_WAIT", "30"))
+MEDIA_MAX_RETRY_WAIT: float = _env_float("MEDIA_MAX_RETRY_WAIT", "30")
 
 # Anki
 
@@ -239,18 +328,18 @@ def wsl_host_ip() -> str | None:
 # where Anki runs on the Windows side; deck.py retries there against
 # wsl_host_ip() rather than defaulting to it, because guessing the gateway
 # would break the mirrored-networking case that works today.
-ANKI_HOST: str = os.getenv("ANKI_HOST", "http://localhost:8765")
+ANKI_HOST: str = _env("ANKI_HOST", "http://localhost:8765")
 
 # Whether the user named the host themselves. An explicit choice is never
 # second-guessed, including an explicit localhost.
-ANKI_HOST_EXPLICIT: bool = bool(os.getenv("ANKI_HOST"))
+ANKI_HOST_EXPLICIT: bool = bool(_env("ANKI_HOST"))
 
 # AnkiConnect API version: do not change unless AnkiConnect upgrades its API
 ANKI_VERSION: int = 6
 
 # Seconds to wait for AnkiConnect to respond before timing out. Fine for the
 # quick calls -- deckNames, findNotes, notesInfo -- which answer immediately.
-ANKI_TIMEOUT: int = int(os.getenv("ANKI_TIMEOUT", "5"))
+ANKI_TIMEOUT: int = _env_int("ANKI_TIMEOUT", "5")
 
 # importPackage is not one of those. Anki writes every note, builds cards and
 # rebuilds indexes before it answers, and how long that takes scales with the
@@ -259,7 +348,7 @@ ANKI_TIMEOUT: int = int(os.getenv("ANKI_TIMEOUT", "5"))
 # user saw an empty deck with no error -- while the same import had worked
 # weeks earlier on a smaller collection. Generous by design; it is a ceiling
 # for a hung server, not a target.
-ANKI_IMPORT_TIMEOUT: int = int(os.getenv("ANKI_IMPORT_TIMEOUT", "300"))
+ANKI_IMPORT_TIMEOUT: int = _env_int("ANKI_IMPORT_TIMEOUT", "300")
 
 # genanki model ID: NEVER change after first use.
 # Changing this causes Anki to treat all existing cards as belonging
@@ -278,24 +367,24 @@ ANKI_IMPORT_TIMEOUT: int = int(os.getenv("ANKI_IMPORT_TIMEOUT", "300"))
 # The new value is that fork's ID, so packages now match the notetype the
 # cards are actually on and imports merge instead of forking again. See
 # ARCHITECTURE.md 8.31. Do not change it again.
-MODEL_ID: int = int(os.getenv("ANKI_MODEL_ID", "1607392321"))
+MODEL_ID: int = _env_int("ANKI_MODEL_ID", "1607392321")
 
 # genanki deck ID: NEVER change after first use.
 # Same constraint as MODEL_ID.
-DECK_ID: int = int(os.getenv("ANKI_DECK_ID", "2059400110"))
+DECK_ID: int = _env_int("ANKI_DECK_ID", "2059400110")
 
 # Deck check: confidence interval thresholds
 
 # Fuzzy match score above this → word already in deck (SKIP)
-CONFIDENCE_HIGH: int = int(os.getenv("CONFIDENCE_HIGH", "90"))
+CONFIDENCE_HIGH: int = _env_int("CONFIDENCE_HIGH", "90")
 
 # Fuzzy match score below this → brand new word (NEW)
 # Between CONFIDENCE_LOW and CONFIDENCE_HIGH → needs user review (QUEUE)
-CONFIDENCE_LOW: int = int(os.getenv("CONFIDENCE_LOW", "60"))
+CONFIDENCE_LOW: int = _env_int("CONFIDENCE_LOW", "60")
 
 # Words shorter than this use exact match only: WRatio is unreliable
 # on short tokens due to partial ratio inflation
-SHORT_WORD_THRESHOLD: int = int(os.getenv("SHORT_WORD_THRESHOLD", "4"))
+SHORT_WORD_THRESHOLD: int = _env_int("SHORT_WORD_THRESHOLD", "4")
 
 # Definition APIs
 
@@ -320,7 +409,7 @@ SHORT_WORD_THRESHOLD: int = int(os.getenv("SHORT_WORD_THRESHOLD", "4"))
 #   3. Commercial use is a negotiation, not a tier. Anything monetized needs
 #      MW's written terms, which is why MW must stay an enhancement rather
 #      than the thing English depends on. See ADR-011.
-MW_API_KEY: str | None = os.getenv("MW_API_KEY")
+MW_API_KEY: str | None = _env("MW_API_KEY") or None
 MW_API_BASE: str = "https://www.dictionaryapi.com/api/v3/references/collegiate/json"
 
 # Pacing for Merriam-Webster, in requests per second across all threads.
@@ -339,11 +428,11 @@ MW_API_BASE: str = "https://www.dictionaryapi.com/api/v3/references/collegiate/j
 # ceiling when someone measures where MW actually starts refusing: the
 # measurement costs a chunk of the 1000-per-day free tier, which is why it
 # has not been done yet.
-MW_RATE_LIMIT: float = float(os.getenv("MW_RATE_LIMIT", "4.0"))
+MW_RATE_LIMIT: float = _env_float("MW_RATE_LIMIT", "4.0")
 
 # Requests allowed back-to-back before pacing applies, so a short review run
 # of a few words pays nothing.
-MW_BURST: int = int(os.getenv("MW_BURST", "8"))
+MW_BURST: int = _env_int("MW_BURST", "8")
 
 # dictionaryapi.dev: fallback, no key required
 DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
@@ -360,27 +449,27 @@ DICT_API_BASE: str = "https://api.dictionaryapi.dev/api/v2/entries"
 # ~12 requests was observed in testing) and requests an identifying
 # User-Agent: see https://meta.wikimedia.org/wiki/User-Agent_policy.
 WIKTIONARY_API_BASE: str = "https://en.wiktionary.org/api/rest_v1/page/definition"
-WIKTIONARY_USER_AGENT: str = os.getenv(
+WIKTIONARY_USER_AGENT: str = _env(
     "WIKTIONARY_USER_AGENT",
     f"Tango-pipeline/{__version__} (https://github.com/AlphaNerdFx/Tango)",
 )
 
 # Seconds to wait for a definition API response before timing out
-API_TIMEOUT: float = float(os.getenv("API_TIMEOUT", "8"))
+API_TIMEOUT: float = _env_float("API_TIMEOUT", "8")
 
 # Maximum number of definition lookups in flight at once. Replaces the old
 # fixed API_DELAY sleep-between-calls approach: rate limiting is now done
 # by bounding concurrency rather than pacing a sequential loop. See
 # ARCHITECTURE.md's design-patterns section for why a thread pool was used
 # instead of asyncio/aiohttp.
-DEFINITION_FETCH_WORKERS: int = int(os.getenv("DEFINITION_FETCH_WORKERS", "5"))
+DEFINITION_FETCH_WORKERS: int = _env_int("DEFINITION_FETCH_WORKERS", "5")
 
 # Consecutive server-error/timeout failures against one definition source
 # before the circuit breaker stops calling it for the rest of the run.
 # Does NOT count 404 ("word not found": the source is healthy, just lacks
 # this word) as a failure, only 5xx/timeout/connection errors: see issue #1's
 # 404-vs-502 investigation for why that distinction matters.
-CIRCUIT_BREAKER_THRESHOLD: int = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "5"))
+CIRCUIT_BREAKER_THRESHOLD: int = _env_int("CIRCUIT_BREAKER_THRESHOLD", "5")
 
 # Proxy (youtube-transcript-api)
 #
@@ -391,24 +480,24 @@ CIRCUIT_BREAKER_THRESHOLD: int = int(os.getenv("CIRCUIT_BREAKER_THRESHOLD", "5")
 # measurably worse when tested (repeated 429s through it, success without
 # it): see issue #8 and SESSION.md 6.5.
 # Format: "http://user:pass@host:port" or "socks5://user:pass@host:port"
-PROXY_HTTP_URL: str | None = os.getenv("PROXY_HTTP_URL")
-PROXY_HTTPS_URL: str | None = os.getenv("PROXY_HTTPS_URL")
+PROXY_HTTP_URL: str | None = _env("PROXY_HTTP_URL") or None
+PROXY_HTTPS_URL: str | None = _env("PROXY_HTTPS_URL") or None
 
 # Webshare-specific credentials, for anyone already using that service.
 # Listed second deliberately: it is not the suggested starting point.
-WEBSHARE_USERNAME: str | None = os.getenv("WEBSHARE_USERNAME")
-WEBSHARE_PASSWORD: str | None = os.getenv("WEBSHARE_PASSWORD")
+WEBSHARE_USERNAME: str | None = _env("WEBSHARE_USERNAME") or None
+WEBSHARE_PASSWORD: str | None = _env("WEBSHARE_PASSWORD") or None
 
 # Images (ADR-009 phase 3)
 #
 # Off by default. The ADR requires the relevance gate to be measured on real
 # vocabulary before this ships enabled, and that measurement is a v0.11.0
 # acceptance target rather than something already done.
-IMAGES_ENABLED: bool = os.getenv("IMAGES_ENABLED", "").lower() in {"1", "true", "yes"}
+IMAGES_ENABLED: bool = _env("IMAGES_ENABLED").lower() in {"1", "true", "yes"}
 
 # Seconds for one Wikipedia or Wikidata lookup. Two calls per candidate
 # lemma, so a slow answer costs the run twice over.
-IMAGE_TIMEOUT: int = int(os.getenv("IMAGE_TIMEOUT", "10"))
+IMAGE_TIMEOUT: int = _env_int("IMAGE_TIMEOUT", "10")
 
 IMAGE_DIR: Path = _resolve_path("IMAGE_DIR", "images")
 
