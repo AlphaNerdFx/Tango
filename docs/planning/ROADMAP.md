@@ -697,14 +697,23 @@ this project's cards.**
 
 1. **The notetype.** `MODEL_ID`, `DECK_ID`, and the field names and order in
    `cards.FIELDS`. Fields may be **appended** (with a migration); indices
-   0–9 are what every already-imported card is bound to.
+   0–13 are what every already-imported card is bound to. This said 0–9
+   until 9 September 2026, which predated IPA and Pronunciation (v0.5.0) and
+   Image and Attribution (v0.11.0). A freeze list that names the wrong range
+   freezes the wrong thing, so `cards.FIELDS` is the authority and a test
+   now pins CLAUDE.md 3.2's table to it.
 2. **The CLI surface.** Command names and their options: `run`, `review`,
    `backlog`, `languages`, `doctor`, `setup`, `install-model`,
-   `install-translation`, `build-dictionary`, `build-antonyms`, and the
-   options `--deck`, `--language`, `--def-lang`, `--force`, `--no-cache`,
-   `--images/--no-images`.
-3. **Configuration keys.** Every `ANKI_*`, `DEF_LANG`, `MW_API_KEY`,
-   `DB_PATH`, `DICT_DIR`, and the rest of `.env.example`.
+   `install-translation`, `build-dictionary`, `build-antonyms`,
+   `uninstall`, `repair-images`, and the options `--deck`, `--language`,
+   `--def-lang`, `--force`, `--no-cache`, `--images/--no-images`,
+   `--verbose`. `uninstall`, `repair-images` and `--verbose` shipped after
+   this list was written and were missing from it.
+3. **Configuration keys.** Every `ANKI_*`, `MW_API_KEY`, `DB_PATH`,
+   `DICT_DIR`, and the rest of `.env.example`, which is the authoritative
+   list and is checked against the code by a test. `DEF_LANG` was named here
+   and is not a setting at all: it is the `--def-lang` flag, already frozen
+   by item 2. The same mistake was in the wiki and is fixed there too.
 4. **On-disk schemas.** `pipeline.db` (definition cache, vocabulary, runs,
    backlog) and the dictionary index (currently v2). A schema bump costs a
    full re-download per language, 288 MB de, 682 MB fr, 278 MB ru, so it
