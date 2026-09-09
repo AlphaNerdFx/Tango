@@ -15,7 +15,7 @@ to 8.52.
 | | before | after |
 |---|---|---|
 | coverage | 86%, 3627 statements, 494 missed | **89%, 3654 statements, 401 missed** |
-| unit tests | 1204 | **1306** across 16 files, 33 integration deselected |
+| unit tests | 1204 | **1307** across 16 files, 33 integration deselected |
 | ruff | 267 | **202**, every actionable category cleared |
 | mypy | 26 | 25 |
 | bandit | 1 HIGH, 1 MEDIUM, 2 LOW | **0 at every severity** |
@@ -140,7 +140,7 @@ wrong fold. ARCHITECTURE 8.51.
 
 ## Part 4: tests
 
-102 added, 1204 to 1306, across 16 files.
+103 added, 1204 to 1307, across 16 files.
 
 - **The socket guard**, which is the highest-value change here. CLAUDE.md
   3.5 forbids network access in the default run and had been prose only.
@@ -193,10 +193,14 @@ serve.
 | `TASKS.md` | "Migrate CLI from argparse to Typer" open | shipped in v0.7.0 |
 | `TASKS.md` | "Dockerfile" open, base `python:3.11-slim` | shipped in v0.8.2, published 8 September, base is `python:3.10-slim` |
 | `TASKS.md` | "Phase 3, images, is deliberately not built" | shipped in v0.11.0 |
-| `ARCHITECTURE.md` §10 | "734 unit tests", "88% overall, 1963 statements", per-module table | 1306, 89%, 3654, and eleven of the fifteen module figures wrong |
-| `SESSION.md`, `HANDOVER.md` | 1230 passing, 86%, 1237 collected | 1306, 89%, 1339 |
+| `ARCHITECTURE.md` §10 | "734 unit tests", "88% overall, 1963 statements", per-module table | 1307, 89%, 3654, and eleven of the fifteen module figures wrong |
+| `SESSION.md`, `HANDOVER.md` | 1230 passing, 86%, 1237 collected | 1307, 89%, 1340 |
 | `README.md` | `pip install "tango-anki[translation,translation-server]"` | that extra does not exist in the published 0.11.0. Verified against the PyPI JSON API |
 | Docker Hub | nothing | the page had no description at all, short or full |
+| `CLAUDE.md` §3.2 | a card field table of indices 0 to 11, and "a new field is index 12" | `cards.FIELDS` has fourteen entries; `Image` and `Attribution` were appended five weeks earlier |
+| GitHub wiki, 9 pages | `API_DELAY`, `LIBRETRANSLATE_URL`, `SPACY_MODEL`, `LANGUAGE=`, `DEF_LANG=`, `python -m pipeline --list-languages`, MW key required, ten card fields, Python 3.9, 40 languages, PyTorch 1.5 GB, no pip or Docker path | none of it true. Rewritten entirely |
+| GitHub wiki, WSL page | "find your Windows host IP, set `ANKI_HOST=http://172.28.144.1:8765`", and auto-import cannot work under WSL | the fallback is automatic since v0.10.0 and setting `ANKI_HOST` turns it off; the path translation that makes auto-import work is already there |
+| GitHub wiki, troubleshooting | Webshare as the first fix for 429s, and "delete `pipeline.db`" for a schema complaint | issue #8 measured Webshare's free tier making extraction worse; CLAUDE.md 8 forbids casually deleting a cache that is expensive to rebuild |
 
 ### Checks that came back clean
 

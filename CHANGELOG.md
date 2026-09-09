@@ -115,7 +115,7 @@ against `config.py`, and the repository against what PyPI and Docker Hub
 actually serve.
 
 - **`ARCHITECTURE.md` section 10 was wrong in every figure.** It claimed 734
-  unit tests across eleven files at 88% over 1963 statements. Measured: 1306
+  unit tests across eleven files at 88% over 1963 statements. Measured: 1307
   tests across 16 files, 89% over 3654. Eleven of its fifteen per-module
   numbers were stale, and three modules recorded at 100% were not. This is
   the fourth stale coverage figure this repository has carried.
@@ -134,6 +134,34 @@ actually serve.
   release it arrives in.
 - **Docker Hub had no description**, short or full. One is now written,
   kept in the repository, and pushed.
+- **The GitHub wiki contradicted the code on nine pages and was rewritten.**
+  It documented two settings that do not exist (`API_DELAY`, removed when
+  definition fetching became concurrent, and `LIBRETRANSLATE_URL`, removed
+  in this release), two flags as if they were settings (`LANGUAGE`,
+  `DEF_LANG`), a `SPACY_MODEL` setting that was never real, and
+  `python -m pipeline --list-languages`, which is both the pre-console-script
+  invocation and a flag v0.7.0 deleted. It called `MW_API_KEY` required when
+  it is optional, listed ten card fields when there are fourteen, gave
+  Python 3.9 as the floor when it is 3.10, said 40 languages when 24 have
+  models, quoted PyTorch at 1.5 GB when the CPU build is 725 MB, and offered
+  no pip or Docker install path at all despite the package being on PyPI
+  since v0.8.0.
+
+  Two pages gave actively harmful advice. **The WSL page told users to find
+  their Windows gateway IP and hardcode it into `ANKI_HOST`**, which turns
+  off the automatic fallback that has handled this since v0.10.0 and pins an
+  address that goes stale on reboot, and it said auto-import could not work
+  under WSL when the path translation that makes it work is already there.
+  **The troubleshooting page recommended Webshare first**, whose free tier
+  was measured making extraction worse, and told users to delete
+  `pipeline.db` for a schema complaint, which throws away a definition cache
+  that is expensive to rebuild.
+- **CLAUDE.md 3.2's card field table listed indices 0 to 11**, five weeks
+  after `Image` and `Attribution` were appended for v0.11.0, and the
+  paragraph under it said a new field is index 12 while index 12 was taken.
+  Prose elsewhere in the same file had it right. That table is what someone
+  reads before adding a field, so it is now pinned to `cards.FIELDS` by a
+  test.
 - Stale test and coverage figures corrected in `CLAUDE.md`, `SESSION.md` and
   `HANDOVER.md`, and the "`make check` takes about ten minutes" claim that
   every handover carried replaced with the measured 145 seconds.
