@@ -1524,12 +1524,27 @@ def _run_doctor() -> int:
     # A setting nothing reads is the quietest failure there is: it looks
     # applied and does nothing. Reported here because doctor is where
     # someone goes when the tool is not behaving as they configured it.
+    from pipeline.config import MALFORMED_ENV_VALUES
+
     stray = unknown_env_keys()
     if stray:
         print(f"    .env           {len(stray)} setting(s) that nothing reads: "
               f"{', '.join(stray)}")
         print("                   these have no effect. See .env.example for "
               "the names that do.")
+
+    # A value that cannot be parsed is quieter still: the setting is known,
+    # the name is spelled right, and the number in it is being ignored. It
+    # cannot raise where it is read, because config is imported before there
+    # is anything to turn an exception into a message, so it is recorded
+    # there and reported here.
+    if MALFORMED_ENV_VALUES:
+        print(f"    {YELLOW}.env           {len(MALFORMED_ENV_VALUES)} setting(s) "
+              f"with a value that is not a number:{RESET}")
+        for name, raw in sorted(MALFORMED_ENV_VALUES.items()):
+            print(f"                   {name}={raw}  -> ignored, default used")
+        print("                   Fix the value, or delete the line to use "
+              "the default.")
     print()
 
     # ── spaCy models: without one, a language cannot be processed at all ──
