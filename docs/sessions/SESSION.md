@@ -64,14 +64,18 @@ behind that. With one remote named `origin`, that command resolves and
 answers honestly. `git status -sb` still names the upstream and is still the
 better habit.
 
-**Test state, measured 8 September 2026:** 1230 passing, 0 failing, 33
-integration deselected (`make check`, exit 0). It was 972 at v0.6.0. The last
-15 arrived with the pre-release audit.
-**Coverage, measured 8 September 2026:** 86% overall, 3627 statements, 494
-missed. Weakest: `images.py` at 65%, because most image tests patch at the
-`find_images` seam and leave the batched resolver, the downloader and the
-cache repair paths uncovered. The 88% carried here since 18 August was taken
-about 1100 statements ago.
+**Test state, measured 9 September 2026:** 1301 passing, 0 failing, 33
+integration deselected (`make check`, exit 0). It was 972 at v0.6.0 and 1204
+before the September audit, which added 97.
+**Coverage, measured 9 September 2026:** 89% overall, 3654 statements, 401
+missed. Weakest now: `translation.py` at 76%, most of it the interactive
+download prompt, then `__main__.py` at 83% and `antonyms.py` at 84%.
+`images.py` was the floor at 65% and is now 93%: the tests patched at the
+`find_images` seam and left the batched resolver, the downloader and the
+cache repair paths uncovered, and the audit covered them.
+
+Both figures above were stale for weeks before this. See
+`docs/history/CODE_AUDIT_2026-09.md`, which records what that cost.
 
 **Overall completion estimate:** roughly 90 percent toward a v1.0.0 CLI
 tool. What is left is one rung, v0.12.0, which runs on modest hardware and
