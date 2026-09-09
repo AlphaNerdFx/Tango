@@ -854,12 +854,15 @@ class TestSetupCommands:
 
     def test_doctor_exit_code_reports_missing_items(self):
         """
-        Non-zero when something is absent, so a setup script can branch.
+        Whatever `_run_doctor` returns reaches the process exit code.
 
-        `make doctor` deliberately does NOT propagate this. The report's own
-        last line says every missing item is optional, and make printing
-        "Error 1" under that reads as a broken tool rather than a checklist.
-        The Makefile swallows it; the CLI keeps it.
+        This pins the wiring, not the policy. The policy changed on
+        9 September 2026: doctor used to return 1 for any absent optional
+        index, and `make doctor` swallowed it with `|| true` because make
+        printing "Error 1" under a report saying everything missing was
+        optional read as a broken tool. It now fails only when something
+        stops a run, so the Makefile propagates it and this stays true
+        either way.
         """
         with patch("pipeline.__main__._run_doctor", return_value=1) as mock_doc:
             with patch("sys.argv", ["tango", "doctor"]):
@@ -925,8 +928,9 @@ class TestSetupCommands:
     def test_doctor_reports_the_antonym_index_without_counting_it_missing(self, capsys):
         """
         The index is optional: a run without it produces the cards it
-        produced before the index existed. Reporting it as missing would
-        make --doctor exit non-zero on a perfectly working install.
+        produced before the index existed. Counting it as blocking would
+        make `tango doctor` exit non-zero on a perfectly working install.
+        (This said "--doctor", a flag v0.7.0 deleted, until 9 September 2026.)
         """
         with patch("pipeline.antonyms.is_available", return_value=False):
             with patch("sys.argv", ["tango", "doctor"]):
@@ -945,8 +949,8 @@ class TestSetupCommands:
             self, capsys):
         """
         Off is the intended state, not a broken install. ADR-009 requires the
-        relevance measurement before images become a default, so reporting
-        them as missing would make doctor exit non-zero on a correct one.
+        relevance measurement before images become a default, so counting
+        them as blocking would make doctor exit non-zero on a correct one.
         """
         with patch("pipeline.config.IMAGES_ENABLED", False):
             with patch("sys.argv", ["tango", "doctor"]):
