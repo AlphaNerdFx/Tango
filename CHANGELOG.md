@@ -14,8 +14,24 @@ rather than list every change.
 
 ## [Unreleased]
 
-Working towards v0.12.0, runs on modest hardware. Everything below is on
-`main` and unreleased: the published 0.11.0 has none of it.
+## [0.12.0] - 2026-09-10
+
+**Runs on modest hardware, and says so when it has not worked.**
+
+The rung's own acceptance targets are measured rather than asserted: peak
+resident memory 564 MB against a 1 GB target, an index build inside 38 MB
+against 2 GB, and a full run on 4 GB and 2 cores. The base install is
+316 MB against a 300 MB target, which is 16 over and recorded as a target
+set below what the architecture allows rather than as work outstanding.
+
+It also carries the freeze work v1.0.0 needs: `docs/COMPATIBILITY.md` states
+the surface that cannot break and a deprecation policy for changing it, and
+`tests/test_compatibility.py` reads that document and checks it against the
+running code in both directions.
+
+Three defects made a run lie to its user, and all three are fixed: a package
+with no definitions exited 0, colour leaked into every pipe and log file,
+and `tango doctor` called a working machine broken.
 
 Most of this came out of a code and documentation audit run on 8 and 9
 September 2026. The full account, with the numbers each conclusion rests on,
