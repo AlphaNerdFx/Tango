@@ -115,7 +115,7 @@ against `config.py`, and the repository against what PyPI and Docker Hub
 actually serve.
 
 - **`ARCHITECTURE.md` section 10 was wrong in every figure.** It claimed 734
-  unit tests across eleven files at 88% over 1963 statements. Measured: 1301
+  unit tests across eleven files at 88% over 1963 statements. Measured: 1306
   tests across 16 files, 89% over 3654. Eleven of its fifteen per-module
   numbers were stale, and three modules recorded at 100% were not. This is
   the fourth stale coverage figure this repository has carried.
@@ -144,6 +144,17 @@ Checks that came back clean are recorded too, in the audit document: version
 agreement across six places, every documented `make` target existing, and
 the PyPI badge pinning confirmed working on the published 0.11.0 page rather
 than only in `make dist`.
+
+**Five of these checks are now tests**, so the audit does not have to be
+repeated by hand and the same drift cannot recur silently. `make check`
+fails if a document cites an ARCHITECTURE section that does not exist, if it
+tells a reader to run a `make` target the Makefile lacks, if CLAUDE.md,
+CHANGELOG and the Dockerfile disagree about the current release, if
+`__version__` falls behind the CHANGELOG, or if a setting is read into a
+constant that nothing uses. A sixth, added alongside them, fails if
+`.env.example` ships a value that disagrees with the code default, which is
+the check that would have caught the MW pacing years earlier than a person
+did.
 
 ## [0.11.0] - 2026-09-08
 
