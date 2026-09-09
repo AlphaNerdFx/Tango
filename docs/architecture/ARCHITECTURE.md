@@ -3175,6 +3175,104 @@ documentation audit is for.
 
 Both decisions, and the options weighed, are in ADR-012.
 
+### 8.53 A failed run that reported success
+
+Found 9 September 2026 by installing the published package into a clean
+virtual environment and running it as a new user would, rather than by
+reading code. Three defects, one cause between them: **the tool had no way
+to tell the user that it had not done what they asked.**
+
+#### What the run did
+
+`tango run _Ab35KWTv9c --deck English` on a fresh machine produced 97 cards,
+**a definition on none of them**, and **exited 0**.
+
+The upstream was the trigger. dictionaryapi.dev answered `HTTP 522` after
+19.6 seconds against an 8 second `API_TIMEOUT`, every lookup timed out, the
+circuit breaker tripped after five consecutive failures, and the run carried
+on to write a package. Checked against controls at the time: pypi.org
+answered 200 and en.wiktionary.org 301, so this was the service and not the
+network.
+
+The package itself was correct. Notetype `1607392321`, fourteen fields in
+order, the frozen filename pattern, the `no-definition` tag, and two
+dictionary example sentences plus the video sentence on every card. Thin
+rather than empty. But every card read "No definition found", and nothing in
+the exit code said so.
+
+#### Three fixes
+
+**The exit code.** `_print_summary` now returns `_EXIT_DEGRADED`, which is 3,
+when a package was written and `card_count` is zero while something was
+looked up. 0 and 1 are the usual pair and 2 is Click's usage error, so this
+needed a number of its own rather than borrowing one that already means
+something else. The condition is deliberately "not one definition" rather
+than a percentage: a threshold invites argument and false alarms, and zero
+is not ambiguous. A run where every word was already in the deck looks the
+same on `card_count` alone and is not a failure, so the check requires that
+there was something to look up.
+
+The cost of that choice, stated plainly: a run that finds one definition in
+97 exits 0. Measured on the verification run, that is exactly what happened
+when the timeout was raised enough for a single lookup to land. The rule
+catches total failure, not a bad day.
+
+**The advice.** A stopped source printed only "Retry later", which fixes
+nothing and will say the same thing tomorrow. It now also names
+`tango build-dictionary <language>`, which is the durable answer: an offline
+index does not care whether a web service is up.
+
+**The gap that made English defenceless.** `tango doctor` skipped English
+when reporting missing indexes, with the condition `code != "en"` written
+literally into the loop. That is residue from the decision ARCHITECTURE 8.19
+took and ADR-011 reversed: the index was judged not worth its download
+because English is served online. `_DISCOURAGED` was emptied when ADR-011
+landed and this loop was not, so the one language whose only safety net is
+the index was the one language never told to build it. It is now reported
+as "web only, so an outage means no definitions".
+
+#### The two other defects the same session found
+
+**Colour leaked into every pipe and log file.** The seven ANSI constants were
+unconditional, so `tango run > log.txt` wrote
+`^[[31m^[[1m[err ]^[[0m  No spaCy model is mapped for 'zz'.` into the file.
+The progress reporter had checked `isatty()` since it was written; the five
+output helpers and 39 other call sites never did.
+
+Colour is now decided per stream at import, and the constants are empty
+strings when it is off, so no call site has to know. `NO_COLOR` disables it
+when merely present, including when empty, which is what the convention
+says. `FORCE_COLOR` enables it for CI that renders colour. Otherwise it
+follows `isatty()`. stdout and stderr are decided **separately**, because
+they are redirected separately: `tango run > log.txt` should write a clean
+file and still colour the error the user sees on screen.
+
+**`doctor` contradicted itself.** One counter covered both blocking and
+optional gaps, so it returned 1 whenever any optional index was absent while
+printing "Each is optional -- the pipeline runs without them". Both halves
+were wrong at once. A machine with no spaCy model cannot run at all, and a
+machine merely lacking a Japanese dictionary is fine, so
+`tango doctor && tango run` never proceeded on a normal machine. Blocking and
+optional are now counted apart, and only blocking sets the exit code.
+
+#### Verified, not reasoned
+
+The same command was rerun against the fixed code in the same clean
+environment, with the same video, deck and a cold cache, while the upstream
+was still answering too slowly to beat the timeout:
+
+| | before | after |
+|---|---|---|
+| exit code | 0 | **3** |
+| ANSI escapes in redirected output | present | **0** |
+| durable fix named | no | yes, twice |
+| `doctor` on a runnable machine | 1 | **0** |
+| `doctor` with no model | 1 | 1, and says a run needs it |
+
+Then the timeout was raised past the upstream's latency on the same run, one
+definition landed, and the exit code was 0. That pair is the point: the new
+code fires on total failure and not on a working run.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
@@ -3224,7 +3322,7 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-**1307 unit tests across 16 test files, 33 more marked integration and
+**1325 unit tests across 16 test files, 33 more marked integration and
 deselected by default**, measured 9 September 2026. All run without network,
 Anki, or installed models, and since 8 September that is enforced rather
 than asked for: an autouse fixture in `conftest.py` fails any default-run
