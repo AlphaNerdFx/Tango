@@ -16,10 +16,14 @@
 # every word to the backlog and still produces a package. To let it check
 # your deck for duplicates, point it at the host and tell Anki to listen:
 #
+# The image already sets ANKI_HOST to host.docker.internal, so what a run
+# needs is the route to it, not the variable:
+#
 #   docker run --rm -v "$PWD/data:/data" \
-#     -e ANKI_HOST=http://host.docker.internal:8765 \
 #     --add-host host.docker.internal:host-gateway \
 #     yousseflarbi/tango run <video-id> --deck "French"
+#
+# On native Linux, --network host works instead and needs no --add-host.
 #
 # Two things are deliberate and worth reading before changing them.
 #
