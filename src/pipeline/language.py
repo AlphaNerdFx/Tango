@@ -473,6 +473,13 @@ def capability_report() -> list[tuple[str, str, dict[str, bool]]]:
         if code not in seen:
             rows.append((code.upper(), code, language_capabilities(code)))
 
+    # Grouped by whether the language can make cards, then by name. The
+    # name half is defensive and currently unreachable: both loops above
+    # already append in sorted order, so dropping it changes no output for
+    # any data this function can be given. A mutation run on 10 September
+    # 2026 flagged it as a survivor and it is an equivalent mutant, not a
+    # test gap. Kept because the guarantee should not depend on two callers
+    # staying sorted.
     rows.sort(key=lambda r: (not r[2]["cards"], r[0]))
     return rows
 
