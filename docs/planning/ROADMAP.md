@@ -709,16 +709,22 @@ this project's cards.**
    `--def-lang`, `--force`, `--no-cache`, `--images/--no-images`,
    `--verbose`. `uninstall`, `repair-images` and `--verbose` shipped after
    this list was written and were missing from it.
-3. **Configuration keys.** Every `ANKI_*`, `MW_API_KEY`, `DB_PATH`,
+3. **Exit codes.** `0` success, `1` a failure the tool has a message for,
+   `2` a usage error from Click, `3` a package was written but not one card
+   got a definition. Added 9 September 2026, after a run that produced 97
+   definition-less cards exited 0 and nothing scriptable could tell that deck
+   from a good one. ARCHITECTURE 8.53.
+
+4. **Configuration keys.** Every `ANKI_*`, `MW_API_KEY`, `DB_PATH`,
    `DICT_DIR`, and the rest of `.env.example`, which is the authoritative
    list and is checked against the code by a test. `DEF_LANG` was named here
    and is not a setting at all: it is the `--def-lang` flag, already frozen
    by item 2. The same mistake was in the wiki and is fixed there too.
-4. **On-disk schemas.** `pipeline.db` (definition cache, vocabulary, runs,
+5. **On-disk schemas.** `pipeline.db` (definition cache, vocabulary, runs,
    backlog) and the dictionary index (currently v2). A schema bump costs a
    full re-download per language, 288 MB de, 682 MB fr, 278 MB ru, so it
    is a real cost to a real user, not an internal detail.
-5. **Output.** The `.apkg` filename pattern `{video_id}_{YYYYMMDD_HHMMSS}`
+6. **Output.** The `.apkg` filename pattern `{video_id}_{YYYYMMDD_HHMMSS}`
    and the guarantee that a package imports without forking a notetype.
 
 Not frozen, deliberately: card *content* (definitions, examples and their
