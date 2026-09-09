@@ -104,6 +104,25 @@ ADR-012, ADR-013 and ADR-014.
 - **A dead source was told only to "retry later".** That fixes nothing and
   says the same thing tomorrow. The advice now also names
   `tango build-dictionary <language>`, which is the durable answer.
+- **An unplayable video crashed its own error handler.**
+  `transcript.get_transcript` re-raised `VideoUnplayable(video_id, reason)`,
+  and that constructor requires a third argument, so a video YouTube reports
+  as unplayable produced `TypeError: __init__() missing 1 required positional
+  argument: 'sub_reasons'`. A named, expected failure was degrading into an
+  unknown one. All eight re-raises in that function were then checked against
+  the library's real signatures; exactly one was wrong, and a test now reads
+  the constructor calls out of the source and compares them, so a library
+  bump fails the suite rather than a user's run.
+- **`get_properties` indexed objects as if they were dicts.**
+  `lang["language_code"]` on a `_TranslationLanguage` is a `TypeError`, and
+  the library returns those for any translatable transcript. Ten tests
+  covered the function and all ten passed, because the fixture used plain
+  dicts: the code was tested against a shape the library does not produce.
+  The fixture now builds real objects, and both shapes are handled because
+  the dependency is pinned to a range.
+- **`make doctor` swallowed a real failure.** It ended in `|| true`, which
+  was right while doctor returned 1 for any absent optional index and wrong
+  the moment doctor started failing only on something that stops a run.
 - **A blank setting no longer stops the program.** `KEY=` in a `.env` loads
   as an empty string rather than leaving the name unset, so eighteen numeric
   settings raised `ValueError` during `import config`, which happens before
@@ -196,6 +215,9 @@ actually serve.
   Prose elsewhere in the same file had it right. That table is what someone
   reads before adding a field, so it is now pinned to `cards.FIELDS` by a
   test.
+- `definition.images_supported` said it was reported by `tango doctor`. That
+  was true of the WordNet concreteness gate; v0.11.0 replaced it with
+  Wikidata and doctor stopped calling this. Nothing calls it now.
 - Stale test and coverage figures corrected in `CLAUDE.md`, `SESSION.md` and
   `HANDOVER.md`, and the "`make check` takes about ten minutes" claim that
   every handover carried replaced with the measured 145 seconds.
