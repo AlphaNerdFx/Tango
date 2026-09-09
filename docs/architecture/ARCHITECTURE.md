@@ -3365,6 +3365,84 @@ sitting in a tool's output, reported on every `make check`, under a heading
 that says "Advisory (not gating)". Advisory is not the same as noise, and a
 list nobody reads is a list that is not doing anything.
 
+### 8.55 The coverage sweep, run at last, and what it confirmed
+
+Run 10 September 2026 for the v0.12.0 rung, across the four languages a user
+can actually have an index for. Sixteen combinations, no definition cache, so
+every number is a cold fetch.
+
+**The sweep had not run since v0.7.0 and could not have.** `scripts/coverage_matrix.py`
+invoked `--video-id=` with no subcommand, which is the argparse surface
+v0.7.0 deleted on 3 September. All sixteen combinations failed with "No such
+option", and nobody saw it because the tool that would have noticed was the
+tool that was broken. This is the same class as the eight shipped messages
+naming deleted flags that v0.8.0 found, in a script rather than in output.
+The scan that came out of v0.8.0 covered `src/` only; it now covers
+`scripts/` and the Makefile too.
+
+#### Native runs
+
+| language | cards | definition | class | 1st ex | 2nd ex | video ex | synonyms | antonyms |
+|---|---|---|---|---|---|---|---|---|
+| German | 349 | 95% | 95% | 95% | 76% | **100%** | 66% | 66% |
+| French | 201 | 99% | 99% | 97% | 76% | **100%** | 86% | 44% |
+| English | 269 | 100% | 100% | 97% | 93% | **100%** | 91% | 75% |
+| Russian | 700 | 95% | 95% | 75% | 38% | **100%** | 73% | 49% |
+
+Definitions are 95% or better in every language with an index built, and the
+sentence from the video is on every card in every language, which is the one
+field that never depends on a dictionary.
+
+Russian is the weak row and the reason is visible: 700 cards from one video,
+roughly twice any other, so the tail is longer and thinner. Its second
+example at 38% and antonyms at 49% are the honest numbers, not a bug.
+
+#### Cross-language, and the prediction it was run to test
+
+All twelve pairs had a translation model, so none of them silently fell back
+to a native run. Definitions held at 97% to 100% throughout.
+
+8.25 ends with a prediction: after examples and synonyms were gated to the
+transcript language, "expect cross-language example and synonym columns to
+fall on the next sweep. That is the measurement becoming honest." This is
+that sweep, and the prediction holds.
+
+The old numbers were **impossible**, and that is what exposed the bug:
+`de->ru` scored 87% on examples against `de->en` 45%, which cannot happen if
+the field is constrained to German. Now:
+
+| German transcript | 1st example | synonyms |
+|---|---|---|
+| native | 95% | 66% |
+| `--def-lang en` | 46% | 23% |
+| `--def-lang fr` | 51% | 10% |
+| `--def-lang ru` | 55% | 13% |
+
+The three cross-language columns have collapsed into one band, 46% to 55%,
+instead of ranging from 45% to 87% by which foreign index happened to match.
+The absolute number fell because the metric stopped counting a violation as
+a success.
+
+#### What it costs a cross-language user, stated plainly
+
+A German learner reading English definitions gets a definition on 99% of
+cards and a dictionary example on 46%, against 95% if they read German
+definitions. The video sentence is on all of them either way, so no card is
+without context. That is the price of the constraint in 3.3, and it is the
+right price: an example sentence in the wrong language is worse than no
+example, because the learner cannot tell which language they are looking at.
+
+#### The five languages with no index
+
+Spanish, Japanese, Korean, Portuguese and Chinese are not in this table and
+are not measured. They have spaCy models and produce cards; without an index
+their definitions come from nothing, because no online source covers them
+(9.1). Building five more indexes is roughly 1.5 GB, which fights this
+rung's own goal, so the decision on 8 September was to report them honestly
+rather than measure them. `tango doctor` and `tango languages` both say so,
+and since 9 September doctor names the cost per language rather than listing
+codes.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
