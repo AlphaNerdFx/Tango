@@ -2969,7 +2969,8 @@ a machine where it usually is, that reads exactly like "the tests pass".
 
 The guard is an autouse fixture in `conftest.py`. Two carve-outs, both
 deliberate: loopback is allowed, because standing up an `http.server` on a
-spare port is a technique this project uses to reproduce failures (18.7);
+spare port is a technique this project uses to reproduce failures
+(CLAUDE.md 18.7);
 and `@pytest.mark.integration` is exempt, because reaching a real service is
 what those tests are for.
 
