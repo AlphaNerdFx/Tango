@@ -651,15 +651,15 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1290 passing, 33 deselected. The count drifts as tests are added,
+Expected: 1301 passing, 33 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
 make coverage      # unit tests plus a per-module line-coverage report
 ```
 
-Measured 9 September 2026: 89% overall, 3623 statements, 397 missed. The
-weakest modules are `translation.py` at 76%, `__main__.py` and
+Measured 9 September 2026: 89% overall, 3654 statements, 401 missed. The
+weakest modules are `translation.py` at 76%, `__main__.py` at 83%,
 `antonyms.py` at 84%, and `transcript.py` at 87%. Every bug found by
 coverage work so far has been wiring between modules rather than logic
 inside one. See ARCHITECTURE.md section 10.
@@ -758,11 +758,16 @@ docs/planning/TASKS.md              Prioritised remaining work
 docs/sessions/SESSION.md            Current working state
 docs/sessions/HANDOVER.md           State for the next session
 docs/history/OPERATING_RULES.md     Superseded by this file; kept for its tone
+docs/history/CODE_AUDIT_2026-09.md  The September audit, findings and numbers
+docs/DOCKERHUB.md                   The Docker Hub page text, kept here so it is reviewable
 
 docs/adr/ADR-008-per-language-dictionary-sources.md
 docs/adr/ADR-009-card-media-enrichment.md
 docs/adr/ADR-010-conceptnet-antonyms.md
 docs/adr/ADR-011-english-offline-index.md
+docs/adr/ADR-012-settings-mean-what-they-say.md
+docs/adr/ADR-013-test-isolation-is-enforced.md
+docs/adr/ADR-014-translation-server-is-its-own-extra.md
 
 docs/ADR_v0.4.0.pdf                 Architecture decisions with rationale
 docs/SAD_v0.4.0.pdf                 System architecture
@@ -776,7 +781,7 @@ so on. The names are unique in the repository, so a search finds them, and
 rewriting several hundred citations into paths would cost more than it
 explains.
 
-The four markdown ADRs are the live ones and are cited throughout the code;
+The seven markdown ADRs are the live ones and are cited throughout the code;
 the v0.4.0 PDF set is the historical record. ADR-010 was accepted and
 implemented on 26 August 2026. ADR-011 was accepted on 27 August 2026: it
 reverses 8.19's decision against an English index, which was measured a week
