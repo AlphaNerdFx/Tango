@@ -100,7 +100,7 @@ def no_outbound_network(request, monkeypatch):
 
     Loopback is allowed. A test that stands up its own `http.server` on a
     spare port and talks to it is not reaching the outside world, and that
-    is a technique this project uses deliberately (ARCHITECTURE 18.7).
+    is a technique this project uses deliberately (CLAUDE.md 18.7).
 
     Integration tests are exempt: reaching real services is their entire
     purpose, and they are deselected by default.
