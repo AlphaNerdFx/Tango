@@ -1479,8 +1479,41 @@ class TestNoMessageNamesARemovedFlag:
 
     @staticmethod
     def _sources():
-        root = Path(__file__).resolve().parent.parent / "src" / "pipeline"
-        return sorted(root.glob("*.py"))
+        root = Path(__file__).resolve().parent.parent
+        return sorted(root.glob("src/pipeline/*.py"))
+
+    def test_no_script_or_makefile_invokes_a_deleted_flag(self):
+        """
+        The scan covered `src/` only, and the casualty was a script.
+
+        `scripts/coverage_matrix.py` invoked `--video-id` with no subcommand
+        and had done since v0.7.0 deleted that surface on 3 September 2026.
+        Every one of its 16 combinations failed with "No such option", and
+        nobody saw it because the sweep was not re-run between then and
+        10 September. A script that cannot run is a worse instruction than a
+        message that cannot be followed: nobody even reads the error.
+
+        Comments explaining the migration are allowed to name what it
+        replaced, so only executable lines are scanned.
+        """
+        root = Path(__file__).resolve().parent.parent
+        targets = sorted(root.glob("scripts/*.py")) + [root / "Makefile"]
+
+        offenders = []
+        for path in targets:
+            if not path.exists():
+                continue
+            for line_no, line in enumerate(
+                    path.read_text(encoding="utf-8").splitlines(), 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue          # prose about the past, not an instruction
+                for flag in self.REMOVED:
+                    if flag in line:
+                        offenders.append(f"{path.name}:{line_no}: {flag}")
+        assert not offenders, (
+            "These run a flag the CLI does not have, so they cannot work:\n  "
+            + "\n  ".join(offenders))
 
     def test_no_module_tells_a_user_to_run_a_deleted_flag(self):
         offenders = []
