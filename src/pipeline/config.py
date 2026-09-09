@@ -534,7 +534,7 @@ KNOWN_ENV_KEYS: frozenset[str] = frozenset({
     "PROXY_HTTP_URL", "PROXY_HTTPS_URL",
     "WEBSHARE_USERNAME", "WEBSHARE_PASSWORD",
     # Language and translation
-    "SPACY_MODEL_SIZE_OVERRIDE", "LIBRETRANSLATE_URL", "ARGOS_PACKAGES_DIR",
+    "SPACY_MODEL_SIZE_OVERRIDE", "ARGOS_PACKAGES_DIR",
     "LIBRETRANSLATE_MIRRORS",
     #Network politeness: the User-Agent Wikimedia asks callers to send
     "WIKTIONARY_USER_AGENT",
