@@ -46,14 +46,21 @@ logger = logging.getLogger(__name__)
 # run and never once produced a translation, while printing "community mirrors
 # are unavailable" as though that were a temporary condition.
 #
-# Empty by default, therefore. Set LIBRETRANSLATE_URL to your own instance
-# (`make translate-setup` installs one you can run locally) and it is used
-# first; otherwise translation goes straight to local argostranslate models,
-# which need no key, no network at query time, and no one else's uptime.
+# Empty by default, therefore. Put your own instance in
+# LIBRETRANSLATE_MIRRORS (`make translate-setup` installs one you can run
+# locally) and it is tried first; otherwise translation goes straight to
+# local argostranslate models, which need no key, no network at query time,
+# and no one else's uptime.
+#
+# There used to be a separate LIBRETRANSLATE_URL beside this, defaulting to
+# http://localhost:5000, and both this comment and .env.example told people
+# to set it. It was read into a constant that nothing ever used, from the
+# day it was added on 10 July 2026 until it was removed on 9 September 2026.
+# Setting it did nothing. A local server has always gone in the list below,
+# and now that is the only thing the documentation says. ADR-012.
 LIBRETRANSLATE_MIRRORS: list[str] = [
     m for m in os.getenv("LIBRETRANSLATE_MIRRORS", "").split(",") if m.strip()
 ]
-LIBRETRANSLATE_LOCAL       = os.getenv("LIBRETRANSLATE_URL", "http://localhost:5000")
 LIBRETRANSLATE_TIMEOUT     = 5    # seconds for mirror probe
 MODEL_WARMUP_TIMEOUT       = 180  # seconds for the first call of a pair, which
                                    # loads the model and its sentence-boundary
