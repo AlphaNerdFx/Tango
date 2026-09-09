@@ -147,8 +147,14 @@ setup: venv
 # as a failed recipe and prints "Error 1" under a report whose own last line
 # says every missing item is optional, which reads as a broken tool.
 # The CLI keeps its exit code; this target does not propagate it.
+# The exit code is propagated, deliberately. It used to be swallowed with
+# `|| true`, and that was right while doctor returned 1 for any absent
+# optional index: make printing "Error 1" under a report whose own last line
+# said everything missing was optional read as a broken tool. Since
+# 9 September 2026 doctor only fails when something stops a run, so the
+# failure is worth surfacing.
 doctor: venv
-	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline doctor || true
+	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline doctor
 
 # -- dictionary ---------------------------------------------------------------
 # Builds the offline Wiktionary index for one language. Large one-time
