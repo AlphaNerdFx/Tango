@@ -662,9 +662,17 @@ the README, the tag was removed from here, because none of what it held is a
 capability. It is a document, a policy and a sweep, and a release exists to
 deliver something a user can run.
 
-- **The compatibility document**: every item in §3 below, pinned and tested.
+- ~~**The compatibility document**: every item in §3 below, pinned and
+  tested.~~ **Done**, `docs/COMPATIBILITY.md`. It is not prose:
+  `tests/test_compatibility.py` reads its tables and compares them against
+  the running code in both directions, so a surface that drifts fails the
+  build. The unmade-promise direction matters as much as the broken-promise
+  one, and was the gap: the existing command test asserted a subset, so
+  `uninstall` and `repair-images` shipped without ever being frozen.
   It gains `--images/--no-images`, added to §3 on 8 September 2026.
-- **A deprecation policy**: what a `0.x` to `1.0` break costs a user.
+- ~~**A deprecation policy**: what a `0.x` to `1.0` break costs a user.~~
+  **Done**, section 8 of the same document, written from what this project
+  actually broke rather than from a template.
 - **The coverage sweep**, across the languages a user can actually have an
   index for, de/fr/ru/en, twelve pairs, including the pronunciation and image
   columns. es/ja/ko/pt/zh are reported honestly as usable for cards but

@@ -762,6 +762,7 @@ during the reorganisation and moved straight back for those reasons.
 
 ```
 docs/architecture/ARCHITECTURE.md   This repo, full system detail
+docs/COMPATIBILITY.md               The frozen surface and the deprecation policy
 docs/planning/ROADMAP.md            One goal per tag to v1.0.0, and what 1.0.0 freezes
 docs/planning/TASKS.md              Prioritised remaining work
 docs/sessions/SESSION.md            Current working state
