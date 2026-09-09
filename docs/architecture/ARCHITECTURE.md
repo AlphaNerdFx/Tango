@@ -3104,6 +3104,77 @@ case is the long s, U+017F: `re.IGNORECASE` does match it against "s",
 behaviour, because the reasoning that picked the wrong example would have
 been just as confident about the wrong fold.
 
+### 8.52 A blank line in a config file stopped the program
+
+Found 9 September 2026 during the documentation audit, by asking what
+happens if a user does the thing the setup instructions tell them to do.
+
+`.env.example` is the file the README says to copy. Ten of its keys ship
+with nothing after the `=`, which is the ordinary way to write "here is the
+name, fill it in if you want it". python-dotenv does not read it that way:
+`KEY=` puts the name into the environment as an empty string, so
+`os.getenv(name, default)` finds it, returns `""`, and never reaches the
+default.
+
+Two different failures, and the second is the one that matters:
+
+| setting | what a blank value did |
+|---|---|
+| `WIKTIONARY_USER_AGENT` | silently replaced a working default with `""` |
+| `API_TIMEOUT` and 17 others | `float("")` raised `ValueError` |
+
+The numeric case is not a bad value in some corner. `config` is imported
+when `pipeline.__main__` is imported, which is before `main()` exists to
+catch anything, so the user got a raw traceback before the program started:
+
+```
+$ API_TIMEOUT= tango doctor
+ValueError: could not convert string to float: ''
+```
+
+**The project already knew this and had fixed one third of it.**
+`_resolve_path` treated unset and empty alike, its docstring said so, and
+`test_empty_env_value_falls_back_to_default` spelled the whole mechanism out
+including the fact that `.env.example` ships blank keys. Paths were safe.
+The eighteen numeric settings and the nine string settings, written by the
+same hands from the same understanding, were not. Nothing connected them,
+because the rule lived inside one function's docstring rather than anywhere
+a reader would look for a project-wide rule.
+
+So the fix extends the convention that existed rather than inventing a
+second one. `_env`, `_env_int` and `_env_float` treat blank as unset,
+whitespace included, and strip before use, so `IMAGES_ENABLED= true` now
+does what it says instead of being silently ignored.
+
+A value that is present but unparseable is deliberately not treated as
+blank. Using the default silently there would hide a real typo. It cannot
+raise either, for the import-order reason above, so it is recorded in
+`MALFORMED_ENV_VALUES` and `tango doctor` prints the name, the value the
+user wrote, and the fact that the default was used:
+
+```
+    .env           2 setting(s) with a value that is not a number:
+                   API_TIMEOUT=banana  -> ignored, default used
+                   MEDIA_BURST=3.7  -> ignored, default used
+```
+
+`3.7` in an integer setting counts as malformed rather than being floored,
+because a burst of 3.7 requests is not a thing and rounding it hides the
+typo.
+
+The same audit found the reverse failure one setting along.
+`LIBRETRANSLATE_URL` was documented in `.env.example` and in a code comment
+as "set this to your own instance and it is used first", and the constant it
+filled appeared exactly once in the repository, on the line that defined it.
+Dead since the commit that introduced it on 10 July 2026. That is worse than
+a stray key, because `tango doctor` reports names nothing reads and this
+name *was* read, so doctor called it healthy. It was removed rather than
+wired up: a local server has always gone in `LIBRETRANSLATE_MIRRORS`, which
+is consumed, and adding a second way to say the same thing is not what a
+documentation audit is for.
+
+Both decisions, and the options weighed, are in ADR-012.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
@@ -3153,26 +3224,45 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-734 unit tests across eleven test files, 24 more marked integration and
-deselected by default. All run without network, Anki, or installed models.
+**1301 unit tests across 16 test files, 33 more marked integration and
+deselected by default**, measured 9 September 2026. All run without network,
+Anki, or installed models, and since 8 September that is enforced rather
+than asked for: an autouse fixture in `conftest.py` fails any default-run
+test that opens a non-loopback connection. It found thirteen that were
+reaching the internet. ADR-013, and 8.49 for the measurement.
+
 Integration tests use `@pytest.mark.integration` and are excluded by the
 default `addopts` in `pyproject.toml`.
 
-Line coverage, measured with `make coverage` (88% overall, 1963 statements):
+Line coverage, measured with `make coverage` on 9 September 2026:
+**89% overall, 3654 statements, 401 missed**.
 
 | Module | Cover | What is untested |
 |---|---|---|
-| `cards.py` | 100% |, |
-| `config.py` | 100% |, |
-| `state.py` | 100% |, |
+| `__init__.py` | 100% | |
 | `language.py` | 99% | one branch |
-| `nlp.py` | 93% | model-load failure paths |
-| `deck.py` | 92% | the AnkiConnect transport itself |
-| `wiktdata.py` | 91% | download and build error paths |
+| `media.py` | 99% | one branch |
+| `cards.py` | 98% | the media-failure fallbacks |
+| `deck.py` | 98% | the AnkiConnect transport itself |
+| `config.py` | 94% | the working-directory fallback for the project root |
+| `images.py` | 93% | request failures and a few refusal branches |
+| `wiktdata.py` | 93% | download and build error paths |
+| `nlp.py` | 92% | model-load failure paths |
+| `state.py` | 89% | schema-migration branches |
 | `definition.py` | 88% | scattered source-specific branches |
-| `transcript.py` | 82% | proxy and fetch-failure paths |
-| `translation.py` | 68% | the argostranslate path |
-| `__main__.py` | 82% | the interactive prompts and the setup wizard |
+| `transcript.py` | 87% | proxy and fetch-failure paths |
+| `antonyms.py` | 84% | index build and download error paths |
+| `__main__.py` | 83% | the interactive prompts and the setup wizard |
+| `translation.py` | 76% | the interactive download prompt |
+
+**Every figure in the two paragraphs above was wrong until this date**, and
+by a lot: the section claimed 734 tests, eleven files, 88% and 1963
+statements, and eleven of the fifteen module numbers were stale. `cards.py`,
+`config.py` and `state.py` were each recorded at 100% and none of them is.
+Nothing had moved them since August while roughly 1700 statements and 570
+tests landed underneath. This is the fourth time this repository has carried
+a stale coverage number, which is why CLAUDE.md 18.1 exists and why every
+figure here now carries the date it was taken.
 
 `__main__.py` was 55% when first measured, with the three run modes
 untested. Writing those tests (8.24) took it to 82% and immediately found a
