@@ -364,6 +364,43 @@ for one full sync afterwards. See `CHANGELOG.md` for the v0.5.0 migration.
 
 ---
 
+## Known limitations
+
+Things that are true, and that are not going to change before v1.0.0.
+
+**Transcripts come from one library, and that is a single point of failure.**
+`youtube-transcript-api` is the only way Tango reads a video. If YouTube
+changes something it depends on, or the library stops being maintained,
+every run stops working and there is no fallback. This was considered and
+left as it is for 1.0: the alternatives are `yt-dlp`, which is a much larger
+dependency for one field, or scraping, which breaks more often rather than
+less. It is documented here rather than hidden because a user who hits it
+should know immediately that it is not their setup.
+
+**No online source has usable non-English dictionary data.** Measured at 0%
+across French, German, Spanish, Portuguese, Japanese, Russian, Korean and
+Chinese. Every non-English language needs `tango build-dictionary <code>`,
+and until you run it those cards say "No definition found".
+
+**English definitions come from the web unless you build its index too.**
+When the source is down you get a package where no card has a definition.
+Tango exits `3` and says so rather than reporting success, but the fix is to
+build the index.
+
+**Five supported languages have no index measured.** Spanish, Japanese,
+Korean, Portuguese and Chinese produce cards and are not in the coverage
+table above, because building five more indexes is roughly 1.5 GB. Their
+words and video sentences work; their definitions depend on you building the
+index.
+
+**Anki must be on the same machine** for the duplicate check and the
+import prompt. A run without it still produces a package and queues the
+words in a backlog you can process later.
+
+**A video is processed once.** Running it again needs `--force`, which is
+deliberate: it stops you creating duplicate cards by re-running a command
+from your shell history.
+
 ## Project structure
 
 ```
