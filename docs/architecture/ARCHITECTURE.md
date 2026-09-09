@@ -3273,6 +3273,98 @@ Then the timeout was raised past the upstream's latency on the same run, one
 definition landed, and the exit code was 0. That pair is the point: the new
 code fires on total failure and not on a working run.
 
+### 8.54 Two bugs mypy had been reporting all along
+
+The audit was re-run end to end on 9 September 2026 after the launch
+blockers were fixed, to check that the fixes had not introduced anything and
+that nothing else was outstanding. Coverage, bandit and pip-audit came back
+unchanged. **mypy's advisory list, which nobody had read line by line, held
+two real bugs.**
+
+Both are in error-handling paths, which is why neither had ever been seen: a
+path that only runs when something is already going wrong is the last place
+anyone looks and the worst place to have a crash.
+
+#### An unplayable video crashed its own handler
+
+`transcript.get_transcript` catches eight exceptions from
+youtube-transcript-api and re-raises each with the video id attached, so the
+message names the video rather than a URL the user never typed. One of those
+constructors takes three required arguments and was being given two:
+
+```
+VideoUnplayable.__init__(self, video_id, reason, sub_reasons)
+raise VideoUnplayable(video_id, exc.reason) from exc
+```
+
+Reproduced before it was fixed, by driving the real handler:
+
+```
+raised : TypeError
+message: VideoUnplayable.__init__() missing 1 required positional argument: 'sub_reasons'
+```
+
+So a video YouTube reports as unplayable produced a message about a missing
+argument. `main()` catches it, so the user got "an unexpected error"
+rather than a traceback, which is CLAUDE.md 4.4 half-working: the failure was
+handled, and the handling threw it away. A named, expected failure was
+degrading into an unknown one.
+
+Every one of the eight re-raises was then checked against the library's real
+signatures. Exactly one was wrong. The check is now a test that reads the
+constructor calls out of the function's source and compares each against the
+live signature, so a library bump that adds a required argument fails the
+suite rather than a user's run. The dependency is pinned to a range,
+`>=1.2.4,<2.0`, which is exactly the space where that happens.
+
+#### A fixture that made a bug unwritable
+
+`get_properties` built its translation-language list like this:
+
+```python
+[lang["language_code"] for lang in transcript.translation_languages]
+```
+
+The library returns `_TranslationLanguage` objects. They are not
+subscriptable, so this is a `TypeError` on any translatable transcript,
+which is most auto-generated ones.
+
+Ten tests covered `get_properties` and every one of them passed, because the
+fixture set `translation_languages` to plain dicts. The code was tested
+against a shape the library does not produce. That is CLAUDE.md 5's warning
+about fixtures that make a bug inexpressible, and it is the second time this
+project has hit it.
+
+The fixture now builds real `_TranslationLanguage` objects, and the reader
+handles both shapes rather than only the current one, because the version
+range makes this precisely the sort of attribute a minor release moves.
+
+#### What else the re-audit found, and did not
+
+`tango doctor`'s exit code was corrected earlier the same day to fail only
+on a blocking gap. `make doctor` was still swallowing it with `|| true`,
+which had been right while doctor failed on any absent optional index and
+was now hiding a genuine "this cannot run". It propagates.
+
+`definition.images_supported` describes the WordNet concreteness gate and
+says it is reported by `tango doctor`. v0.11.0 replaced that gate with
+Wikidata, which judges the concept rather than the word and needs no
+per-language support table (8.46), and doctor stopped calling this. Nothing
+calls it now. Its docstring said otherwise until this pass. It is kept
+rather than deleted because it is still the honest answer to "can WordNet
+judge this language", which the synonym and antonym fields still depend on.
+
+Coverage, security and lint were unchanged by the blocker fixes: 89% before
+and after, with 52 new statements and no new misses, bandit clean at every
+severity, and the same 11 dependency advisories, all inside the translation
+server extra. mypy fell from 25 to 23 because the two bugs above were two of
+them.
+
+**The lesson is the one this project keeps relearning.** Both bugs had been
+sitting in a tool's output, reported on every `make check`, under a heading
+that says "Advisory (not gating)". Advisory is not the same as noise, and a
+list nobody reads is a list that is not doing anything.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
@@ -3322,7 +3414,7 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-**1325 unit tests across 16 test files, 33 more marked integration and
+**1330 unit tests across 16 test files, 33 more marked integration and
 deselected by default**, measured 9 September 2026. All run without network,
 Anki, or installed models, and since 8 September that is enforced rather
 than asked for: an autouse fixture in `conftest.py` fails any default-run
@@ -3332,8 +3424,10 @@ reaching the internet. ADR-013, and 8.49 for the measurement.
 Integration tests use `@pytest.mark.integration` and are excluded by the
 default `addopts` in `pyproject.toml`.
 
-Line coverage, measured with `make coverage` on 9 September 2026:
-**89% overall, 3654 statements, 401 missed**.
+Line coverage, measured with `make coverage` on 9 September 2026, after the
+launch-blocker fixes and the re-audit that followed them:
+**89% overall, 3710 statements, 400 missed**. The blocker work added 56
+statements and no new misses.
 
 | Module | Cover | What is untested |
 |---|---|---|
@@ -3348,7 +3442,7 @@ Line coverage, measured with `make coverage` on 9 September 2026:
 | `nlp.py` | 92% | model-load failure paths |
 | `state.py` | 89% | schema-migration branches |
 | `definition.py` | 88% | scattered source-specific branches |
-| `transcript.py` | 87% | proxy and fetch-failure paths |
+| `transcript.py` | 89% | proxy and fetch-failure paths |
 | `antonyms.py` | 84% | index build and download error paths |
 | `__main__.py` | 83% | the interactive prompts and the setup wizard |
 | `translation.py` | 76% | the interactive download prompt |
