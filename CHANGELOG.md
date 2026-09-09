@@ -24,6 +24,16 @@ ADR-012, ADR-013 and ADR-014.
 
 ### Added
 
+- **Exit code 3: a package was written, but not one card got a definition.**
+  Found by installing the published package into a clean virtual environment
+  and running it as a new user. dictionaryapi.dev answered `HTTP 522` after
+  19.6 seconds against an 8 second timeout, the circuit breaker tripped, and
+  a real English run produced 97 cards with a definition on none of them and
+  **exited 0**. Nothing scriptable could tell that deck from a good one. The
+  condition is "not one definition", not a percentage: zero is unambiguous
+  and a threshold invites false alarms. A run where every word was already in
+  the deck is not a failure and still exits 0. ARCHITECTURE 8.53, and the
+  codes are now frozen in ROADMAP section 3.
 - **The Docker image is published**, as `yousseflarbi/tango`, tags `latest`
   and `0.11.0`. It installs the wheel from PyPI on purpose, so building it
   tests the artefact users actually install. AnkiConnect is not reachable
@@ -70,6 +80,30 @@ ADR-012, ADR-013 and ADR-014.
 
 ### Fixed
 
+- **Colour no longer leaks into pipes and log files.** The seven ANSI
+  constants were unconditional, so `tango run > log.txt` wrote
+  `^[[31m^[[1m[err ]^[[0m` into the file. It is now decided per stream at
+  import: `NO_COLOR` disables it when merely present, `FORCE_COLOR` enables
+  it for CI, and otherwise it follows `isatty()`. stdout and stderr are
+  decided separately, so a redirected run still colours the error you see on
+  screen. The progress reporter had checked `isatty()` since it was written;
+  the five output helpers and 39 other call sites never had.
+- **`tango doctor` no longer calls a working machine broken.** One counter
+  covered both blocking and optional gaps, so it exited 1 whenever any
+  optional index was absent while printing "Each is optional -- the pipeline
+  runs without them". Both halves were wrong at once: without a spaCy model
+  nothing runs at all, and a missing Japanese dictionary is fine. It now
+  exits non-zero only when something stops a run, and says "Ready to run"
+  otherwise. `tango doctor && tango run` works on a normal machine again.
+- **`doctor` never suggested the English offline index.** The loop that
+  reports missing indexes carried `code != "en"`, residue from the decision
+  ARCHITECTURE 8.19 took and ADR-011 reversed. `_DISCOURAGED` was emptied
+  when ADR-011 landed and this was not, so the one language whose only
+  safety net is the index was the one language never told to build it. It is
+  now reported as "web only, so an outage means no definitions".
+- **A dead source was told only to "retry later".** That fixes nothing and
+  says the same thing tomorrow. The advice now also names
+  `tango build-dictionary <language>`, which is the durable answer.
 - **A blank setting no longer stops the program.** `KEY=` in a `.env` loads
   as an empty string rather than leaving the name unset, so eighteen numeric
   settings raised `ValueError` during `import config`, which happens before
