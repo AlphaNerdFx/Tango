@@ -37,7 +37,40 @@ IP someone read as the shipped default lived in an uncommitted `.env`. WSL
 is now detected and handled by retrying rather than by a different default
 (ARCHITECTURE 8.45). The `/mnt/c` path translation in `__main__.py` is
 already conditional on `is_wsl()`.
-**Current tag:** v0.11.0, images on cards gated to concrete nouns, released
+**Current tag:** v0.12.0, runs on modest hardware, tagged 10 September 2026.
+The rung's targets are measured rather than asserted: peak resident memory
+564 MB against a 1 GB target, an index build inside 38 MB against 2 GB, and
+a full run on 4 GB and 2 cores. The base install is 316 MB against a 300 MB
+target, 16 over, and that is recorded as a target set below what the
+architecture allows rather than as work outstanding: spaCy and numpy are
+160 MB of it and are the floor while spaCy is the NLP engine.
+
+It carries the freeze work v1.0.0 needs. `docs/COMPATIBILITY.md` states the
+surface that cannot break and the policy for changing it, and it is not
+prose: `tests/test_compatibility.py` reads its tables and compares them
+against the running code **in both directions**, so a command that ships
+without being frozen fails the build as loudly as a promise that is broken.
+That direction was the gap, and it had already cost something: the old
+command test asserted a subset, so `uninstall` and `repair-images` shipped
+without ever being frozen.
+
+Three defects that made a run lie to its user were fixed first. A package
+with no definition on any card exited 0, so nothing scriptable could tell a
+hollow deck from a good one; it now exits 3 and names the durable fix.
+Colour was unconditional, so every pipe and log file carried raw escape
+codes; it now follows the stream, `NO_COLOR` and `FORCE_COLOR`. And
+`tango doctor` returned non-zero for any absent optional index while
+printing that everything missing was optional, so `tango doctor && tango run`
+never proceeded on a normal machine.
+
+The coverage sweep ran for the first time since v0.7.0, and could not have
+run before: the sweep script invoked the flag surface v0.7.0 deleted, so all
+sixteen combinations failed and the only tool that would have noticed was the
+broken one. Definitions are 95% or better in all four languages with an
+index, and the sentence from the video is on every card in every language.
+ARCHITECTURE 8.53 to 8.55.
+
+v0.11.0 before it was images on cards gated to concrete nouns, released
 8 September 2026 and published to PyPI. A picture for 45.9% of nouns, chosen by resolving the word
 to a Wikidata concept rather than searching text; refused where the concept
 is abstract; dropped where it describes a different sense than the card's
@@ -167,7 +200,9 @@ Images are asked for per run with `--images`, and stay off by default.
 either way. The cost is why: a picture roughly doubles a deck that already
 carries audio, 4.8 MB of 10.1 MB on a real 299-card run.
 
-**Next:** v0.12.0, runs on modest hardware. Three items of that rung were
+**Next:** v1.0.0, a finished CLI. No new features; everything in
+ROADMAP §3 frozen, documented and tested, which `docs/COMPATIBILITY.md`
+now is. Three items of that rung were
 found wrong when traced on 8 September 2026 and are corrected in ROADMAP
 before any of it is built: `pymupdf` arrives through libretranslate rather
 than being a stray, `minisbd` cannot replace `stanza` because it depends on
@@ -660,7 +695,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1330 passing, 33 deselected. The count drifts as tests are added,
+Expected: 1346 passing, 33 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
