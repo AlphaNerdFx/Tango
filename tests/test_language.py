@@ -19,6 +19,9 @@ from pipeline.language import (
     list_supported_languages,
     resolve_language_code,
     resolve_transcript,
+    capability_report,
+    _with_collapsed_forms,
+    FILLER_SOUNDS,
 )
 
 
@@ -556,3 +559,50 @@ class TestIntegration:
         tl = api.list("2QkRcDSClS0")
         result = resolve_transcript(tl, "fr")
         assert result.language_code.startswith("fr")
+
+
+class TestSurvivorsFoundByMutationTesting:
+    """
+    Gaps found by a mutation run on 10 September 2026, not by review.
+
+    `language.py` scored 185 killed of 281 mutants. Most survivors mutate a
+    log message or an error string, which no test should be expected to
+    catch, and some are equivalent mutants that change no observable
+    behaviour. These three change what a user sees and nothing failed.
+    """
+
+    def test_languages_that_can_make_cards_are_listed_first(self):
+        # `tango languages` is read top-down by someone deciding what to
+        # study. Sorting alphabetically across the whole table puts
+        # Afrikaans, Arabic, Bengali and Bulgarian at the top, none of which
+        # can produce a card, and buries the two dozen that can.
+        #
+        # A mutation replacing the sort key with None survived: nothing
+        # asserted the order at all.
+        rows = capability_report()
+        can = [i for i, r in enumerate(rows) if r[2]["cards"]]
+        cannot = [i for i, r in enumerate(rows) if not r[2]["cards"]]
+        assert can and cannot, "the fixture needs both kinds to be meaningful"
+        assert max(can) < min(cannot), (
+            "a language that cannot make cards is listed above one that can")
+
+
+    def test_a_filler_sound_brings_its_collapsed_spelling(self):
+        # A lemma is matched by collapsing runs of three or more to one, so
+        # a sound written only in its doubled form is unreachable from its
+        # own elongation. Russian shipped "тсс", "мм" and "ээ" without the
+        # short forms and every elongation of them became a card.
+        collapsed = _with_collapsed_forms(frozenset({"mm", "tss"}))
+        assert collapsed == {"mm", "m", "tss", "ts"}
+
+    def test_the_shipped_tables_already_carry_the_short_forms(self):
+        # The derived tables, not the helper. This is what the regression
+        # actually looked like, and it is what a new language would
+        # reintroduce if the derivation were dropped.
+        assert {"м", "мм"} <= FILLER_SOUNDS["ru"]
+        assert {"тс", "тсс"} <= FILLER_SOUNDS["ru"]
+
+    def test_a_sound_with_no_doubled_letter_is_left_alone(self):
+        # The pair. A helper that returned every single character, or that
+        # collapsed unrelated spellings together, would pass the test above.
+        assert _with_collapsed_forms(frozenset({"ah"})) == {"ah"}
