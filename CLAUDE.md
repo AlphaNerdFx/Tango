@@ -274,13 +274,21 @@ generates its field list from it, and both note builders pass a **name-keyed
 dict** through `_note_fields()`, which does the positional mapping once:
 
 ```
-0  Word                         6  Synonyms
-1  Class                        7  Antonyms
-2  Definition                   8  VideoID
-3  1st Example Sentence         9  Source
-4  2nd Example Sentence        10  IPA             (ADR-009 phase 1)
-5  Example from Youtube Video  11  Pronunciation   (ADR-009 phase 1)
+0  Word                         7  Antonyms
+1  Class                        8  VideoID
+2  Definition                   9  Source
+3  1st Example Sentence        10  IPA             (ADR-009 phase 1)
+4  2nd Example Sentence        11  Pronunciation   (ADR-009 phase 1)
+5  Example from Youtube Video  12  Image           (ADR-009 phase 3)
+6  Synonyms                    13  Attribution     (ADR-009 phase 3)
 ```
+
+Fourteen, not twelve. This table listed 0 to 11 until 9 September 2026, five
+weeks after `Image` and `Attribution` were appended for v0.11.0, and the
+paragraph below it still said "a new field is index 12" while index 12 was
+taken. The prose elsewhere in this file had the right answer, naming
+Attribution as field 13. Only the table was stale, which is the worst place
+for it: this is the section someone reads before adding a field.
 
 What this buys, and why the old rule is retired:
 
@@ -297,7 +305,8 @@ the lowest-`order` field (ARCHITECTURE.md 8.22). And new fields are still
 **appended**: indices 0-11 are what every already-imported card in every
 user's collection is bound to. That range was 0-9 until v0.5.0 shipped IPA
 and Pronunciation and collections were migrated onto the 12-field notetype,
-so a new field is index 12.
+and 0-11 until v0.11.0 appended Image and Attribution, so a new field is
+index 14.
 
 **Appending is safe for the indices. It is not, by itself, safe for the
 notetype.** Anki matches an incoming notetype by ID, and when that ID
@@ -651,7 +660,7 @@ PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
 ```
 
-Expected: 1306 passing, 33 deselected. The count drifts as tests are added,
+Expected: 1307 passing, 33 deselected. The count drifts as tests are added,
 trust `make test` over this number, and update it here when it moves.
 
 ```bash
