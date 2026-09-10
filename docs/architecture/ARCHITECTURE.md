@@ -3443,6 +3443,150 @@ rather than measure them. `tango doctor` and `tango languages` both say so,
 and since 9 September doctor names the cost per language rather than listing
 codes.
 
+### 8.56 Printing the version loaded spaCy
+
+Measured 10 September 2026 by `scripts/benchmark.py`, which was written for
+this and is now `make benchmark`. It times each phase a user waits for, in a
+fresh interpreter each time, against a threshold for each.
+
+Import cost is not overhead to be subtracted here. It is the first thing a
+user waits for, and a benchmark that imports once and then loops reports a
+number nobody experiences.
+
+#### `tango --version` loaded 1208 modules
+
+`__main__` imports `pipeline.nlp` at module level, `nlp` imported spaCy at
+module level, and `cards` imported genanki the same way. So every command
+paid for the whole stack: printing a version string loaded a natural
+language pipeline and a deck writer.
+
+Both are used only inside function bodies. Every other mention is an
+annotation, and both modules carry `from __future__ import annotations`, so
+those are strings at runtime and need the name only for a type checker. The
+imports moved inside the four functions that call genanki and the two that
+call spaCy, with a `TYPE_CHECKING` block for the annotations.
+
+| | before | after |
+|---|---|---|
+| modules loaded by `tango --version` | 1208 | **547** |
+| `tango --version` | 45.94s | **3.98s** |
+| `tango --help` | 45.94s | 5.88s |
+
+The spaCy deferral is almost all of it. genanki was worth 0.26 seconds,
+measured by a controlled A/B rather than by comparing across runs: an
+earlier reading across separate runs showed no difference and was wrong,
+because the two runs were not otherwise identical.
+
+**The 1.17 seconds genanki appeared to cost on its own was misleading.**
+Timing `import genanki` in isolation charges it for dependencies that other
+imports have already loaded by the time it runs for real. The marginal cost
+is what matters and it is a quarter of that.
+
+#### The other 44 seconds are the filesystem, not the code
+
+The numbers above are from a virtualenv on `/mnt/c`, a Windows drive seen
+from WSL. The same code from a virtualenv on the Linux filesystem:
+
+| stage | on `/mnt/c` | native | limit |
+|---|---|---|---|
+| `tango --version` | 45.94s | **1.69s** | 5s |
+| `tango --help` | 45.94s | **1.57s** | 5s |
+| build a 400-card package | 2.90s | **0.40s** | 10s |
+| 800 transcript searches | 2.76s | **0.32s** | 5s |
+
+Importing spaCy alone took 44 to 47 seconds from `/mnt/c` across three
+consecutive runs, so it is not a cold cache, and 2.2 seconds from the Linux
+filesystem. WSL reaches `/mnt/c` through a translation layer and Python's
+import machinery opens thousands of small files.
+
+Every stage passes its threshold natively. No code change can fix the other
+case, so `tango doctor` reports it instead: a user whose every command takes
+45 seconds will reasonably blame the tool, and nothing in the symptom points
+at the cause. `config.slow_filesystem_warning()` fires only under WSL and
+only for a prefix under `/mnt/`, because `/mnt` is an ordinary mount point
+on native Linux and says nothing about speed there.
+
+#### The thresholds
+
+They are what a person tolerates before a command feels broken, not what
+this machine manages, and they are deliberately loose. The point is to catch
+a regression that makes something unusable, not to pin today's hardware. A
+stage over its limit exits 1, so `make benchmark` is usable in CI.
+
+### 8.57 What a mutation run found that 89% coverage did not
+
+Coverage says a line ran. It does not say anything would have failed if the
+line were wrong. `mutmut` was run on 10 September 2026 to ask the second
+question.
+
+**It had to run somewhere else.** A mutation run re-runs the suite once per
+mutant, and the suite takes 134 seconds on `/mnt/c` against 42 on the Linux
+filesystem, almost all of it import. The run was done on a native-filesystem
+copy for that reason, which is the same finding as 8.56 arriving from a
+different direction.
+
+#### The numbers
+
+| module | mutants | killed | survived | raw | behaviour only |
+|---|---|---|---|---|---|
+| `language.py` | 281 | 185 | 96 | 66% | **76%** |
+| `cards.py` | 729 | 466 | 263 | 63% | **82%** |
+| `cards.py`, `config.py`, `media.py` | 1063 | 683 | 380 | 64% | |
+
+**The raw score understates the suite, and by a lot.** Of `language.py`'s 96
+survivors, 32 mutate only a logging call and 7 only the text of an error
+message. `cards.py` is starker: **163 of its 263 survivors change nothing but
+a log line, a string literal, an error message or a progress line.** No test
+should be expected to catch those, and a suite that did would be pinning
+text that is free to change. The last column excludes them.
+
+#### The check that mattered most
+
+`cards.py` writes the user's deck, and CLAUDE.md 3.2 is about one property:
+content landing in the field it belongs to. genanki maps note fields to
+model fields by index, and a mismatch writes content into the wrong card
+section with no error and a valid `.apkg`.
+
+`_note_fields` is the function that does that mapping. **Thirteen of its
+fifteen mutants were killed, and both survivors mutate the separator inside
+an error message**, `", ".join(unknown)`. Nothing that changes where content
+goes survived.
+
+The other high-stakes cluster reads the same way. Of the 38 survivors across
+the note and model builders, the behaviour-changing ones are CSS class names
+(`"vocab-pill"` becoming `None`), empty-string placeholders, and a `language`
+default argument every caller overrides. A wrong pill class means unstyled
+pills. None of them moves a field.
+
+#### Two real gaps, and one that could not be one
+
+Both found by triaging survivors by hand, both user-visible, both now tested.
+
+- **`tango languages` had no test for its order.** The table puts languages
+  that can produce cards first, and a mutant replacing the sort key with
+  `None` survived. Sorted plainly, Afrikaans, Arabic, Bengali and Bulgarian
+  lead the table and none of them can make a card.
+- **Filler-sound collapsing had no test.** A lemma is matched by collapsing
+  runs of three or more letters to one, so a sound written only in its
+  doubled form is unreachable from its own elongation. Russian shipped
+  "тсс", "мм" and "ээ" without the short forms once already.
+
+The third looked like a gap and was not. The name half of that same sort
+key, `r[0]`, is unreachable: both loops that build the list already append
+in sorted order, so dropping it changes no output for any data the function
+can be given. Two attempts to write a test that killed it failed before the
+reachability was checked, which is the lesson. It is an equivalent mutant,
+it is recorded as one in the source, and the test that could not fail was
+deleted rather than weakened until it passed.
+
+**One near miss worth recording.** A fourth survivor was investigated by
+reimplementing the function in the test harness rather than calling it, and
+the reimplementation said the behaviour changed. Running the real function
+with the mutation actually applied said it did not. A test was nearly
+written for a bug that did not exist, on the strength of a simulation. The
+rule that catches this is the one already in CLAUDE.md 18.7: reproduce
+against the real thing before concluding anything.
+
 ## 9. Known architectural gaps
 
 ### 9.1 dictionaryapi.dev has no meaningful non-English coverage
