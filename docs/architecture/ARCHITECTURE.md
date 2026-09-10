@@ -3532,11 +3532,26 @@ different direction.
 
 #### The numbers
 
-| module | mutants | killed | survived | raw | behaviour only |
-|---|---|---|---|---|---|
-| `language.py` | 281 | 185 | 96 | 66% | **76%** |
-| `cards.py` | 729 | 466 | 263 | 64% | **76%** |
-| `cards.py`, `config.py`, `media.py` | 1063 | 683 | 380 | 64% | |
+Where it started, 10 September 2026:
+
+| module | mutants | killed | raw | behaviour only |
+|---|---|---|---|---|
+| `language.py` | 281 | 185 | 66% | 76% |
+| `cards.py` | 729 | 466 | 64% | 76% |
+| `cards.py`, `config.py`, `media.py` | 1063 | 683 | 64% | |
+
+Where it ended, 11 September 2026, after four rounds of writing tests for
+survivors and re-running:
+
+| module | mutants | killed | raw | behaviour only |
+|---|---|---|---|---|
+| `language.py` | 281 | **212** | 75.4% | **87.6%** |
+| `cards.py` | 729 | **536** | 73.5% | **92.6%** |
+
+Both figures use the same categoriser, applied to both modules on the same
+day. The raw scores are quoted beside them because they need no
+interpretation: 73.5% of every mutant `cards.py` admits is caught, including
+the ones that only reword a log line.
 
 **The raw score understates the suite, and by a lot.** Of `language.py`'s 96
 survivors, 32 mutate only a logging call and 7 only the text of an error
@@ -3593,6 +3608,30 @@ download used `continue`, and a mutant turning it into `break` survived: that
 is the difference between one card linking out and every remaining card
 linking out. And a picture that contradicts its card's definition is dropped
 **before** it is fetched, which nothing checked.
+
+#### Counting the denominator, and getting it wrong twice
+
+The raw score is deflated by mutants no test should catch: a changed log
+line, a reworded error, a string literal. Excluding them gives a number that
+means something, and arriving at that number took two corrections.
+
+**The first was comparing two different categorisers.** An early figure of
+82% for `cards.py` was computed one way and then compared against a later
+count computed another. Run against a single categoriser the baseline was
+76%. A percentage is only a measurement if the denominator is measured the
+same way each time, and it was re-measured at every step after that.
+
+**The second was reading only the changed lines.** A multi-line logging call
+puts `logger.info(` on one line and its arguments on the next, so a scan
+that looks only at what the diff touched sees an argument being nulled and
+calls it behaviour. Fifteen of `resolve_transcript`'s survivors were
+classified that way and every one of them was a log message. The scan now
+reads the enclosing statement, which moved `language.py` from an apparent
+80.9% to a real 87.6%.
+
+Both corrections moved the number in the flattering direction, which is
+exactly why they are written down here. The raw scores are quoted alongside
+because they need no interpretation at all.
 
 #### Four equivalent mutants, all the same shape
 
@@ -3690,7 +3729,7 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-**1354 unit tests across 17 test files, 33 more marked integration and
+**1402 unit tests across 17 test files, 33 more marked integration and
 deselected by default**, measured 9 September 2026. All run without network,
 Anki, or installed models, and since 8 September that is enforced rather
 than asked for: an autouse fixture in `conftest.py` fails any default-run
