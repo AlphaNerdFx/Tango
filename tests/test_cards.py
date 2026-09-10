@@ -1614,3 +1614,110 @@ class TestTheAudioDownloadLoop:
             names, paths = cards_module._download_audio({}, "de")
         assert (names, paths) == ({}, [])
         fetch.assert_not_called()
+
+
+class TestTheImageSenseGuardArguments:
+    """
+    What `_download_images` hands the wrong-sense guard, 10 September 2026.
+
+    A picture and a definition are chosen by two routes that never speak to
+    each other, so `palais` can get a photograph of a building beside the
+    roof of the mouth (ARCHITECTURE 8.47). The guard that drops those takes
+    five arguments and nothing checked any of them, so a dozen mutants that
+    nulled, reordered or dropped one survived.
+    """
+
+    class _Result:
+        def __init__(self, description):
+            self.description = description
+            self.url = "https://example.invalid/pic.jpg"
+            self.attribution = "someone, CC BY-SA 4.0"
+
+    def _found(self, **kw):
+        return {k: self._Result(v) for k, v in kw.items()}
+
+    def test_the_guard_is_asked_about_the_right_word_sense_and_language(self):
+        # word, language, the card's definition, the picture's description,
+        # and the part of speech. Passing the picture's description where the
+        # definition belongs, or the pos where the definition belongs, makes
+        # the guard compare a string against itself and drop nothing.
+        calls = []
+
+        def guard(word, language, definition, description, pos=None):
+            calls.append((word, language, definition, description, pos))
+            return False
+
+        with patch.object(cards_module.images, "find_images",
+                          return_value=self._found(palais="a royal residence")), \
+             patch.object(cards_module.wiktdata, "describes_other_sense",
+                          side_effect=guard), \
+             patch.object(cards_module.images, "fetch_image", return_value=None):
+            cards_module._download_images(
+                ["palais"], "fr",
+                senses={"palais": ("the roof of the mouth", "noun")})
+
+        assert calls == [("palais", "fr", "the roof of the mouth",
+                          "a royal residence", "noun")]
+
+    def test_the_guard_is_asked_in_the_definition_language(self):
+        # `definition_language or language`. Under --def-lang the card's
+        # definition is in the target language, so the guard has to compare
+        # in that language, not the transcript's. A mutant using `and`
+        # survived, and `and` yields the transcript language whenever both
+        # are set, which is exactly the case this matters in.
+        calls = []
+        with patch.object(cards_module.images, "find_images",
+                          return_value=self._found(palais="a royal residence")), \
+             patch.object(cards_module.wiktdata, "describes_other_sense",
+                          side_effect=lambda *a, **k: calls.append(a) or False), \
+             patch.object(cards_module.images, "fetch_image", return_value=None):
+            cards_module._download_images(
+                ["palais"], "fr", senses={"palais": ("le palais", "noun")},
+                definition_language="en")
+
+        assert calls[0][1] == "en", calls
+
+    def test_a_word_with_no_recorded_sense_still_asks_the_guard(self):
+        # `senses.get(lemma, ("", ""))`. The default is what keeps a lemma
+        # that has no row from raising, and mutants replacing it with None
+        # or a single value survived.
+        calls = []
+        with patch.object(cards_module.images, "find_images",
+                          return_value=self._found(unbekannt="a thing")), \
+             patch.object(cards_module.wiktdata, "describes_other_sense",
+                          side_effect=lambda *a, **k: calls.append(a) or False), \
+             patch.object(cards_module.images, "fetch_image", return_value=None):
+            cards_module._download_images(
+                ["unbekannt"], "de", senses={"anderes": ("x", "noun")})
+
+        assert calls[0][2] == "" and calls[0][4] is None, calls
+
+    def test_a_contradicting_picture_is_dropped_before_it_is_fetched(self):
+        # The point of the guard. The dropped word must not reach the
+        # downloader at all, since dropping it after paying for it is the
+        # expensive half.
+        fetched = []
+        with patch.object(cards_module.images, "find_images",
+                          return_value=self._found(palais="a royal residence",
+                                                   hund="a dog")), \
+             patch.object(cards_module.wiktdata, "describes_other_sense",
+                          side_effect=lambda word, *a, **k: word == "palais"), \
+             patch.object(cards_module.images, "fetch_image",
+                          side_effect=lambda result, lemma: fetched.append(lemma) or None):
+            cards_module._download_images(
+                ["palais", "hund"], "fr",
+                senses={"palais": ("the roof of the mouth", "noun")})
+
+        assert fetched == ["hund"], fetched
+
+    def test_resolution_failing_does_not_fail_the_run(self):
+        # `find_images` reaches the network. Nothing here may stop the
+        # package being written; the cards simply carry no picture.
+        with patch.object(cards_module.images, "find_images",
+                          side_effect=OSError("wikidata unreachable")):
+            assert cards_module._download_images(["hund"], "de") == ({}, {}, [])
+
+    def test_nothing_wanted_asks_for_nothing(self):
+        with patch.object(cards_module.images, "find_images") as find:
+            assert cards_module._download_images([], "de") == ({}, {}, [])
+        find.assert_not_called()
