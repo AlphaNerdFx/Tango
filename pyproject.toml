@@ -139,6 +139,12 @@ dev = [
     "build>=1.0",
     "twine>=5.0",
 
+    # Mutation testing, run by `make mutation`. Coverage says a line ran;
+    # this says whether anything would have failed if the line were wrong.
+    # It found two real gaps in `tango languages` and the filler stoplist
+    # that 89% line coverage did not. ARCHITECTURE 8.57.
+    "mutmut>=3.7",
+
     # Security auditing, run by `make audit`. bandit reads the source for
     # unsafe patterns; pip-audit reads the installed tree against the PyPI
     # advisory database. Added 8 September 2026, when the first run found 37
@@ -256,3 +262,24 @@ warn_return_any        = true
 warn_unused_configs    = true
 ignore_missing_imports = true
 files                  = ["src/pipeline"]
+
+[tool.mutmut]
+# Run by `make mutation`. Two modules rather than the whole package: a
+# mutation run re-runs the suite once per mutant, and these are the two that
+# have been driven to a measured score. Widen it by adding to this list, and
+# expect roughly an hour per thousand mutants.
+#
+# `make mutation` warns if you run it from a virtualenv on a Windows drive.
+# The suite takes 134 seconds there against 42 on the Linux filesystem, and
+# a mutation run pays that difference once per mutant. ARCHITECTURE 8.56.
+source_paths = ["src/pipeline/cards.py", "src/pipeline/language.py"]
+
+# Everything the suite reads at run time, not just the code under test.
+# Several tests read repository files: the compatibility document, CLAUDE.md's
+# field table, .env.example, the Makefile's targets, the README's badges.
+# Without these the sandbox collection fails before a single mutant runs.
+also_copy = [
+    "tests/", "src/", "scripts/", "docs/",
+    "pyproject.toml", "README.md", "CLAUDE.md", "CHANGELOG.md",
+    "Dockerfile", "Makefile", ".env.example",
+]
