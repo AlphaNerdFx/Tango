@@ -16,7 +16,9 @@ remain in their respective modules, they are not deployment config.
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
+from typing import Optional
 
 from dotenv import load_dotenv
 
@@ -256,6 +258,35 @@ MEDIA_MAX_RETRIES: int = _env_int("MEDIA_MAX_RETRIES", "2")
 MEDIA_MAX_RETRY_WAIT: float = _env_float("MEDIA_MAX_RETRY_WAIT", "30")
 
 # Anki
+
+
+def slow_filesystem_warning() -> Optional[str]:
+    """
+    Whether this install sits on a Windows drive seen from WSL, and the cost.
+
+    WSL reaches `/mnt/c` through a translation layer, and Python's import
+    machinery opens thousands of small files. Measured 10 September 2026 on
+    this project: importing spaCy took **44 seconds** from a virtualenv under
+    `/mnt/c` and **2.2 seconds** from one on the Linux filesystem, the same
+    package and the same machine. `tango --version` took 46 seconds.
+
+    Nothing in the code can fix that, which is why this reports rather than
+    works around it: the fix is to put the virtualenv somewhere else, and a
+    user who does not know the cause will reasonably blame the tool.
+
+    Returns:
+        A sentence naming the problem, or None when the install is fine.
+    """
+    if not is_wsl():
+        return None
+    if not str(sys.prefix).startswith("/mnt/"):
+        return None
+    return (
+        "this install is on a Windows drive, which WSL reaches through a "
+        "translation layer. Imports are roughly 20x slower there: measured "
+        "44s against 2.2s for the same package on the Linux filesystem. "
+        "Reinstall under your Linux home directory to avoid it."
+    )
 
 
 def is_wsl() -> bool:
