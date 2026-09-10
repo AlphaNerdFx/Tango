@@ -1,6 +1,10 @@
 # Compatibility: what Tango promises not to break
 
-Status: in force from v0.12.0.
+Status: in force from v1.0.0, 11 September 2026.
+
+Written during v0.12.0 and enforced from that release onwards, but the
+promise only becomes binding at 1.0: under `0.x` this page described the
+surface, and from 1.0 it constrains it.
 
 This is the public surface SemVer talks about. **Nothing on this page may
 change in a way that breaks an existing user without a major version bump.**
