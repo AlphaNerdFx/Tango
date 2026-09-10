@@ -1845,3 +1845,91 @@ class TestWhatBuildPackageHandsEachNote:
         con.close()
         assert fields[cards_module.FIELDS.index("Example from Youtube Video")] == \
             "Das Wort steht hier."
+
+
+class TestWhatBuildPackageHandsTheDownloaders:
+    """
+    The last cluster of `build_package` survivors, 10 September 2026.
+
+    Everything the two downloaders receive is assembled here: the audio map
+    keyed by lowercased lemma, the image candidate list, and the sense map
+    the wrong-sense guard compares against. Nothing asserted any of it.
+    """
+
+    @staticmethod
+    def _result(lemma, audio_url=None, definition="eine Definition", pos="noun"):
+        # audio_url is passed by keyword on purpose. It is the eleventh
+        # field, after ipa, and an earlier version of this helper accepted
+        # the argument and quietly dropped it, so a test asserting on the
+        # audio map was measuring an empty one.
+        return DefinitionResult(lemma, definition, "Ein Satz.", "Noch einer.",
+                                None, ["syn"], ["ant"], pos, "test",
+                                audio_url=audio_url)
+
+    def _capture_audio(self, monkeypatch):
+        seen = {}
+        monkeypatch.setattr(
+            cards_module, "_download_audio",
+            lambda wanted, language, **kw: seen.update(
+                wanted=wanted, language=language) or ({}, []))
+        return seen
+
+    def test_the_audio_map_is_keyed_by_the_lowercased_lemma(self, tmp_path,
+                                                            monkeypatch):
+        # Every other map in this function is keyed that way, and the note
+        # loops look words up with `result.lemma.lower()`. A mutant using
+        # `.upper()` survived, which would miss every lookup.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        seen = self._capture_audio(monkeypatch)
+        cards_module.build_package(
+            "vid", "Deck", [], ["Hund"], language="de",
+            snippets={0.0: {"end": 1.0, "text": "Der Hund bellt."},
+                      "_full_text": "x"},
+            not_found_audio={"Hund": "https://example.invalid/h.ogg"})
+        assert seen["wanted"] == {"hund": "https://example.invalid/h.ogg"}
+
+    def test_the_downloader_is_told_the_transcript_language(self, tmp_path,
+                                                            monkeypatch):
+        # `_download_audio(audio_wanted, language, ...)`. A mutant nulling
+        # the language survived; the recording has to match the word's
+        # language or the card plays the wrong one.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        seen = self._capture_audio(monkeypatch)
+        cards_module.build_package(
+            "vid", "Deck", [self._result("Hund", "https://example.invalid/h.ogg")],
+            [], language="de")
+        assert seen["language"] == "de"
+
+    def test_a_found_words_own_url_wins_over_the_fallback_map(self, tmp_path,
+                                                              monkeypatch):
+        # `setdefault`, not assignment. The definition source's URL is the
+        # better one; the not_found map is there for words that got no
+        # definition at all.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        seen = self._capture_audio(monkeypatch)
+        cards_module.build_package(
+            "vid", "Deck",
+            [self._result("Hund", "https://example.invalid/from-definition.ogg")],
+            [], language="de",
+            not_found_audio={"hund": "https://example.invalid/fallback.ogg"})
+        assert seen["wanted"] == {"hund": "https://example.invalid/from-definition.ogg"}
+
+    def test_the_image_candidates_and_senses_are_keyed_the_same_way(
+            self, tmp_path, monkeypatch):
+        # `candidates` and `senses` are both built from `r.lemma.lower()`,
+        # and the guard looks a lemma up in `senses` by the same key. Mutants
+        # upper-casing either survived, and a mismatch silently turns the
+        # wrong-sense guard off for every word.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        seen = {}
+        monkeypatch.setattr(
+            cards_module, "_download_images",
+            lambda wanted, language, **kw: seen.update(
+                wanted=wanted, language=language, senses=kw.get("senses"))
+            or ({}, {}, []))
+        cards_module.build_package(
+            "vid", "Deck", [self._result("Hund", definition="ein Tier")], [],
+            language="de", images_enabled=True)
+        assert seen["wanted"] == ["hund"]
+        assert seen["language"] == "de"
+        assert seen["senses"] == {"hund": ("ein Tier", "noun")}
