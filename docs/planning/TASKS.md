@@ -83,7 +83,8 @@ verification session.
       Found while starting the hyphenated-fuzzy-match item below, which is
       downstream of this function and was worth doing in this order.
 
-Everything below was done for v0.4.1. See CLAUDE.md/ARCHITECTURE.md for
+Everything below was done for v0.4.1. See CLAUDE.md and
+      docs/architecture/ARCHITECTURE.md for
 current state.
 
 - [x] **Verify the WordNet fix is actually applied.**
@@ -198,7 +199,7 @@ current state.
       empty for non-English), and Wiktionary's raw wikitext API (real
       native-language definitions confirmed for French/German/Russian, but
       needs a per-language-edition parser). Full evidence and candidate
-      writeups in `docs/ADR-008-per-language-dictionary-sources.md`.
+      writeups in `docs/adr/ADR-008-per-language-dictionary-sources.md`.
 
       **Option A shipped: OMW synonym/antonym supplementation.** Extended
       `_wordnet_synonyms_antonyms()` to call OMW's `lang=` parameter for the
@@ -730,7 +731,7 @@ remaining user-visible value is; the rest is measurement and hygiene.
       nouns. ARCHITECTURE 8.46 and 8.47. Phase 4 is untouched and still
       needs the ToS decision below.
 
-      Original note follows; see `docs/ADR-009-card-media-enrichment.md`.
+      Original note follows; see `docs/adr/ADR-009-card-media-enrichment.md`.
       Four phases in dependency order, each independently shippable.
 
       Phase 1 is the clear first move: 91.5% of German entries in the kaikki
