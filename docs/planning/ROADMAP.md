@@ -716,7 +716,8 @@ edit. v0.8.1 exists for exactly this reason and cost a release; this cost a
 patch number instead.
 
 The worst finding was not in a document at all. A user-facing error told
-people to read `docs/languages.txt`, which has never existed here. That is
+people to read a `languages.txt` file under `docs/`, which has never existed
+in this repository. That is
 the v0.7.0 flag-removal class again: an instruction that cannot be followed,
 with nothing failing when it stopped working.
 
