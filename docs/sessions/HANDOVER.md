@@ -15,6 +15,8 @@ Written 9 September 2026.
 | PyPI | **0.11.0 published**, `pip install tango-anki` |
 | Docker | **published as `yousseflarbi/tango`** |
 | security | `make audit`: bandit clean at every severity, pip-audit 11, all in the translation server extra |
+| mutation | `make mutation`: `cards.py` 536/729, `language.py` 212/281, measured 11 September |
+| benchmark | `make benchmark`: 4 of 6 phases inside their thresholds here, all 6 on a Linux filesystem |
 
 The v0.11.0 rung is released. The tag names `9cb0866`, which is the exact
 commit the PyPI artefacts were built from, so a checkout of the tag rebuilds
@@ -167,6 +169,54 @@ short version:
 
 `make audit` runs bandit and pip-audit together. Both are in the `dev` extra.
 
+## Mutation testing and benchmarking, 10 and 11 September 2026
+
+Two tools added, both slow enough to sit outside `make check`.
+
+### `make benchmark`
+
+Times each phase a user waits for, in a fresh interpreter, against a
+threshold for each. Exits 1 when one is over.
+
+It found that **`tango --version` loaded 1208 modules**, because `nlp`
+imported spaCy and `cards` imported genanki at module scope. Both are used
+only inside function bodies. Moving them took the command from 45.94s to
+3.98s on this machine, cut the module count to 547, and shortened test
+collection from about 44 seconds to 2.6.
+
+The remaining 44 seconds are the filesystem, not the code. A virtualenv on
+`/mnt/c` imports spaCy in 44 seconds; the same package on the Linux
+filesystem takes 2.2. Every phase passes its threshold there. `tango doctor`
+now reports this, because nothing in the symptom points at the cause.
+
+### `make mutation`
+
+Coverage says a line ran. This says whether anything would have failed if it
+were wrong. Four rounds of writing tests for survivors:
+
+| module | killed | raw | behaviour only |
+|---|---|---|---|
+| `cards.py` | 536 of 729 | 73.5% | 92.6% |
+| `language.py` | 212 of 281 | 75.4% | 87.6% |
+
+**What worked, and would work again:** assert what a function hands the thing
+it calls. `fetch_audio(url, lemma, language)` had six survivors that each
+dropped or nulled an argument, and one test killed all six.
+
+**Two things to know before reading those numbers.** The behaviour-only
+figure excludes survivors that change nothing but a log line or a string,
+and the denominator was computed wrongly twice, both times flatteringly:
+once by comparing two different categorisers, once by reading only the
+changed lines of a multi-line logging call. Both corrections are in
+ARCHITECTURE 8.57 with the raw scores beside them.
+
+**Seven mutants cannot be killed**, all the same shape: a lookup shadowed by
+the fallback beneath it. Each is recorded at its call site. Two tests that
+could not fail were deleted rather than weakened until they passed. If a
+survivor looks unkillable, run the mutation against the real function before
+concluding it: one was nearly given a test on the strength of a
+reimplementation in the harness that disagreed with the real code.
+
 ## What needs the user
 
 1. **Look at the two review decks.** `output/IMGREVIEW2-de_*.apkg` (19 cards,
@@ -192,13 +242,21 @@ short version:
 
 ## The exact next step
 
-1. The three items above, all of which need eyes rather than code.
-2. Then decide whether `IMAGES_ENABLED` defaults to true. Everything the
-   measurement can supply is now in: coverage clears ADR-010's bar in every
+v0.12.0 is tagged and its rung is closed. Nothing is half-built.
+
+1. **Publish v0.12.0.** The tag exists; the wheel and the Docker image do
+   not. `make dist`, install the built wheel into a clean virtualenv and run
+   it (CLAUDE.md 18.11), then `twine upload`, then build and push the image.
+   Both steps are irreversible and each is its own confirmation.
+2. **The three items under "What needs the user"**, all of which need eyes
+   rather than code.
+3. **Decide whether `IMAGES_ENABLED` defaults to true.** Everything the
+   measurement can supply is in: coverage clears ADR-010's bar in every
    language, the runtime cost is about 24 requests for a deck, and the
    wrong-sense failure is measured and guarded.
-3. `tango doctor` reports image coverage but not the sense guard. Worth a line
-   once the default is decided.
+4. Then v1.0.0, which adds no features. `docs/COMPATIBILITY.md` is written
+   and enforced, so what remains is the decision to freeze rather than more
+   building.
 
 ## Open decisions
 
@@ -219,9 +277,12 @@ Nothing. `make check` exits 0.
 
 Environmental notes, not this repository's bugs:
 
-- **`make check` takes about 145 seconds here**, measured 8 September. The
-  "about ten minutes" in every previous handover was never timed, and was
-  reading contention from background jobs left running in the same session.
+- **`make check` takes 164 seconds here**, measured 11 September. It was 145
+  on 8 September, and it went up despite the import work that made the suite
+  itself faster, because the suite gained 172 tests over the same days. The
+  "about ten minutes" that every handover before those carried was never
+  timed at all, and was reading contention from background jobs left running
+  in the same session.
 - **There is no pre-commit hook.** Run `make check` yourself before committing.
 - **There is no `pip` script in `.tangovenv/bin`.** Use
   `.tangovenv/bin/python -m pip`.
