@@ -726,7 +726,40 @@ here without a date as unmeasured.
 make format        # black
 make lint          # ruff
 make typecheck     # mypy
+make audit         # bandit + pip-audit
 ```
+
+```bash
+make benchmark     # time each phase a user waits for, against a threshold
+```
+
+Exits 1 when a stage is over its limit, so it is usable in CI. Each phase
+runs in a fresh interpreter, because import cost is the first thing a user
+waits for and a benchmark that imports once and loops reports a number
+nobody experiences. Measured 10 September 2026: `tango --version` was 45.94s
+and is 3.98s, after spaCy and genanki moved out of module scope. The
+thresholds are what a person tolerates before a command feels broken, not
+what this machine manages. ARCHITECTURE 8.56.
+
+```bash
+make mutation      # break the code deliberately, see if a test notices
+```
+
+Coverage says a line ran. This says whether anything would have failed if
+the line were wrong, which is a different question, and it found two gaps at
+89% line coverage: `tango languages` had no test for the order it prints,
+and the filler stoplist had none at all.
+
+Slow by nature, since the suite runs once per mutant, and slower still from
+a virtualenv on a Windows drive, where the suite takes 134 seconds against
+42 on the Linux filesystem. The target warns about that.
+
+Measured 11 September 2026 after four rounds of writing tests for survivors:
+`cards.py` 536 killed of 729, `language.py` 212 of 281. Excluding survivors
+that change only a log line, a string or an error message, 92.6% and 87.6%.
+Read the raw numbers as the ones needing no interpretation, and see
+ARCHITECTURE 8.57 for the two ways the denominator was computed wrongly
+first, and the seven mutants that cannot be killed at all.
 
 ### Maintenance
 
