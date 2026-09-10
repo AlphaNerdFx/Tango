@@ -64,8 +64,13 @@ change meaning.
 | backlog | `--deck` `--def-lang` `--images/--no-images` `--language` `--verbose` |
 | uninstall | `--dry-run` `--yes` |
 
-`--version` and `--help` are frozen on the top-level command. `-h` is a
-frozen alias for `--help`.
+Frozen on the top-level command: `--version`, `--help`,
+`--install-completion`, `--show-completion`. `-h` is a frozen alias for
+`--help`.
+
+The two completion options arrived in v1.0.0 and are the only addition that
+release carries. Typer provides them; they were switched off with no
+recorded reason.
 
 ## 4. Exit codes
 
