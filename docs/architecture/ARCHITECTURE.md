@@ -3535,12 +3535,12 @@ different direction.
 | module | mutants | killed | survived | raw | behaviour only |
 |---|---|---|---|---|---|
 | `language.py` | 281 | 185 | 96 | 66% | **76%** |
-| `cards.py` | 729 | 466 | 263 | 63% | **82%** |
+| `cards.py` | 729 | 466 | 263 | 64% | **76%** |
 | `cards.py`, `config.py`, `media.py` | 1063 | 683 | 380 | 64% | |
 
 **The raw score understates the suite, and by a lot.** Of `language.py`'s 96
 survivors, 32 mutate only a logging call and 7 only the text of an error
-message. `cards.py` is starker: **163 of its 263 survivors change nothing but
+message. `cards.py` is starker: **114 of its 263 survivors change nothing but
 a log line, a string literal, an error message or a progress line.** No test
 should be expected to catch those, and a suite that did would be pinning
 text that is free to change. The last column excludes them.

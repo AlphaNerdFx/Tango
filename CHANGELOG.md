@@ -55,8 +55,8 @@ rather than list every change.
 
 Both were found by triaging the survivors of a `mutmut` run, not by review.
 `language.py` scored 185 killed of 281 mutants and `cards.py` 466 of 729,
-76% and 82% once the survivors that change nothing but a log line, a string
-or an error message are excluded. In `cards.py`, thirteen of the fifteen
+both about 76% once the survivors that change nothing but a log line, a
+string or an error message are excluded. In `cards.py`, thirteen of the fifteen
 mutants of the function that maps content to card fields were killed and
 both survivors mutate only the separator in an error message, so nothing
 that moves a field survived. ARCHITECTURE
