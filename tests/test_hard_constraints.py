@@ -1157,6 +1157,48 @@ class TestTheDocumentationAgreesWithTheCode:
         assert not missing, (
             "These name a file that is not there:\n  " + "\n  ".join(missing))
 
+    def test_the_readme_roadmap_table_matches_the_version(self):
+        """
+        The README is the PyPI description, and PyPI freezes it at upload.
+
+        So a "next" marker in the roadmap table is a live claim written onto
+        a page that can never be corrected. The published v0.11.0 page still
+        says v0.9.0 is next, because the table was stale at the moment that
+        release was uploaded, and there is no way to fix it now.
+
+        Two things must hold: every tag at or below the current version is
+        marked released, and the one marked next is above it.
+        """
+        from pipeline import __version__
+
+        def as_tuple(text):
+            return tuple(int(part) for part in text.split("."))
+
+        current = as_tuple(__version__)
+        rows = re.findall(r"^\| v(\d+\.\d+\.\d+) \| ([^|]*) \| ([^|]*) \|$",
+                          (self.ROOT / "README.md").read_text(encoding="utf-8"), re.M)
+        assert len(rows) >= 6, "the roadmap table is gone or its shape changed"
+
+        wrong, nexts = [], []
+        for version, _goal, status in rows:
+            state = status.strip().strip("*").lower()
+            if "next" in state:
+                nexts.append(version)
+            # "done" and "released" both mean shipped. The table uses the
+            # first for the early rungs and the second once the package was
+            # on PyPI, and that distinction is worth keeping rather than
+            # flattening. What must not appear is "next", or a blank.
+            shipped = "released" in state or "done" in state
+            if as_tuple(version) <= current and not shipped:
+                wrong.append(f"v{version} is at or below {__version__} "
+                             f"but reads {status.strip()!r}")
+        for version in nexts:
+            if as_tuple(version) <= current:
+                wrong.append(f"v{version} is marked next but {__version__} "
+                             f"is already here")
+        assert len(nexts) <= 1, f"more than one row marked next: {nexts}"
+        assert not wrong, "\n  ".join([""] + wrong)
+
     # -- helpers --
 
     def _documents(self):
