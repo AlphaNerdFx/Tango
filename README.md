@@ -275,11 +275,9 @@ the server pulls **134 MB across 36 packages** that translation itself never
 touches, PyMuPDF and lxml among them, for converting documents Tango does
 not convert.
 
-The split landed after v0.11.0 was published, so `translation-server` is not
-an extra the released package has: on 0.11.0 that command fails with an
-unknown extra, and `tango-anki[translation]` still installs the server as it
-always did. It arrives in v0.12.0. Until then, install from a clone if you
-want the split.
+The split arrived in v0.12.0. On 0.11.0 and earlier the command fails with
+an unknown extra, and `tango-anki[translation]` installs the server as it
+always did.
 
 ### Definition coverage
 
@@ -311,7 +309,7 @@ is worse than none. The video sentence is still on every card.
 
 Build it for English too, since 27 August 2026. That advice used to be the opposite, and the reversal is worth knowing: Merriam-Webster still writes better definitions and is still tried first, but it is the only source English has, it allows 1000 queries a day per key, and one 1094-word video exceeds that on its own. The index is the floor under it.
 
-Measured on a real 1094-lemma English deck, the index supplies IPA for 96.4% of words, audio for 97.0% and an example for 90.3%, all offline. Before it, English cards carried none of those whenever dictionaryapi.dev was unreachable, which it was for the whole day this was measured. See `docs/ADR-011-english-offline-index.md`.
+Measured on a real 1094-lemma English deck, the index supplies IPA for 96.4% of words, audio for 97.0% and an example for 90.3%, all offline. Before it, English cards carried none of those whenever dictionaryapi.dev was unreachable, which it was for the whole day this was measured. See `docs/adr/ADR-011-english-offline-index.md`.
 
 The antonym column above is what the Wiktionary index alone gives. Antonyms have their own optional index, built once for every language at the same time:
 
@@ -404,20 +402,25 @@ from your shell history.
 ## Project structure
 
 ```
-tango/
+Tango/
 ├── src/pipeline/
 │   ├── config.py          config and environment variables
 │   ├── language.py        language resolution and BCP-47 mapping
-│   ├── translation.py     argostranslate integration and mirror fallback
 │   ├── transcript.py      YouTube transcript extraction
 │   ├── nlp.py             spaCy vocabulary extraction
 │   ├── deck.py            AnkiConnect duplicate detection
 │   ├── definition.py      definition fetching and caching
+│   ├── wiktdata.py        the offline Wiktionary index
+│   ├── antonyms.py        the offline ConceptNet antonym index
+│   ├── translation.py     argostranslate and mirror fallback
 │   ├── cards.py           Anki card and package generation
+│   ├── media.py           pronunciation audio, downloaded and cached
+│   ├── images.py          pictures for concrete nouns, gated on Wikidata
 │   ├── state.py           SQLite state management
 │   └── __main__.py        CLI entry point
-├── tests/
-├── docs/
+├── tests/                 one file per module, plus conftest.py
+├── scripts/               measurement and release tooling
+├── docs/                  architecture, planning, ADRs, sessions
 ├── pyproject.toml
 └── Makefile
 ```
