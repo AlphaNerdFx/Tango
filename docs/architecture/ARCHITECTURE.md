@@ -3472,6 +3472,11 @@ call spaCy, with a `TYPE_CHECKING` block for the annotations.
 | `tango --version` | 45.94s | **3.98s** |
 | `tango --help` | 45.94s | 5.88s |
 
+It shortened the test suite too, which was not the point but is worth
+recording: `conftest.py` imports pipeline modules, so collection stopped
+loading spaCy as well. Collection went from about 44 seconds to 2.6, and the
+whole suite from 134 to 112.
+
 The spaCy deferral is almost all of it. genanki was worth 0.26 seconds,
 measured by a controlled A/B rather than by comparing across runs: an
 earlier reading across separate runs showed no difference and was wrong,
@@ -3636,7 +3641,7 @@ original single-word spot checks suggested.
 
 ## 10. Test architecture
 
-**1346 unit tests across 17 test files, 33 more marked integration and
+**1354 unit tests across 17 test files, 33 more marked integration and
 deselected by default**, measured 9 September 2026. All run without network,
 Anki, or installed models, and since 8 September that is enforced rather
 than asked for: an autouse fixture in `conftest.py` fails any default-run
