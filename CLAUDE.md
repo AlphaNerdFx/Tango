@@ -689,7 +689,7 @@ and `make help` lists every target.
 ### Test
 
 ```bash
-make test          # unit only, no external deps, ~90s
+make test          # unit only, no external deps, 112s measured 10 Sep 2026
 make test-all      # includes integration tests
 PYTHONPATH=src python -m pytest tests/test_nlp.py -q
 PYTHONPATH=src python -m pytest tests/ -m "not integration" -q
