@@ -22,6 +22,10 @@ from pipeline.language import (
     capability_report,
     _with_collapsed_forms,
     FILLER_SOUNDS,
+    language_capabilities,
+    language_caveat,
+    localise_pos,
+    is_filler,
 )
 
 
@@ -624,3 +628,121 @@ class TestSurvivorsFoundByMutationTesting:
         # The pair. A helper that returned every single character, or that
         # collapsed unrelated spellings together, would pass the test above.
         assert _with_collapsed_forms(frozenset({"ah"})) == {"ah"}
+
+
+class TestCapabilityFlagsAndCaveats:
+    """
+    `language_capabilities` and `language_caveat`, 11 September 2026.
+
+    Both drive what `tango languages` and `tango doctor` tell a user, and
+    neither had a test that read a flag. Eighteen mutants survived between
+    them: flipping an `or` to an `and`, dropping the `.lower()`, inverting a
+    membership test, and nulling the base-code fallback.
+    """
+
+    # code -> the flags it must report. Chosen so every branch of every flag
+    # is exercised by at least one row that differs from its neighbours.
+    CASES = {
+        # English is the only language WordNet covers directly.
+        "en": dict(cards=True, wordnet=True, pos_labels=True,
+                   filler_sounds=True, named=True),
+        # German has a model and a filler list but no OMW data at all, which
+        # is why the WordNet concreteness gate reached 0% of German cards.
+        "de": dict(cards=True, wordnet=False, pos_labels=True,
+                   filler_sounds=True, named=True),
+        # A regional variant has to fall back to its base code.
+        "fr-CA": dict(cards=True, wordnet=True, pos_labels=True,
+                      filler_sounds=True, named=True),
+        # Norwegian reaches a model only through the alias table.
+        "no": dict(cards=True, wordnet=False, pos_labels=False,
+                   filler_sounds=False, named=True),
+        # Arabic has a name and nothing else: named without cards is the
+        # combination that `or` versus `and` in the "named" flag decides.
+        "ar": dict(cards=False, wordnet=False, pos_labels=False,
+                   filler_sounds=False, named=True),
+        # A code this project has never heard of.
+        "zz": dict(cards=False, wordnet=False, pos_labels=False,
+                   filler_sounds=False, named=False),
+    }
+
+    def test_every_flag_for_every_representative_code(self):
+        for code, expected in self.CASES.items():
+            assert language_capabilities(code) == expected, code
+
+    def test_the_code_is_lowercased_before_anything_is_looked_up(self):
+        # `code.split("-")[0].lower()`. Every table is keyed lowercase, so
+        # dropping the `.lower()` makes an upper-case code report nothing.
+        assert language_capabilities("DE") == language_capabilities("de")
+        assert language_capabilities("FR-ca") == language_capabilities("fr-CA")
+
+    def test_a_caveat_is_found_by_the_exact_code_first(self):
+        # zh-TW has its own caveat and zh does not, so an exact hit is the
+        # only way to reach it.
+        assert "Simplified" in language_caveat("zh-TW")
+
+    def test_a_caveat_falls_back_to_the_base_code(self):
+        # fr is keyed on the base, so a regional variant has to reach it.
+        # A mutant nulling that second lookup survived.
+        assert language_caveat("fr-XX") == language_caveat("fr")
+        assert language_caveat("fr-XX") is not None
+
+    def test_a_language_with_no_caveat_says_so(self):
+        # The pair, so the two above cannot be satisfied by a function that
+        # always returns the same string.
+        assert language_caveat("de") is None
+        assert language_caveat("zz") is None
+
+
+class TestPosLabelsAndFillerLookups:
+    """
+    `localise_pos` and `is_filler`, 11 September 2026.
+
+    Both resolve a language through the same two-step chain: the exact code,
+    then the base code. Ten mutants survived across them, nulling a lookup,
+    turning the `or` into an `and`, or changing what an absent argument
+    falls back to.
+    """
+
+    def test_a_part_of_speech_is_written_in_the_cards_language(self):
+        # CLAUDE.md 3.3: Class is a label on the definition, so it follows
+        # the definition's language. Never "noun" on a German card.
+        assert localise_pos("noun", "de") == "Substantiv"
+
+    def test_a_regional_variant_reaches_its_base_tables(self):
+        # `POS_LABELS.get(code) or POS_LABELS.get(code.split("-")[0])`.
+        # Mutants nulling the second lookup, or splitting on the wrong
+        # string, survived. de-AT has no table of its own.
+        assert localise_pos("noun", "de-AT") == "Substantiv"
+
+    def test_no_language_at_all_means_english(self):
+        # `(language or "en")`. A mutant defaulting to something else
+        # survived, and the label would then be written in a language the
+        # caller never asked for.
+        assert localise_pos("noun", None) == "noun"
+
+    def test_a_language_with_no_table_shows_the_tag_unchanged(self):
+        # Better than dropping it or guessing. The pair to the three above:
+        # a function that always returned the input would pass this one and
+        # fail the first.
+        assert localise_pos("noun", "zz") == "noun"
+
+    def test_a_filler_sound_is_recognised_in_its_language(self):
+        assert is_filler("äh", "de") is True
+
+    def test_a_filler_lookup_falls_back_to_the_base_code(self):
+        # The same two-step chain, and the same surviving mutants.
+        assert is_filler("äh", "de-AT") is True
+
+    def test_a_real_word_is_not_a_filler(self):
+        # The pair. Without it a function returning True always would pass.
+        assert is_filler("hund", "de") is False
+
+    def test_an_empty_lemma_is_not_a_filler(self):
+        # `(lemma or "")`. A mutant defaulting to a non-empty placeholder
+        # survived, and an empty lemma would then be compared against it.
+        assert is_filler("", "de") is False
+
+    def test_no_language_means_no_filler_list(self):
+        # `(language or "")`. There is no language-neutral stoplist, so an
+        # absent language has to mean no match rather than every match.
+        assert is_filler("äh", None) is False
