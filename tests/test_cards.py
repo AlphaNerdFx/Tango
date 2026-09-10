@@ -1497,3 +1497,120 @@ class TestMoreSurvivorsFromTheMutationRun:
         model = cards_module._build_model()
         assert model.name == cards_module.MODEL_NAME
         assert model.name.strip() != ""
+
+
+class TestTheAudioDownloadLoop:
+    """
+    Survivors from the third mutation pass, 10 September 2026.
+
+    `_download_audio` runs a thread pool over the words that have a
+    pronunciation URL. Nothing tested what it hands each worker, what it does
+    when one raises, or how often it reports progress, so mutants that
+    reordered the arguments, aborted the loop on the first failure, or broke
+    the progress counter all survived.
+    """
+
+    @staticmethod
+    def _fake_path(tmp_path, name):
+        p = tmp_path / name
+        p.write_bytes(b"audio")
+        return p
+
+    def test_each_worker_gets_the_url_the_lemma_and_the_language(self, tmp_path):
+        # `fetch_audio(url, lemma, language)`, in that order. Six mutants
+        # survived here, each dropping or nulling one argument, and passing
+        # the wrong one is the exact class CLAUDE.md 8 names: a lemma where a
+        # URL belongs downloads nothing and the card silently links out.
+        calls = []
+
+        def fake(url, lemma, language):
+            calls.append((url, lemma, language))
+            return self._fake_path(tmp_path, f"{lemma}.ogg")
+
+        with patch.object(cards_module.media, "fetch_audio", side_effect=fake):
+            names, paths = cards_module._download_audio(
+                {"hund": "https://example.invalid/hund.ogg"}, "de")
+
+        assert calls == [("https://example.invalid/hund.ogg", "hund", "de")]
+        assert names == {"hund": "hund.ogg"}
+        assert [p.name for p in paths] == ["hund.ogg"]
+
+    def test_one_failed_download_does_not_abandon_the_others(self, tmp_path):
+        # The `continue` in the except block. A mutant turning it into
+        # `break` survived, and that is the difference between one card
+        # linking out and every remaining card linking out.
+        def fake(url, lemma, language):
+            if lemma == "erste":
+                raise OSError("network went away")
+            return self._fake_path(tmp_path, f"{lemma}.ogg")
+
+        wanted = {w: f"https://example.invalid/{w}.ogg"
+                  for w in ("erste", "zweite", "dritte")}
+        with patch.object(cards_module.media, "fetch_audio", side_effect=fake):
+            names, paths = cards_module._download_audio(wanted, "de")
+
+        assert set(names) == {"zweite", "dritte"}
+        assert len(paths) == 2
+
+    def test_a_worker_returning_nothing_is_not_counted_as_embedded(self, tmp_path):
+        # `if path:` guards the result. A word whose audio does not exist
+        # comes back as None and its card links out instead.
+        def fake(url, lemma, language):
+            return None if lemma == "leer" else self._fake_path(tmp_path, f"{lemma}.ogg")
+
+        wanted = {"leer": "https://example.invalid/a.ogg",
+                  "voll": "https://example.invalid/b.ogg"}
+        with patch.object(cards_module.media, "fetch_audio", side_effect=fake):
+            names, paths = cards_module._download_audio(wanted, "de")
+
+        assert set(names) == {"voll"}
+        assert len(paths) == 1
+
+    def test_progress_is_reported_once_every_twenty_five(self, tmp_path):
+        # `done += 1` and `done % PROGRESS_EVERY == 0`. Mutants that reset
+        # the counter, decremented it, stepped by two, or flipped the
+        # modulo test all survived. PROGRESS_EVERY is 25, so 50 downloads
+        # report twice and 24 report not at all.
+        seen = []
+
+        def fake(url, lemma, language):
+            return self._fake_path(tmp_path, f"{lemma}.ogg")
+
+        # The cadence lines only. A closing summary goes through the same
+        # callback whatever the count, so it is filtered out rather than
+        # folded into the number, which is what made the first version of
+        # this test wrong.
+        cadence = lambda lines: [x for x in lines if x.lstrip().startswith("audio ")]
+
+        with patch.object(cards_module.media, "fetch_audio", side_effect=fake):
+            cards_module._download_audio(
+                {f"w{i}": f"https://example.invalid/{i}.ogg" for i in range(50)},
+                "de", progress=seen.append)
+        assert len(cadence(seen)) == 2, seen
+
+        seen.clear()
+        with patch.object(cards_module.media, "fetch_audio", side_effect=fake):
+            cards_module._download_audio(
+                {f"x{i}": f"https://example.invalid/{i}.ogg" for i in range(24)},
+                "de", progress=seen.append)
+        assert cadence(seen) == []
+
+    def test_the_closing_line_says_how_many_link_out(self, tmp_path):
+        # The summary after the loop, which the cadence test filters out.
+        # It only mentions linking when some card actually does.
+        def fake(url, lemma, language):
+            return None if lemma == "leer" else self._fake_path(tmp_path, f"{lemma}.ogg")
+
+        seen = []
+        with patch.object(cards_module.media, "fetch_audio", side_effect=fake):
+            cards_module._download_audio(
+                {"leer": "https://example.invalid/a.ogg",
+                 "voll": "https://example.invalid/b.ogg"}, "de", progress=seen.append)
+        assert "1 of 2" in seen[-1] and "link out" in seen[-1]
+
+    def test_nothing_wanted_does_no_work_at_all(self, tmp_path):
+        # The early return. Without it an empty pool is still built.
+        with patch.object(cards_module.media, "fetch_audio") as fetch:
+            names, paths = cards_module._download_audio({}, "de")
+        assert (names, paths) == ({}, [])
+        fetch.assert_not_called()
