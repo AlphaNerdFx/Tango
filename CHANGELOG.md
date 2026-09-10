@@ -14,6 +14,42 @@ rather than list every change.
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-09-11
+
+**Documentation that matches the repository, and two tools that check it.**
+
+v0.12.0 was tagged but never published. This is that release plus a
+documentation audit, cut as a separate version because the README is also
+the PyPI description and PyPI freezes it at upload: publishing a page with
+links that already resolve to nothing is what cost this project v0.8.1.
+
+### Fixed
+
+- **An error message told users to read `docs/languages.txt`**, which has
+  never existed in this repository. It now names `tango languages`, which
+  does. Same class as the v0.7.0 flag removals: an instruction that cannot
+  be followed, with nothing failing when it stopped working.
+- **The structure tree in ARCHITECTURE predated the reorganisation it
+  described.** It listed `SESSION.md`, `TASKS.md` and `ARCHITECTURE.md` at
+  the repository root, five months after they moved into `docs/`, and left
+  out `CHANGELOG.md`, `images.py`, `scripts/` and four test files.
+- **Four ADR citations pointed at `docs/` rather than `docs/adr/`**, in the
+  README, ARCHITECTURE and TASKS, and one reference read
+  `CLAUDE.md/ARCHITECTURE.md` as though it were a path.
+- **The README listed ten of the fifteen pipeline modules**, omitting
+  `media.py`, `images.py`, `wiktdata.py` and `antonyms.py`.
+- **The README said the `translation-server` extra "arrives in v0.12.0"**,
+  which would have been frozen onto the published page as a promise about a
+  release the page itself was announcing.
+- Two PDFs on disk were missing from CLAUDE.md's document index, and
+  `docs/history/` and `docs/COMPATIBILITY.md` from CONTRIBUTING's layout.
+
+### Added
+
+- **A test that fails when a document or a message names a file that is not
+  there.** It caught a mistake in the corrected structure tree within a
+  minute of being written.
+
 ### Added
 
 - **`make benchmark`**, which times each phase a user waits for against a
