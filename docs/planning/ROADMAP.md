@@ -733,10 +733,41 @@ Two guards came out of it, both in `test_hard_constraints.py`:
 
 ### v1.0.0: A finished CLI
 
+**Released 11 September 2026.**
+
 A fully-fledged, optimized command-line tool that installs from a package,
 runs on Windows, macOS and Linux, and works on low-end and high-end hardware
 alike. §3 is frozen, documented and tested. No new features, everything
 above is done or explicitly deferred.
+
+Two things closed on the day, and one of them bends the rule above.
+
+**The declared floor was tested on one platform of three.** CI ran 3.10,
+3.11 and 3.12 on Linux but only 3.12 on macOS and Windows, so "runs on
+Windows, macOS and Linux" at the declared minimum was a promise nothing
+checked. Both now run the floor as well. That is test coverage of an
+existing claim rather than a feature.
+
+**Shell completion is the one addition, and it is an argued exception.**
+`add_completion=False` sat in the Typer app with no comment, no ADR and no
+recorded reason. Typer supplies `--install-completion` and
+`--show-completion` for nothing, and a twelve-command CLI is exactly the
+kind that wants them. Calling a CLI finished while it cannot complete its
+own subcommand names read worse than the exception does. It is frozen in
+§3 along with everything else, so it is the last.
+
+Enabling it also exposed a gap in the guard: `tests/test_compatibility.py`
+checked the options of four subcommands and never the top level, so two
+options joined the public surface and every compatibility test still
+passed. That direction, a promise nobody made, is the one the test exists
+for. It now covers `tango` itself.
+
+**What is deliberately not in 1.0.0**, and is recorded rather than
+forgotten: the base install is 316 MB against a 300 MB target that was set
+below what the architecture allows (spaCy and numpy are 160 MB of it), and
+the dictionary index could shed roughly 20% of its bytes at the cost of a
+full re-download per language. The second is a real decision with a real
+price and is not being taken to make a deadline.
 
 ---
 
