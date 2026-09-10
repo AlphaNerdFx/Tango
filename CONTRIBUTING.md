@@ -43,7 +43,9 @@ docs/adr/         architecture decisions
 docs/architecture/  ARCHITECTURE.md, the full system detail
 docs/planning/    ROADMAP.md and TASKS.md
 docs/sessions/    working state between sessions
+docs/history/     superseded documents, and the September audit record
 docs/assets/      diagrams and icons
+docs/COMPATIBILITY.md   what v1.0.0 freezes, checked against the code by a test
 ```
 
 `src/` holds the importable package and nothing else. That is the
