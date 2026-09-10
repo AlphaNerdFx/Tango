@@ -1388,3 +1388,112 @@ class TestSurfaceFormMatching:
             language="fr", surface_forms={"savoir": ["sais"]},
         )
         assert result.example_transcript == "je sais pas ce qu'il faut faire"
+
+
+class TestMoreSurvivorsFromTheMutationRun:
+    """
+    A second pass over `cards.py`'s surviving mutants, 10 September 2026.
+
+    The first pass covered the transcript fold and the pre-filter. These are
+    the rest of the small clusters, all of them boundary conditions or
+    fallback values that no test reached: exactly the shape coverage cannot
+    see, because the lines all ran.
+    """
+
+    # -- the pill character budget -------------------------------------------
+    #
+    # `_format_pills` drops entries that would take the field over a
+    # character budget, and keeps trying shorter ones after a long one is
+    # skipped (issue #12). The budget counts rendered HTML, not visible text,
+    # so a pill is 32 characters of markup plus the word.
+
+    def test_a_pill_landing_exactly_on_the_budget_is_kept(self):
+        # The boundary itself. `>` keeps this and `>=` drops it, and nothing
+        # distinguished the two.
+        pill = len('<span class="vocab-pill">ab</span>')
+        assert pill == 34
+        assert _format_pills(["ab"], "vocab-pill", max_chars=34) != ""
+        assert _format_pills(["ab"], "vocab-pill", max_chars=33) == ""
+
+    def test_the_second_pill_is_charged_for_its_joining_space(self):
+        # Two 34-character pills need 69, not 68: the space between them is
+        # real and is counted once, for the second pill onwards. Mutants that
+        # charged 2, charged the first pill, or subtracted instead of adding
+        # all survived because nothing tested the seam.
+        assert _format_pills(["ab", "ab"], "vocab-pill", max_chars=69).count("<span") == 2
+        assert _format_pills(["ab", "ab"], "vocab-pill", max_chars=68).count("<span") == 1
+
+    # -- a snippet with no text ----------------------------------------------
+
+    def test_a_snippet_carrying_no_text_folds_to_empty(self):
+        # youtube-transcript-api has handed back entries with no "text". The
+        # default in `.get("text", "")` is what keeps that from becoming
+        # `None.casefold()`, and mutants replacing it with None or a
+        # placeholder both survived.
+        folded = _fold_snippets({0.0: {"end": 1.0},
+                                 1.0: {"end": 2.0, "text": "Ein Satz."},
+                                 "_full_text": "x"})
+        assert folded == [("", ""), ("Ein Satz.", "ein satz.")]
+
+    def test_a_textless_snippet_does_not_stop_the_search(self):
+        # The pair. Folding correctly is only useful if the search still
+        # finds the line after it.
+        snippets = {0.0: {"end": 1.0},
+                    1.0: {"end": 2.0, "text": "Ein Satz."},
+                    "_full_text": "x"}
+        assert _find_in_snippets("satz", snippets) == "Ein Satz."
+
+    # -- substring is not a word ---------------------------------------------
+
+    def test_a_word_inside_a_longer_word_is_not_a_match(self):
+        # The pre-filter asks whether the needle appears at all; the regex
+        # then asks whether it appears as a word. A mutant turning that
+        # `and` into `or` returns the line on the substring alone, so
+        # searching "wort" would hand back a sentence about "Antwort".
+        snippets = {0.0: {"end": 1.0, "text": "Die Antwort war lang."},
+                    "_full_text": "x"}
+        assert _find_in_snippets("wort", snippets) is None
+
+    def test_the_same_word_standing_alone_is_a_match(self):
+        # The pair, so the test above cannot be satisfied by a search that
+        # never matches anything.
+        snippets = {0.0: {"end": 1.0, "text": "Ein Wort war lang."},
+                    "_full_text": "x"}
+        assert _find_in_snippets("wort", snippets) == "Ein Wort war lang."
+
+    # -- surface forms --------------------------------------------------------
+
+    def test_an_empty_surface_form_is_never_searched(self):
+        # `if form and ...` drops a falsy form. Turning that `and` into `or`
+        # lets "" through as a candidate, and an empty needle compiles to
+        # `\b\w*`, which matches the first line of anything.
+        #
+        # The match therefore has to be on a LATER line for this to fail.
+        # With it on line one the mutant returns the same answer and the
+        # test passed while proving nothing.
+        snippets = {0.0: {"end": 1.0, "text": "Ein Satz ohne alles."},
+                    1.0: {"end": 2.0, "text": "Ein Wort war lang."},
+                    "_full_text": "x"}
+        assert _find_in_snippets("katze", snippets, ["", "Wort"]) == \
+            "Ein Wort war lang."
+
+    # -- the output directory -------------------------------------------------
+
+    def test_the_output_directory_is_created_with_its_parents(self, monkeypatch,
+                                                              tmp_path):
+        # `mkdir(parents=True)`. Dropping it, or passing False, only fails
+        # when OUTPUT_DIR is more than one level deep, which no test made it.
+        nested = tmp_path / "a" / "b" / "output"
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", nested)
+        path = cards_module._build_output_path("vid123")
+        assert nested.is_dir()
+        assert path.parent == nested
+
+    # -- the notetype name ----------------------------------------------------
+
+    def test_the_model_carries_its_name(self):
+        # Anki matches a notetype by ID, and shows this name in the browser.
+        # A mutant passing None survived.
+        model = cards_module._build_model()
+        assert model.name == cards_module.MODEL_NAME
+        assert model.name.strip() != ""
