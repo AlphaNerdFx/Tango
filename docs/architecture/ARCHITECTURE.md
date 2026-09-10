@@ -3563,6 +3563,55 @@ the note and model builders, the behaviour-changing ones are CSS class names
 default argument every caller overrides. A wrong pill class means unstyled
 pills. None of them moves a field.
 
+#### Driving `cards.py` to 85%
+
+The first pass reported the numbers. A second, on 10 September 2026, set out
+to raise them, on the module that writes the user's deck.
+
+| run | tests added | killed | behaviour-only |
+|---|---|---|---|
+| 1 | baseline | 466 | 75.8% |
+| 2 | the pill budget, the word boundary, the output directory | 484 | 78.7% |
+| 3 | the audio loop, the wrong-sense guard's arguments | 520 | 84.6% |
+| 4 | what each note is handed, and the counters | **524** | **85.1%** |
+
+**The denominator was re-measured at each step rather than carried over.**
+That matters: an earlier figure of 82% in this section was wrong because two
+different categorisers were compared against each other, and the corrected
+baseline was 76%. Run 4's noise count came out at 113, not the 114 assumed
+from run 2, which is why the final figure is 85.1% and not 85.2%.
+
+The tests that moved it are all the same shape: **assert what a function
+hands the thing it calls.** `fetch_audio(url, lemma, language)` had six
+surviving mutants that dropped or nulled an argument, and one test killed
+all six. The wrong-sense guard takes five arguments and had a dozen. Passing
+the wrong one is the exact class CLAUDE.md 8 names, and a lemma where a URL
+belongs downloads nothing while the card silently links out.
+
+Two behaviours found this way were worth having on their own. A failed audio
+download used `continue`, and a mutant turning it into `break` survived: that
+is the difference between one card linking out and every remaining card
+linking out. And a picture that contradicts its card's definition is dropped
+**before** it is fetched, which nothing checked.
+
+#### Four equivalent mutants, all the same shape
+
+None of these can be killed, and each was verified as unkillable rather than
+assumed:
+
+- the name half of `capability_report`'s sort key, shadowed because both
+  loops already append in sorted order;
+- the exact-match half of the spaCy alias lookup, shadowed by the same
+  lookup on the base code;
+- the case comparison in the surface-form guard, shadowed because the search
+  is `IGNORECASE`;
+- the `snippets` argument at both `_find_in_snippets` call sites, shadowed by
+  `lines=`, which is a consequence of the optimization in 8.51.
+
+They are defensive code that a second path already covers. Each is recorded
+as equivalent at the call site, and in two cases a test that could not fail
+was deleted rather than weakened until it passed.
+
 #### Two real gaps, and one that could not be one
 
 Both found by triaging survivors by hand, both user-visible, both now tested.
