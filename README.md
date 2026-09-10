@@ -445,9 +445,10 @@ Windows, macOS and Linux, on low-end and high-end hardware alike.
 | v0.8.2 | an install that looks after itself | released |
 | v0.9.0 | nothing fails without saying why | released |
 | v0.10.0 | runs on any operating system | released |
-| v0.11.0 | images on cards, gated to concrete nouns | **released, on PyPI** |
-| v0.12.0 | runs on modest hardware, and the 1.0 freeze | next |
-| v1.0.0 | a finished CLI | |
+| v0.11.0 | images on cards, gated to concrete nouns | released |
+| v0.12.0 | runs on modest hardware, and the 1.0 freeze | released |
+| v0.12.1 | documentation that matches the repository | **released, on PyPI** |
+| v1.0.0 | a finished CLI | next |
 
 Packaging moved forward three rungs on 27 August 2026, from v0.10.0, after
 an outside review pointed out that the funnel had no top. Card quality,
