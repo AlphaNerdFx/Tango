@@ -14,6 +14,45 @@ rather than list every change.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-09-11
+
+**A finished CLI.**
+
+Installable from a package, running on Windows, macOS and Linux, on low-end
+and high-end hardware alike. `docs/COMPATIBILITY.md` is in force from this
+release: the notetype, the commands, their options, the exit codes, the
+configuration keys, the on-disk schemas and the output filename cannot
+change without a 2.0.0, and a test reads that document and checks it against
+the running code in both directions.
+
+### Added
+
+- **Shell completion**, `--install-completion` and `--show-completion`. The
+  one addition this release carries, and an argued exception to its own
+  no-new-features rule: Typer supplies them for nothing, they were switched
+  off with no recorded reason, and a twelve-command CLI that cannot complete
+  its own subcommand names is not a finished one.
+
+### Fixed
+
+- **The declared Python floor was tested on one platform of three.** CI ran
+  3.10, 3.11 and 3.12 on Linux but only 3.12 on macOS and Windows, so the
+  minimum this project promises was unchecked on two thirds of the platforms
+  it promises it for. Both now run the floor.
+- **Nothing checked the options on the top-level command.** The
+  compatibility test covered four subcommands and skipped `tango` itself, so
+  enabling completion put two options into the frozen surface and every test
+  still passed. It now covers the one command every user types.
+
+### What 1.0.0 does not carry
+
+Recorded rather than forgotten. The base install is 316 MB against a 300 MB
+target set below what the architecture allows, since spaCy and numpy are
+160 MB of it. The dictionary index could shed roughly 20% of its bytes, at
+the cost of a full re-download per language: 288 MB German, 682 MB French,
+278 MB Russian. That is a real price and it is not being paid to meet a
+date.
+
 ## [0.12.1] - 2026-09-11
 
 **Documentation that matches the repository, and two tools that check it.**
