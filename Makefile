@@ -8,6 +8,7 @@
 #   make spacy-model : download the spaCy model for SPACY_LANG (default: en)
 #   make doctor      : report what is installed and what is missing
 #   make benchmark   : time each phase a user waits for, against a threshold
+#   make mutation    : break the code deliberately, see if a test notices
 #   make test        : run unit tests only (no network, no Anki required)
 #   make test-all    : run full suite including integration tests
 #   make coverage    : run unit tests with a per-module coverage report
@@ -71,7 +72,7 @@ CYAN   := \033[36m
 # -- Phony targets ------------------------------------------------------------
 
 .PHONY: all venv install setup spacy-model dictionary antonyms translate-setup translate-stop \
-        test test-all coverage format lint typecheck translate-model doctor benchmark \
+        test test-all coverage format lint typecheck translate-model doctor benchmark mutation \
         run review backlog dist audit clean check-os help
 
 .DEFAULT_GOAL := help
@@ -158,6 +159,21 @@ setup: venv
 # Wall-clock per phase against a threshold each, so a regression that makes
 # something unusable fails rather than waiting for a user to notice. Exits 1
 # when a stage is over its limit, which is what makes it usable in CI.
+# Coverage says a line ran. This says whether anything would have failed if
+# the line were wrong, which is a different question and the one that found
+# the gaps in `tango languages` and the filler stoplist.
+#
+# Slow by nature: the suite runs once per mutant. Modules and the reasoning
+# behind the pair chosen are in [tool.mutmut] in pyproject.toml.
+mutation: venv
+	@case "$$(cd . && pwd -P)" in /mnt/*) \
+	  printf '  This tree is on a Windows drive. A mutation run pays the\n'; \
+	  printf '  import penalty once per mutant, so it will take hours\n'; \
+	  printf '  longer here than on the Linux filesystem. See 8.56.\n\n';; \
+	esac
+	@PYTHONPATH=src $(VENV_PYTHON) -m mutmut run
+	@PYTHONPATH=src $(VENV_PYTHON) -m mutmut results
+
 benchmark: venv
 	@PYTHONPATH=src $(VENV_PYTHON) scripts/benchmark.py
 
