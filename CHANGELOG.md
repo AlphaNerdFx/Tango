@@ -54,9 +54,18 @@ rather than list every change.
   such sounds without their short forms once already.
 
 Both were found by triaging the survivors of a `mutmut` run, not by review.
-`language.py` scored 185 killed of 281 mutants and `cards.py` 466 of 729,
-both about 76% once the survivors that change nothing but a log line, a
-string or an error message are excluded. In `cards.py`, thirteen of the fifteen
+Four rounds of writing tests for survivors and re-running took
+`language.py` from 185 killed of 281 to **212**, and `cards.py` from 466 of
+729 to **536**. Excluding the survivors that change nothing but a log line,
+a string or an error message, that is **87.6%** and **92.6%**; the raw
+scores are 75.4% and 73.5%.
+
+Most of the ground was gained by one kind of test: assert what a function
+hands the thing it calls. `fetch_audio(url, lemma, language)` had six
+survivors that each dropped or nulled an argument, and a single test killed
+all six. Seven other survivors were verified as equivalent mutants, all the
+same shape, a lookup shadowed by the fallback beneath it, and are recorded
+as such at their call sites rather than chased. In `cards.py`, thirteen of the fifteen
 mutants of the function that maps content to card fields were killed and
 both survivors mutate only the separator in an error message, so nothing
 that moves a field survived. ARCHITECTURE
