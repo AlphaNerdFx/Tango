@@ -57,10 +57,9 @@ without being told.
   not the cost of translating a word.
 - One more extra to explain in the README, which is a real cost and a small
   one.
-- **The split landed after v0.11.0 was published**, so `translation-server`
-  is not an extra the released package has. On 0.11.0 the command fails with
-  an unknown extra and `[translation]` still installs the server as it
-  always did. The README says so, and it arrives in v0.12.0.
+- **The split landed after v0.11.0 was published**, so it shipped in
+  v0.12.0. On 0.11.0 and earlier the command fails with an unknown extra and
+  `[translation]` installs the server as it always did.
 
 ## What this does not fix
 
