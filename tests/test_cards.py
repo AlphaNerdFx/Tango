@@ -1721,3 +1721,127 @@ class TestTheImageSenseGuardArguments:
         with patch.object(cards_module.images, "find_images") as find:
             assert cards_module._download_images([], "de") == ({}, {}, [])
         find.assert_not_called()
+
+
+class TestWhatBuildPackageHandsEachNote:
+    """
+    Survivors in `build_package` itself, 10 September 2026.
+
+    The two card loops pass per-word media and image names into the note
+    builders, keyed by the lowercased lemma. Nothing asserted any of those
+    arguments, so mutants nulling them, or looking them up under `None`,
+    survived. A card whose `media_name` arrives as None is a card that
+    silently links out instead of playing its audio.
+    """
+
+    @staticmethod
+    def _result(lemma):
+        return DefinitionResult(lemma, "eine Definition", "Ein Satz.",
+                                "Noch einer.", None, ["syn"], ["ant"],
+                                "noun", "test")
+
+    def test_a_standard_note_is_handed_its_own_media_and_image(self, tmp_path,
+                                                               monkeypatch):
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        seen = {}
+        real = cards_module._build_note
+
+        def spy(result, model, video_id, language, **kw):
+            seen[result.lemma] = kw
+            return real(result, model, video_id, language, **kw)
+
+        monkeypatch.setattr(cards_module, "_build_note", spy)
+        monkeypatch.setattr(cards_module, "_download_audio",
+                            lambda *a, **k: ({"hund": "hund.ogg"}, []))
+        cards_module.build_package(
+            "vid", "Deck", [self._result("Hund")], [], language="de",
+            not_found_audio={}, )
+        assert seen["Hund"]["media_name"] == "hund.ogg"
+        assert seen["Hund"]["ipa"] is None or seen["Hund"]["ipa"] == ""
+
+    def test_a_word_with_no_media_gets_none_not_another_words(self, tmp_path,
+                                                              monkeypatch):
+        # `media_names.get(key)`. A mutant looking it up under `None`
+        # survived, and under a shared key every card would get the same
+        # recording.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        seen = {}
+        real = cards_module._build_note
+
+        def spy(result, model, video_id, language, **kw):
+            seen[result.lemma] = kw
+            return real(result, model, video_id, language, **kw)
+
+        monkeypatch.setattr(cards_module, "_build_note", spy)
+        monkeypatch.setattr(cards_module, "_download_audio",
+                            lambda *a, **k: ({"hund": "hund.ogg"}, []))
+        cards_module.build_package(
+            "vid", "Deck", [self._result("Hund"), self._result("Katze")], [],
+            language="de")
+        assert seen["Hund"]["media_name"] == "hund.ogg"
+        assert seen["Katze"]["media_name"] is None
+
+    def test_every_skipped_word_is_counted(self, tmp_path, monkeypatch):
+        # `skipped_count += 1`. A mutant assigning 1 survived, so three
+        # dropped words reported as one. The count is what the run summary
+        # tells the user.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        result = cards_module.build_package(
+            "vid", "Deck", [], ["eins", "zwei", "drei"], language="de")
+        assert result.skipped_count == 3
+        assert result.fallback_count == 0
+
+    def test_every_fallback_card_is_counted(self, tmp_path, monkeypatch):
+        # The pair, and `fallback_count += 1` had the same mutant. A
+        # fallback needs a transcript example to exist at all.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        snippets = {0.0: {"end": 1.0, "text": "Eins zwei drei zusammen."},
+                    "_full_text": "x"}
+        result = cards_module.build_package(
+            "vid", "Deck", [], ["eins", "zwei", "drei"], language="de",
+            snippets=snippets)
+        assert result.fallback_count == 3
+        assert result.skipped_count == 0
+
+    def test_one_skipped_word_does_not_abandon_the_rest(self, tmp_path,
+                                                        monkeypatch):
+        # The `continue` in the fallback loop. Turned into `break`, the
+        # first word with no example ends the loop and every later word
+        # loses its card too.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        snippets = {0.0: {"end": 1.0, "text": "Nur zwei steht hier."},
+                    "_full_text": "x"}
+        result = cards_module.build_package(
+            "vid", "Deck", [], ["eins", "zwei"], language="de",
+            snippets=snippets)
+        assert result.fallback_count == 1
+        assert result.skipped_count == 1
+
+    def test_a_fallback_card_carries_the_sentence_from_the_video(self, tmp_path,
+                                                                  monkeypatch):
+        # A fallback card has no definition, so the transcript sentence is
+        # the only context it carries and the reason the card is worth
+        # making at all. Read back out of the built package rather than
+        # inferred from a count.
+        #
+        # This began as a test that the snippets argument reaches
+        # `_find_in_snippets`, which cannot be tested: both call sites also
+        # pass `lines=`, and that shadows the argument entirely.
+        monkeypatch.setattr(cards_module, "OUTPUT_DIR", tmp_path)
+        snippets = {0.0: {"end": 1.0, "text": "Das Wort steht hier."},
+                    "_full_text": "x"}
+        result = cards_module.build_package(
+            "vid", "Deck", [], ["wort"], language="de", snippets=snippets)
+        assert result.fallback_count == 1
+
+        import sqlite3, tempfile, zipfile
+        with zipfile.ZipFile(result.path) as z:
+            tmp = tempfile.mkdtemp()
+            name = ("collection.anki21" if "collection.anki21" in z.namelist()
+                    else "collection.anki2")
+            z.extract(name, tmp)
+        con = sqlite3.connect(Path(tmp) / name)
+        fields = con.execute("select flds from notes").fetchone()[0].split("\x1f")
+        con.close()
+        assert fields[cards_module.FIELDS.index("Example from Youtube Video")] == \
+            "Das Wort steht hier."
