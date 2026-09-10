@@ -330,3 +330,43 @@ class TestAMalformedValueIsReportedNotRaised:
         monkeypatch.setenv("API_TIMEOUT", "")
         assert config._env_float("API_TIMEOUT", "8") == 8.0
         assert config.MALFORMED_ENV_VALUES == {}
+
+
+class TestTheSlowFilesystemWarning:
+    """
+    An install on a Windows drive under WSL is 20x slower to import.
+
+    Measured 10 September 2026: importing spaCy took 44 seconds from a
+    virtualenv under `/mnt/c` and 2.2 seconds from one on the Linux
+    filesystem, same package, same machine. `tango --version` took 46
+    seconds. Nothing in the code can fix it, so `tango doctor` reports it:
+    a user whose every command takes 45 seconds will blame the tool, and the
+    cause is invisible from the symptom.
+    """
+
+    def test_a_windows_drive_under_wsl_is_reported(self, monkeypatch):
+        monkeypatch.setattr(config, "is_wsl", lambda: True)
+        monkeypatch.setattr(config.sys, "prefix", "/mnt/c/proj/.tangovenv")
+        warning = config.slow_filesystem_warning()
+        assert warning and "Windows drive" in warning
+
+    def test_the_linux_filesystem_under_wsl_is_fine(self, monkeypatch):
+        # The pair. A check that fired on WSL alone would tell every WSL user
+        # to move an install that is already in the right place.
+        monkeypatch.setattr(config, "is_wsl", lambda: True)
+        monkeypatch.setattr(config.sys, "prefix", "/home/someone/proj/.tangovenv")
+        assert config.slow_filesystem_warning() is None
+
+    def test_a_mnt_path_off_wsl_is_fine(self, monkeypatch):
+        # The other half of the pair. /mnt is an ordinary mount point on
+        # native Linux and says nothing about speed there.
+        monkeypatch.setattr(config, "is_wsl", lambda: False)
+        monkeypatch.setattr(config.sys, "prefix", "/mnt/data/proj/.tangovenv")
+        assert config.slow_filesystem_warning() is None
+
+    def test_the_warning_names_the_fix(self, monkeypatch):
+        # Reporting a problem without the next step is the failure mode
+        # v0.9.0 existed to remove.
+        monkeypatch.setattr(config, "is_wsl", lambda: True)
+        monkeypatch.setattr(config.sys, "prefix", "/mnt/c/proj/.tangovenv")
+        assert "Reinstall" in config.slow_filesystem_warning()
