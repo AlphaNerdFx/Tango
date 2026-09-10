@@ -7,6 +7,7 @@
 #   make install     : install package and all dependencies into venv
 #   make spacy-model : download the spaCy model for SPACY_LANG (default: en)
 #   make doctor      : report what is installed and what is missing
+#   make benchmark   : time each phase a user waits for, against a threshold
 #   make test        : run unit tests only (no network, no Anki required)
 #   make test-all    : run full suite including integration tests
 #   make coverage    : run unit tests with a per-module coverage report
@@ -70,7 +71,7 @@ CYAN   := \033[36m
 # -- Phony targets ------------------------------------------------------------
 
 .PHONY: all venv install setup spacy-model dictionary antonyms translate-setup translate-stop \
-        test test-all coverage format lint typecheck translate-model doctor \
+        test test-all coverage format lint typecheck translate-model doctor benchmark \
         run review backlog dist audit clean check-os help
 
 .DEFAULT_GOAL := help
@@ -154,6 +155,12 @@ setup: venv
 # said everything missing was optional read as a broken tool. Since
 # 9 September 2026 doctor only fails when something stops a run, so the
 # failure is worth surfacing.
+# Wall-clock per phase against a threshold each, so a regression that makes
+# something unusable fails rather than waiting for a user to notice. Exits 1
+# when a stage is over its limit, which is what makes it usable in CI.
+benchmark: venv
+	@PYTHONPATH=src $(VENV_PYTHON) scripts/benchmark.py
+
 doctor: venv
 	@PYTHONPATH=src $(VENV_PYTHON) -m pipeline doctor
 
