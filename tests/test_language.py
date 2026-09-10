@@ -587,6 +587,24 @@ class TestSurvivorsFoundByMutationTesting:
             "a language that cannot make cards is listed above one that can")
 
 
+    def test_the_norwegian_alias_resolves_to_the_model_that_exists(self):
+        # spaCy ships nb_core_news_sm and nothing under "no", so
+        # _SPACY_CODE_ALIASES maps one to the other. Nothing exercised it,
+        # and mutants of both alias lookups survived.
+        assert get_spacy_model("no") == "nb_core_news_sm"
+        assert get_spacy_model("nb") == "nb_core_news_sm"
+
+    def test_the_alias_applies_to_a_regional_variant_too(self):
+        # The second lookup, on the base code. "no-NO" reaches the alias
+        # only after the regional suffix is dropped, which is a different
+        # branch from the one above and had its own surviving mutant.
+        assert get_spacy_model("no-NO") == "nb_core_news_sm"
+
+    def test_an_unaliased_code_is_left_alone(self):
+        # The pair. A lookup that rewrote every code, or returned the alias
+        # target regardless, would satisfy the two tests above.
+        assert get_spacy_model("de") == "de_core_news_sm"
+
     def test_a_filler_sound_brings_its_collapsed_spelling(self):
         # A lemma is matched by collapsing runs of three or more to one, so
         # a sound written only in its doubled form is unreachable from its
