@@ -54,9 +54,25 @@ warnings.filterwarnings(
     category=UserWarning,
 )
 
-# noqa: E402 throughout -- these must follow the filter above to take effect.
-import spacy  # noqa: E402,I001
-from spacy.language import Language  # noqa: E402
+# spaCy is imported inside the two functions that use it, not here.
+#
+# Importing it costs 1.2 seconds on a native filesystem and 44 on a venv
+# sitting on a Windows drive under WSL, and `import pipeline.nlp` is on the
+# path of every command through `__main__`. So `tango --version` was loading
+# 1208 modules, spaCy and genanki among them, to print a version string.
+# Measured 10 September 2026 by scripts/benchmark.py.
+#
+# `Language` is only ever an annotation, and this module has
+# `from __future__ import annotations`, so it is a string at runtime and is
+# needed only for type checking.
+#
+# The CUDA warning filter above still applies: `warnings.filterwarnings` is
+# global and persists, so it is in effect whenever the deferred import runs.
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # pragma: no cover
+    from spacy.language import Language
+
 from pipeline import wiktdata
 from pipeline.language import (  # noqa: E402
     # Re-exported on purpose: `get_spacy_model` raises it, and a caller of
@@ -122,6 +138,8 @@ def _get_model(language: str = "en") -> Language:
     if model_name not in _nlp_models:
         logger.debug("Loading spaCy model: %s", model_name)
         try:
+            import spacy
+
             _nlp_models[model_name] = spacy.load(model_name)
             logger.info("spaCy model loaded: %s", model_name)
         except OSError as exc:
@@ -149,6 +167,8 @@ def is_model_installed(language: str) -> bool:
         know whether the run can proceed, and both answers are "no".
     """
     try:
+        import spacy.util
+
         return bool(spacy.util.is_package(get_spacy_model(language)))
     except Exception:
         return False
