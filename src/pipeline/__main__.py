@@ -1201,7 +1201,11 @@ def _run_setup_wizard() -> None:
 app = typer.Typer(
     name="tango",
     help="YouTube transcripts to Anki flashcard packages.",
-    add_completion=False,
+    # Typer provides --install-completion and --show-completion for free,
+    # and a twelve-command CLI is the kind that wants them. This was off
+    # with no recorded reason; turning it on is the one addition v1.0.0
+    # carries, argued in ROADMAP's v1.0.0 rung.
+    add_completion=True,
     no_args_is_help=True,
     context_settings={"help_option_names": ["-h", "--help"]},
 )
