@@ -591,6 +591,12 @@ def get_spacy_model(language_code: str) -> str:
             language or its base code, even after alias normalisation.
     """
     code = language_code.strip().lower()
+    # Shadowed by the same lookup on the base code below, and therefore an
+    # equivalent mutant: no alias key contains a region suffix, so any code
+    # this rewrites the base branch would rewrite too. Verified rather than
+    # assumed on 10 September 2026 after a mutation run flagged it. Kept
+    # because it stops depending on that, the moment an alias like "zh-yue"
+    # is added.
     code = _SPACY_CODE_ALIASES.get(code, code)
     if code in SPACY_MODELS:
         return _apply_size_override(SPACY_MODELS[code])
