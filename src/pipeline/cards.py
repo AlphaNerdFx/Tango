@@ -921,6 +921,12 @@ def _find_in_snippets(
     """
     candidates = [lemma]
     for form in surface_forms or []:
+        # The case comparison is belt and braces: the search below is
+        # IGNORECASE, so a candidate differing from the lemma only in case
+        # can never change the answer, only cost a second pass. A mutation
+        # run on 10 September 2026 flagged it as a survivor and it is an
+        # equivalent mutant rather than a test gap. The `and` is not: it
+        # keeps an empty form out, and an empty needle matches everything.
         if form and form.lower() != lemma.lower():
             candidates.append(form)
 
