@@ -64,7 +64,7 @@ behind that. With one remote named `origin`, that command resolves and
 answers honestly. `git status -sb` still names the upstream and is still the
 better habit.
 
-**Test state, measured 10 September 2026:** 1354 passing, 0 failing, 33
+**Test state, measured 11 September 2026:** 1402 passing, 0 failing, 33
 integration deselected (`make check`, exit 0). It was 972 at v0.6.0 and 1204
 before the September audit and the v0.12.0 work, which added 142.
 **Coverage, measured 9 September 2026:** 89% overall, 3710 statements, 400
