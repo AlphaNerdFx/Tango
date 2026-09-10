@@ -1161,6 +1161,10 @@ def build_package(
             logger.debug("Skipping duplicate fallback note for '%s'.", lemma)
             continue
         transcript_example = (
+            # `snippets` is shadowed here by `lines`, which is why a mutant
+            # nulling it survives: the fold has already been done. It stays
+            # because the parameter is not optional and callers that do not
+            # pre-fold still need it. ARCHITECTURE 8.51.
             _find_in_snippets(lemma, snippets, (surface_forms or {}).get(key),
                               lines=folded_snippets)
             if snippets else None
