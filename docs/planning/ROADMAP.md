@@ -701,6 +701,35 @@ deliver something a user can run.
 Dropped from the old rung: backfilling GitHub release notes for v0.4.1 to
 v0.4.5, which was done on 3 September 2026. All twenty-one tags have notes.
 
+### v0.12.1: Documentation that matches the repository
+
+A patch rung, and it exists for one reason: **the README is also the PyPI
+description, and PyPI freezes it at upload.** v0.12.0 was tagged and, before
+it was published, an audit found four ADR citations pointing at `docs/`
+rather than `docs/adr/`, a structure tree still listing three documents at
+the repository root five months after they moved, a module list ten of
+fifteen long, and a line promising the `translation-server` extra "arrives in
+v0.12.0" on the page that would have announced v0.12.0.
+
+Publishing that would have burned every one of them onto a page nobody can
+edit. v0.8.1 exists for exactly this reason and cost a release; this cost a
+patch number instead.
+
+The worst finding was not in a document at all. A user-facing error told
+people to read `docs/languages.txt`, which has never existed here. That is
+the v0.7.0 flag-removal class again: an instruction that cannot be followed,
+with nothing failing when it stopped working.
+
+Two guards came out of it, both in `test_hard_constraints.py`:
+
+- a document or message naming a file that is not there fails the build, and
+  it caught a mistake in the corrected structure tree within a minute;
+- the README's roadmap table must agree with `__version__`, because a "next"
+  marker is a live claim on a frozen page. The published v0.11.0 page still
+  says v0.9.0 is next and always will.
+
+---
+
 ### v1.0.0: A finished CLI
 
 A fully-fledged, optimized command-line tool that installs from a package,
