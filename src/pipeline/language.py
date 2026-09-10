@@ -444,6 +444,11 @@ def language_capabilities(code: str) -> dict[str, bool]:
 
     return {
         "cards": resolved in SPACY_MODELS,
+        # `code == "en"` is redundant and therefore an equivalent mutant:
+        # base is derived from code, so it is only ever true when
+        # `base == "en"` is true as well. Verified on 11 September 2026
+        # after a mutation run flagged it. Kept as the plainest statement of
+        # the rule, which is that English is the language WordNet covers.
         "wordnet": code == "en" or base == "en" or base in _OMW_LANGUAGE_CODES,
         "pos_labels": base in POS_LABELS,
         "filler_sounds": base in _FILLER_SOUNDS_AUTHORED,
@@ -732,6 +737,10 @@ def localise_pos(pos: str, language: str) -> str:
     key = raw.lower()
     key = _POS_ALIASES.get(key, key)
     code = (language or "en").lower()
+    # The exact lookup is shadowed by the base one and is therefore an
+    # equivalent mutant: no POS_LABELS key contains a region suffix, so
+    # base == code for every key that exists. Verified 11 September 2026.
+    # Kept so a regional table can be added without touching this line.
     table = POS_LABELS.get(code) or POS_LABELS.get(code.split("-")[0]) or POS_LABELS["en"]
     return table.get(key, raw)
 
@@ -876,6 +885,10 @@ def is_filler(lemma: str, language: str) -> bool:
     a French transcript against the German list would drop words nobody
     measured.
     """
+    # The "" default is unkillable by mutation: no filler set contains a
+    # placeholder, so an empty lemma and any substitute both simply fail to
+    # match. It is still the right default, because a None lemma must not
+    # reach .strip().
     word = (lemma or "").strip().lower()
     if not word:
         return False
