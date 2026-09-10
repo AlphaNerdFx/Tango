@@ -71,7 +71,7 @@ def mock_spacy_model():
     Patch spacy.load so no real model is needed.
     Returns the mock model object for test configuration.
     """
-    with patch("pipeline.nlp.spacy.load") as mock_load:
+    with patch("spacy.load") as mock_load:
         mock_model = MagicMock()
         mock_load.return_value = mock_model
         yield mock_model
@@ -250,27 +250,27 @@ class TestProcessTranscript:
             process_transcript("   \n\t  ")
 
     def test_raises_on_model_not_found(self):
-        with patch("pipeline.nlp.spacy.load", side_effect=OSError("model not found")):
+        with patch("spacy.load", side_effect=OSError("model not found")):
             with pytest.raises(NLPModelNotFoundError):
                 process_transcript("some text")
 
     def test_model_loaded_once_across_calls(self, mock_spacy_model):
         """Lazy loading: spacy.load must be called exactly once."""
         mock_spacy_model.return_value = _make_doc(SAMPLE_TOKENS)
-        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+        with patch("spacy.load", return_value=mock_spacy_model) as mock_load:
             process_transcript("first call")
             process_transcript("second call")
             mock_load.assert_called_once()
 
     def test_defaults_to_english_model_when_language_omitted(self, mock_spacy_model):
         mock_spacy_model.return_value = _make_doc([])
-        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+        with patch("spacy.load", return_value=mock_spacy_model) as mock_load:
             process_transcript("some text")
             mock_load.assert_called_once_with("en_core_web_sm")
 
     def test_passes_correct_model_for_requested_language(self, mock_spacy_model):
         mock_spacy_model.return_value = _make_doc([])
-        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+        with patch("spacy.load", return_value=mock_spacy_model) as mock_load:
             process_transcript("un texte", language="fr")
             # "md", not "sm" -- French is pinned to the medium model, see
             # issue #13. Other languages still default to "sm".
@@ -286,7 +286,7 @@ class TestProcessTranscript:
         # model, and vice versa -- each language gets its own spacy.load
         # call, not a single shared global.
         mock_spacy_model.return_value = _make_doc([])
-        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+        with patch("spacy.load", return_value=mock_spacy_model) as mock_load:
             process_transcript("some text", language="en")
             process_transcript("un texte", language="fr")
             assert mock_load.call_count == 2
@@ -295,7 +295,7 @@ class TestProcessTranscript:
 
     def test_same_language_reuses_cached_model(self, mock_spacy_model):
         mock_spacy_model.return_value = _make_doc([])
-        with patch("pipeline.nlp.spacy.load", return_value=mock_spacy_model) as mock_load:
+        with patch("spacy.load", return_value=mock_spacy_model) as mock_load:
             process_transcript("premier texte", language="fr")
             process_transcript("deuxième texte", language="fr")
             mock_load.assert_called_once_with("fr_core_news_md")
@@ -742,6 +742,14 @@ class TestPartsOfSpeechOutParameter:
 # the POS filter because the tagger calls them nouns and adverbs in the
 # sentences they appear in, so the tokens below are tagged the way spaCy
 # actually tagged them, not INTJ.
+
+# These patch `spacy.load` rather than `pipeline.nlp.spacy.load`. nlp.py used
+# to import spaCy at module level, so the name was an attribute of it and the
+# tests reached through the re-export. The import is deferred now, because
+# `import pipeline.nlp` sits on the path of every command and spaCy costs
+# 1.2 seconds natively and 44 on a venv on a Windows drive, so `tango
+# --version` was loading 1208 modules to print a string. `load` lives on the
+# library, so that is where these patch it.
 
 class TestFillerSounds:
 
