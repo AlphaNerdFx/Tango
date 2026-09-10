@@ -27,6 +27,11 @@ from pipeline.config import DECK_ID, KNOWN_ENV_KEYS, MODEL_ID
 DOC = Path(__file__).resolve().parent.parent / "docs" / "COMPATIBILITY.md"
 
 
+def doc_text() -> str:
+    """The document, for tests that are not using the fixture."""
+    return DOC.read_text(encoding="utf-8")
+
+
 @pytest.fixture(scope="module")
 def doc() -> str:
     return DOC.read_text(encoding="utf-8")
@@ -146,6 +151,31 @@ class TestTheOptionSurface:
                 missing.append(f"{name}: {sorted(opts - {'--help'})}")
         assert not missing, (
             "These take options that nothing freezes:\n  " + "\n  ".join(missing))
+
+    def test_the_top_level_options_are_the_ones_frozen(self):
+        """
+        The option table covers subcommands; this covers `tango` itself.
+
+        Nothing checked the top-level options until 11 September 2026, so
+        enabling shell completion added two to the public surface and every
+        compatibility test still passed. That is the unmade-promise
+        direction, on the one command every user types.
+        """
+        body = _section(doc_text(), "3. Options")
+        stated = set(re.findall(r"`(--[a-z-]+)`", body.split("Frozen on the top-level")[1]))
+
+        cli = typer.main.get_command(main_module.app)
+        live = {o for p in cli.params for o in list(p.opts) + list(p.secondary_opts)
+                if o.startswith("--")}
+        # Click supplies --help through context_settings rather than as a
+        # declared parameter, so collecting params alone misses it and the
+        # document looks wrong when it is right.
+        live |= {o for o in main_module.app.info.context_settings["help_option_names"]
+                 if o.startswith("--")}
+
+        assert stated == live, (
+            f"only in the document: {sorted(stated - live)}\n"
+            f"only on the command line: {sorted(live - stated)}")
 
     def test_help_has_its_short_alias(self):
         assert "-h" in main_module.app.info.context_settings["help_option_names"]
