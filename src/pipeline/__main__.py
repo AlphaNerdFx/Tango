@@ -33,7 +33,8 @@ import logging
 import os
 import re
 import shutil
-import subprocess  # nosec B404 - one call, list form, see _run_install_model
+import subprocess
+import textwrap  # nosec B404 - one call, list form, see _run_install_model
 import sys
 import time
 from types import SimpleNamespace
@@ -53,7 +54,7 @@ from pipeline import (
 )
 from pipeline.translation import reset_warning_state
 
-from pipeline.config import MW_RATE_LIMIT, unknown_env_keys
+from pipeline.config import MW_RATE_LIMIT, slow_filesystem_warning, unknown_env_keys
 from pipeline.config import is_wsl as config_is_wsl
 from pipeline.definition import reset_circuit_breaker
 from pipeline.language import (
@@ -1680,6 +1681,18 @@ def _run_doctor() -> int:
     print("  Tango environment")
     print(f"    project root   {PROJECT_ROOT}")
     print(f"    database       {DB_PATH}  {'(exists)' if DB_PATH.exists() else '(will be created)'}")
+
+    # Not counted as missing: nothing is absent and nothing needs installing.
+    # It is reported because a user whose every command takes 45 seconds will
+    # reasonably blame the tool, and the cause is invisible from the symptom.
+    slow = slow_filesystem_warning()
+    if slow:
+        # textwrap, not _wrap_words: that one joins with commas because it
+        # lays out word lists, and this is a sentence.
+        head, _, rest = slow.partition(", ")
+        print(f"    {YELLOW}install        {head}{RESET}")
+        for line in textwrap.wrap(rest, width=60):
+            print(f"                   {DIM}{line}{RESET}")
 
     # A setting nothing reads is the quietest failure there is: it looks
     # applied and does nothing. Reported here because doctor is where
