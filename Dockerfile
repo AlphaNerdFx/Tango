@@ -3,7 +3,7 @@
 # Built for the "just run it" case: no Python setup, no virtualenv, no spaCy
 # download step. One image, one command.
 #
-#   docker pull yousseflarbi/tango:0.12.1
+#   docker pull yousseflarbi/tango:1.0.0
 #   docker run --rm -v "$PWD/data:/data" yousseflarbi/tango run <video-id> --deck "French"
 #
 # Or build it yourself, which is the same thing since the image installs the
@@ -48,7 +48,7 @@ RUN apt-get update \
 
 # Build from the published package rather than the source tree: it is the
 # thing users actually install, so the image tests the same artifact.
-ARG TANGO_VERSION=0.12.1
+ARG TANGO_VERSION=1.0.0
 RUN pip install --no-cache-dir "tango-anki==${TANGO_VERSION}" \
  && python -m spacy download en_core_web_sm
 
