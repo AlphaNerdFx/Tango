@@ -92,7 +92,31 @@ Run the formatter and linter before committing.
 make format
 make lint
 make coverage    # per-module line coverage
+make audit       # bandit and pip-audit
 ```
+
+Two slower checks, neither of them part of `make check`, both worth running
+when you change something they cover.
+
+```bash
+make benchmark   # time each phase a user waits for, against a threshold
+make mutation    # break the code deliberately, see if a test notices
+```
+
+`make benchmark` exits 1 when a phase is over its limit. Each one runs in a
+fresh interpreter, because import cost is the first thing a user waits for.
+
+`make mutation` asks the question coverage cannot: not whether a line ran,
+but whether anything would have failed if it were wrong. It is slow, since
+the suite runs once per mutant, and much slower from a virtualenv on a
+Windows drive under WSL. The target says so when it detects one.
+
+If a mutant survives, the test is usually the thing to fix, not the mutant.
+Some cannot be killed at all: seven in this repository are lookups shadowed
+by the fallback beneath them, and each is recorded as such at its call site.
+Check that a survivor is genuinely unkillable by running the mutation
+against the real function before concluding it, rather than reasoning about
+it.
 
 ### Verifying a release
 
