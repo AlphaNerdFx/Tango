@@ -1129,7 +1129,14 @@ class TestTheDocumentationAgreesWithTheCode:
         skip = ("http", "www", "~", "/mnt", "/tmp", "/usr", "/home", "site-packages",
                 "argostranslate/", "kaikki.org", "github.com", ".docker/")
 
-        targets = list(root.glob("*.md")) + list(root.glob("docs/**/*.md"))
+        # CHANGELOG.md is exempt, and by principle rather than convenience.
+        # A changelog records what changed, so it names paths precisely
+        # because they are gone: the entry for this test names both
+        # `docs/languages.txt` and the malformed `CLAUDE.md/ARCHITECTURE.md`
+        # it removed. Every other document gives current instructions, and
+        # an instruction naming a file that is not there cannot be followed.
+        targets = [f for f in root.glob("*.md") if f.name != "CHANGELOG.md"]
+        targets += list(root.glob("docs/**/*.md"))
         targets += list(root.glob("src/pipeline/*.py"))
 
         missing = []
