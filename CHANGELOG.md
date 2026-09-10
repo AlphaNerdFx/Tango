@@ -14,6 +14,55 @@ rather than list every change.
 
 ## [Unreleased]
 
+### Added
+
+- **`make benchmark`**, which times each phase a user waits for against a
+  threshold for each and exits 1 when one is over, so a regression that makes
+  something unusable fails rather than waiting for someone to notice. Each
+  phase runs in a fresh interpreter, because import cost is the first thing a
+  user waits for and a benchmark that imports once and loops reports a number
+  nobody experiences. ARCHITECTURE 8.56.
+- **`tango doctor` reports an install on a Windows drive under WSL.** Imports
+  are roughly 20x slower there: measured 44 seconds against 2.2 for the same
+  package on the Linux filesystem, same machine. No code change can fix it,
+  so it is reported with the remedy. It fires only under WSL and only for a
+  prefix under `/mnt/`, since `/mnt` is an ordinary mount point elsewhere.
+
+### Changed
+
+- **`tango --version` loaded 1208 modules, and now loads 547.** `__main__`
+  pulled in spaCy through `nlp` and genanki through `cards`, both at module
+  level, so printing a version string loaded a language pipeline and a deck
+  writer. Both are used only inside function bodies; every other mention is
+  an annotation, and both modules have `from __future__ import annotations`.
+  The imports moved into the six functions that call them.
+
+  On a virtualenv on a Windows drive that took `tango --version` from
+  **45.94s to 3.98s**. The spaCy half is almost all of it; genanki was worth
+  0.26s, measured by a controlled A/B after a first reading across separate
+  runs wrongly showed no difference.
+
+### Fixed
+
+- **`tango languages` had no test for the order it prints.** The table puts
+  languages that can produce cards first, and a mutant replacing the sort key
+  with `None` survived a mutation run. Sorted plainly, four languages that
+  cannot make a card lead the table.
+- **Filler-sound collapsing had no test.** A lemma is matched by collapsing
+  runs of three or more letters to one, so a sound written only in its
+  doubled form is unreachable from its own elongation. Russian shipped three
+  such sounds without their short forms once already.
+
+Both were found by triaging the survivors of a `mutmut` run, not by review.
+`language.py` scored 185 killed of 281 mutants and `cards.py` 466 of 729,
+76% and 82% once the survivors that change nothing but a log line, a string
+or an error message are excluded. In `cards.py`, thirteen of the fifteen
+mutants of the function that maps content to card fields were killed and
+both survivors mutate only the separator in an error message, so nothing
+that moves a field survived. ARCHITECTURE
+8.57 records the two gaps, one equivalent mutant that no test can kill, and
+a near miss where a simulation disagreed with the real function.
+
 ## [0.12.0] - 2026-09-10
 
 **Runs on modest hardware, and says so when it has not worked.**
