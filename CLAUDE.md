@@ -37,7 +37,10 @@ IP someone read as the shipped default lived in an uncommitted `.env`. WSL
 is now detected and handled by retrying rather than by a different default
 (ARCHITECTURE 8.45). The `/mnt/c` path translation in `__main__.py` is
 already conditional on `is_wsl()`.
-**Current tag:** v0.12.0, runs on modest hardware, tagged 10 September 2026.
+**Current tag:** v0.12.1, tagged 11 September 2026. v0.12.0's rung and
+everything below still describes it; this release adds a documentation audit
+and is the first of the pair to reach PyPI. It was cut separately because the
+README is also the PyPI description and PyPI freezes it at upload.
 The rung's targets are measured rather than asserted: peak resident memory
 564 MB against a 1 GB target, an index build inside 38 MB against 2 GB, and
 a full run on 4 GB and 2 cores. The base install is 316 MB against a 300 MB
