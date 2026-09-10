@@ -253,7 +253,8 @@ def resolve_language_code(
         f"  Either rename your deck to a language name (e.g. 'French', 'Deutsch'),\n"
         f"  or pass the language code explicitly:\n"
         f"    tango run <id> --deck \"{deck_name or 'MyDeck'}\" --language fr\n"
-        f"  Supported codes: fr, es, de, ja, zh-CN, ar, and more (see docs/languages.txt)"
+        f"  Supported codes: fr, es, de, ja, zh-CN, ar, and more.\n"
+        f"  Run 'tango languages' for the full list and what each one can do."
     )
 
 
