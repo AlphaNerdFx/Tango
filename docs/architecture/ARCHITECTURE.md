@@ -19,6 +19,8 @@ thread pool, described in the design patterns section below.
 ```
 Tango/
 ├── .github/
+│   ├── workflows/
+│   │   └── ci.yml                  the suite on Linux, macOS and Windows
 │   └── ISSUE_TEMPLATE/
 │       ├── bug_report.md
 │       ├── feature_request.md
@@ -32,14 +34,16 @@ Tango/
 │   ├── Code_Walkthrough.pdf
 │   ├── Initial Python Libraries and APIs.pdf
 │   ├── Prototype Diagram.pdf
-│   ├── adr/                        the live ADRs, 008 to 011
-│   ├── architecture/               this file
-│   ├── planning/                   ROADMAP.md, TASKS.md
-│   ├── sessions/                   SESSION.md, HANDOVER.md
-│   ├── history/                    OPERATING_RULES.md
-│   └── assets/                     diagrams and icons, referenced by docs
+│   ├── COMPATIBILITY.md             what v1.0.0 freezes, and the deprecation policy
+│   ├── DOCKERHUB.md                 the Docker Hub page text, kept here to be reviewable
+│   ├── adr/                         the live ADRs, 008 to 014
+│   ├── architecture/                this file
+│   ├── planning/                    ROADMAP.md, TASKS.md
+│   ├── sessions/                    SESSION.md, HANDOVER.md
+│   ├── history/                     OPERATING_RULES.md, CODE_AUDIT_2026-09.md
+│   └── assets/                      diagrams and icons, referenced by docs
 ├── src/
-│   └── pipeline/                   the only thing in src/, deliberately
+│   └── pipeline/                    the only thing in src/, deliberately
 │       ├── __init__.py
 │       ├── __main__.py
 │       ├── config.py
@@ -51,45 +55,42 @@ Tango/
 │       ├── translation.py
 │       ├── cards.py
 │       ├── media.py
+│       ├── images.py
 │       ├── wiktdata.py
 │       ├── antonyms.py
 │       └── state.py
-├── tests/
-│   ├── test_transcript.py
-│   ├── test_language.py
-│   ├── test_nlp.py
-│   ├── test_deck.py
-│   ├── test_definition.py
-│   ├── test_translation.py
-│   ├── test_cards.py
-│   ├── test_wiktdata.py
-│   ├── test_antonyms.py
-│   ├── test_media.py
-│   ├── test_config.py
-│   ├── test_hard_constraints.py
-│   ├── test_state.py
-│   ├── conftest.py
-│   └── test_main.py
-├── output/                         generated .apkg files, gitignored
-├── dictionaries/                   offline Wiktionary indexes, gitignored
-├── .tangovenv/                     virtual environment, gitignored
-├── .env                            secrets and config, gitignored
+├── tests/                           conftest.py plus one file per module
+│   ├── conftest.py                  fixtures, and the outbound-network guard
+│   ├── test_hard_constraints.py     the six constraints, and the doc guards
+│   ├── test_compatibility.py        reads docs/COMPATIBILITY.md, checks both ways
+│   └── ...                          fifteen more, one per module
+├── scripts/                         measurement and release tooling
+│   ├── benchmark.py                 make benchmark
+│   ├── coverage_matrix.py           the language sweep
+│   ├── measure_footprint.py         peak RSS per stage
+│   ├── measure_antonym_sources.py
+│   ├── measure_image_sources.py
+│   ├── check_pins.py
+│   ├── pypi_readme.py               badge pinning for an upload
+│   └── verify-release.sh
+├── output/                          generated .apkg files, gitignored
+├── dictionaries/                    offline Wiktionary indexes, gitignored
+├── .tangovenv/                      virtual environment, gitignored
+├── .env                             secrets and config, gitignored
 ├── .gitignore
-├── pipeline.db                     SQLite state, gitignored
-├── review.json                     deferred queue words, gitignored
+├── pipeline.db                      SQLite state, gitignored
+├── review.json                      deferred queue words, gitignored
 ├── Makefile
 ├── pyproject.toml
 ├── requirements.txt
 ├── requirements-dev.txt
 ├── README.md
+├── CHANGELOG.md
+├── CLAUDE.md
 ├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md
 ├── SECURITY.md
-├── LICENSE
-├── CLAUDE.md
-├── SESSION.md
-├── TASKS.md
-└── ARCHITECTURE.md
+└── LICENSE
 ```
 
 The `src/` layout is deliberate. Without it, Python can import the package from
@@ -3710,7 +3711,7 @@ field.
 offline Wiktionary index takes French definitions from 0% to 95%. What
 follows is the evaluation that led there.
 
-ADR-008 (`docs/ADR-008-per-language-dictionary-sources.md`) evaluated real
+ADR-008 (`docs/adr/ADR-008-per-language-dictionary-sources.md`) evaluated real
 alternatives for the remaining gap. Wiktionary's raw wikitext API
 (`action=parse&prop=wikitext`, distinct from the REST endpoint 8.13 uses)
 is the only one confirmed to return real native-language definitions --
