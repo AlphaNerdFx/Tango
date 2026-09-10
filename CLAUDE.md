@@ -852,6 +852,9 @@ docs/SAD_v0.4.0.pdf                 System architecture
 docs/SRD_v0.4.0.pdf                 Software requirements, CLI spec, schemas
 docs/PRD_v0.4.0.pdf                 Product requirements, user stories
 docs/Code_Walkthrough.pdf           Function-by-function explanation
+docs/Prototype Diagram.pdf          The original prototype sketch
+docs/Initial Python Libraries and APIs.pdf
+                                    The library survey this project started from
 ```
 
 Code comments still cite documents by bare name, `ARCHITECTURE.md 8.45` and
