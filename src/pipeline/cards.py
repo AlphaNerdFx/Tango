@@ -33,9 +33,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from collections.abc import Callable
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
-import genanki
+# genanki is imported inside the four functions that build something with
+# it, not here. It costs 1.17 seconds to import, and `pipeline.cards` is on
+# the path of every command through `__main__`, so `tango languages` and
+# `tango doctor` were paying to load a deck-writing library in order to
+# print a table. Measured 10 September 2026 by scripts/benchmark.py.
+#
+# Every genanki name in an annotation is a string at runtime because of
+# `from __future__ import annotations` above, so only the call sites need
+# the real module. The names still have to resolve for a type checker.
+if TYPE_CHECKING:  # pragma: no cover
+    import genanki
 
 from pipeline import images, media, wiktdata
 from pipeline.definition import DefinitionResult
@@ -445,6 +455,8 @@ def _note_fields(payload: dict[str, str]) -> list[str]:
 # -- Model --------------------------------------------------------------------
 
 def _build_model() -> genanki.Model:
+    import genanki
+
     return genanki.Model(
         MODEL_ID,
         MODEL_NAME,
@@ -740,6 +752,8 @@ def _build_note(
     `sounds` block for, simply leaves both fields empty. Measured on the
     real German index, 341 of 342 card words carry IPA and 339 an audio URL.
     """
+    import genanki
+
     synonyms_html = _format_pills(result.synonyms, "vocab-pill")
     antonyms_html = _format_pills(result.antonyms, "antonym-pill")
 
@@ -806,6 +820,8 @@ def _build_fallback_note(
     OMW lookup when there's no definition, so this is the only place a
     fallback card can pick them up.
     """
+    import genanki
+
     return genanki.Note(
         model=model,
         fields=_note_fields({
@@ -1026,6 +1042,8 @@ def build_package(
     Raises:
         ValueError: If found and not_found are both empty.
     """
+    import genanki
+
     if not found and not not_found:
         raise ValueError(
             "No words to build cards from. "
