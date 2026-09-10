@@ -1107,6 +1107,49 @@ class TestTheDocumentationAgreesWithTheCode:
             f"  table lists: {listed}\n"
             f"  FIELDS is:   {expected}")
 
+    def test_no_document_or_message_names_a_file_that_is_gone(self):
+        """
+        A path in a document or a message has to resolve.
+
+        The documents moved into `docs/` subdirectories on 3 September 2026
+        and several citations kept the old flat path, so `docs/ADR-011-...`
+        pointed at nothing in the README, ARCHITECTURE and TASKS. Worse, a
+        user-facing error told people to read `docs/languages.txt`, which
+        has never existed in this repository.
+
+        That is the same shape as the deleted-flag class: an instruction
+        that cannot be followed, and nothing failing when it stops working.
+        """
+        root = self.ROOT
+        # A directory component plus a documentary extension. Runtime
+        # artefacts (pipeline.db, review.json, output/) are deliberately
+        # excluded: they are absent until a run creates them.
+        pattern = re.compile(
+            r"`?((?:[\w.\-]+/)+[\w.\-]+\.(?:md|py|toml|txt|cfg|yml|yaml))`?")
+        skip = ("http", "www", "~", "/mnt", "/tmp", "/usr", "/home", "site-packages",
+                "argostranslate/", "kaikki.org", "github.com", ".docker/")
+
+        targets = list(root.glob("*.md")) + list(root.glob("docs/**/*.md"))
+        targets += list(root.glob("src/pipeline/*.py"))
+
+        missing = []
+        for path in targets:
+            for lineno, line in enumerate(
+                    path.read_text(encoding="utf-8", errors="ignore").splitlines(), 1):
+                if line.strip().startswith(("http", "//")):
+                    continue
+                for match in pattern.finditer(line):
+                    ref = match.group(1)
+                    if any(s in ref for s in skip) or any(c in ref for c in "<>*"):
+                        continue
+                    if "example" in ref:
+                        continue
+                    if not (root / ref).exists():
+                        missing.append(f"{path.relative_to(root)}:{lineno}: {ref}")
+
+        assert not missing, (
+            "These name a file that is not there:\n  " + "\n  ".join(missing))
+
     # -- helpers --
 
     def _documents(self):
