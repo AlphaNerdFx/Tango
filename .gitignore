@@ -87,3 +87,11 @@ README.md.orig
 # and it grows with every deck. Note this is the cache at the repo root, not
 # docs/assets/, which holds committed diagrams.
 images/
+
+# Third-party agent skills, installed per-machine by `npx skills add`.
+# Not this project's code, and they run with full agent permissions, so
+# they stay out of the repository rather than being shipped to anyone who
+# clones it.
+.agents/
+.claude/skills/
+skills-lock.json
