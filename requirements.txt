@@ -20,7 +20,7 @@ spacy==3.8.16
 thinc==8.3.13
 pydantic==2.13.5
 numpy>=1.24,<2.3
-cymem==2.0.13
+cymem==2.0.16
 preshed==3.0.13
 murmurhash==1.0.15
 
