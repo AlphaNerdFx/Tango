@@ -21,7 +21,7 @@ thinc==8.3.13
 pydantic==2.13.5
 numpy>=1.24,<2.3
 cymem==2.0.13
-preshed==3.0.13
+preshed==3.0.15
 murmurhash==1.0.15
 
 # Fuzzy matching
