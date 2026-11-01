@@ -5,16 +5,16 @@
 #   pip install -e ".[dev]"
 
 # Test runner
-pytest==9.1.1
+pytest==9.2.0
 
 # Code formatter
-black==26.5.1
+black==26.10.1
 
 # Linter
-ruff==0.16.5
+ruff==0.17.3
 
 # Static type checker
-mypy==2.3.1
+mypy==2.4.1
 
 # Type stubs
-types-requests==2.33.0.20260712
+types-requests==2.33.0.20261006
